@@ -217,7 +217,10 @@ def assess_asr(out: Path, max_per_dataset: int, cv_root: Path | None, model_name
         audio_s = 0.0
         failures = 0
         failure_types = {}
+        failure_stages = {}
+        failure_causes = {}
         for reference, audio in itertools.islice(rows, max_per_dataset):
+            stage = "audio_decode"
             try:
                 array, rate = decode_audio(audio)
                 if rate != 16000:
@@ -225,6 +228,7 @@ def assess_asr(out: Path, max_per_dataset: int, cv_root: Path | None, model_name
                 duration = len(array) / rate
                 if not 0.15 <= duration <= 60:
                     continue
+                stage = "whisper_inference"
                 t0 = time.perf_counter()
                 segments, _ = model.transcribe(array, language="en", beam_size=1,
                                                condition_on_previous_text=False, vad_filter=False)
@@ -235,10 +239,27 @@ def assess_asr(out: Path, max_per_dataset: int, cv_root: Path | None, model_name
                 audio_s += duration
             except Exception as exc:
                 failures += 1
-                failure_types[type(exc).__name__] = failure_types.get(type(exc).__name__, 0) + 1
+                kind = type(exc).__name__
+                failure_types[kind] = failure_types.get(kind, 0) + 1
+                failure_stages[stage] = failure_stages.get(stage, 0) + 1
+                message = str(exc).lower()
+                # Categorize errors without publishing source text, audio, file
+                # paths or full exception messages into a public repository.
+                if "cublas" in message or "cudnn" in message or "cudart" in message:
+                    cause = "cuda12_library_missing_or_incompatible"
+                elif "cuda" in message or "cud" in message:
+                    cause = "cuda_runtime_error"
+                elif "ffmpeg" in message or "decode" in message:
+                    cause = "audio_decode_error"
+                elif "out of memory" in message:
+                    cause = "out_of_memory"
+                else:
+                    cause = "other_runtime_error"
+                failure_causes[cause] = failure_causes.get(cause, 0) + 1
         if not scored:
             return {"status": "failed_no_audio_transcriptions", "dataset": source,
                     "errors": failures, "error_types": failure_types,
+                    "failure_stages": failure_stages, "failure_causes": failure_causes,
                     "transcripts_or_audio_published": False}
         result = score(scored, dataset=name)
         result.update({"status": "measured_live_cuda_subset", "source": source,
@@ -248,6 +269,7 @@ def assess_asr(out: Path, max_per_dataset: int, cv_root: Path | None, model_name
                        "latency_ms_p95": pct(timings, 95),
                        "real_time_factor": round(sum(timings) / 1000 / audio_s, 4) if audio_s else None,
                        "failed_or_skipped": failures, "failure_types": failure_types,
+                       "failure_stages": failure_stages, "failure_causes": failure_causes,
                        "transcripts_or_audio_published": False})
         return result
 
@@ -299,6 +321,7 @@ def main():
     parser.add_argument("--cooldown-ms", type=int, default=1500)
     parser.add_argument("--asr-samples", type=int, default=20, help="samples per public ASR dataset")
     parser.add_argument("--whisper-model", default="turbo")
+    parser.add_argument("--asr-only", action="store_true", help="Skip Gemini and offline tests; rerun CUDA ASR only")
     parser.add_argument("--common-voice-root", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -313,7 +336,7 @@ def main():
                           "gemini_requests": 10 * args.repeat + 2, "ASR_max_per_dataset": args.asr_samples,
                           "no_live_measurements_created": True}, indent=2))
         return 0
-    if not os.environ.get("GEMINI_API_KEY"):
+    if not args.asr_only and not os.environ.get("GEMINI_API_KEY"):
         raise RuntimeError("Missing GEMINI_API_KEY; set it using Kaggle Secrets in the launch cell")
     gpu = gpu_metadata()
     out = args.output_dir.resolve()
@@ -339,12 +362,17 @@ def main():
               "jobs": {}}
     # Save a start marker for crash diagnosis; no private content.
     write_json(out / "run_manifest.json", report)
-    print("1/3: Offline fixtures, legacy event and sample artifact validation", flush=True)
-    report["jobs"]["offline"] = run_offline(out)
-    write_json(out / "run_manifest.json", report)
-    print("2/3: Gemini streaming time-to-first-visible-text benchmark", flush=True)
-    report["jobs"]["gemini"] = run_gemini(out, args.gemini_model, args.repeat, args.cooldown_ms)
-    write_json(out / "run_manifest.json", report)
+    if args.asr_only:
+        report["jobs"]["offline"] = {"status": "skipped_by_configuration"}
+        report["jobs"]["gemini"] = {"status": "skipped_by_configuration"}
+        write_json(out / "run_manifest.json", report)
+    else:
+        print("1/3: Offline fixtures, legacy event and sample artifact validation", flush=True)
+        report["jobs"]["offline"] = run_offline(out)
+        write_json(out / "run_manifest.json", report)
+        print("2/3: Gemini streaming time-to-first-visible-text benchmark", flush=True)
+        report["jobs"]["gemini"] = run_gemini(out, args.gemini_model, args.repeat, args.cooldown_ms)
+        write_json(out / "run_manifest.json", report)
     print("3/3: CUDA Whisper Turbo on LibriSpeech/FLEURS (+ optional Common Voice)", flush=True)
     try:
         report["jobs"]["asr"] = assess_asr(out, args.asr_samples, args.common_voice_root, args.whisper_model)
