@@ -20,24 +20,24 @@
 
 Designed and implemented **Rizzler**, a Gemini-powered real-time voice AI and asynchronous task-execution prototype. Built a browser-to-FastAPI speech pipeline with Whisper Turbo CUDA recognition, streamed model responses, KittenTTS male speech, interruption handling and HTTPS fallback. Integrated a separate schema-governed Work Agent for research, structured analysis, document generation and persistent job-status reporting. Packaged a Kaggle-ready notebook with GitHub Actions, security checks, benchmark provenance and testable modules.
 
-## Benchmark evidence and dataset disclosure
+## Verified benchmark evidence (Kaggle T4, November 2026)
 
-| Historical measurement | Sample size | Median | P95 | Scope |
-| --- | ---: | ---: | ---: | --- |
-| Gemini Flash-Lite TTFT | 20 | 1,012.7 ms | 1,136.0 ms | API text latency only |
-| Gemini persistent-client TTFT | 10 | 960.3 ms | 1,076.3 ms | API text latency only |
-| Gemini fresh-client TTFT | 10 | 1,051.0 ms | 1,241.8 ms | API text latency only |
+| Measured workload | Samples | Primary metric | Secondary metric |
+| --- | ---: | --- | --- |
+| Whisper Turbo — LibriSpeech test-clean | **50** | **3.115% WER** | **329.58 ms median / 420.04 ms P95 inference** |
+| Whisper Turbo — FLEURS `en_us`/test | **50** | **4.833% WER** | **360.42 ms median / 424.31 ms P95 inference** |
+| Gemini streaming REST API | **50** | **621.79 ms median TTFT** | **969.71 ms P95, 50/50 successful** |
 
-**Data used:** Historical model request summaries, one failed legacy voice JSONL trace, and synthetic tabular/content fixtures for offline tests. **Data not used yet:** LibriSpeech, Common Voice, FLEURS or a labeled golden Work Agent benchmark. There is **no verified V9 first-audible p50/p95 measurement**; 300 ms remains a stretch goal.
+**Benchmark scope:** First 50 valid samples per audio dataset, FP16 T4 inference on GPU 0; *not* full-corpus WER, microphone-to-speaker latency or a controlled model comparison. Gemini runs in the cloud. The **564 ms TTFT goal was not met**. Earlier Gemini historical runs and the failed voice event remain documented separately.
 
-[Benchmark tables](../benchmarks/RESULTS.md) · [Dataset inventory](../benchmarks/DATASETS.md)
+[Verified raw ASR metrics](../benchmarks/results/asr_t4_534e70b217/asr_results.json) · [Gemini run summary](../benchmarks/results/kaggle_20261108_130822_2882d8/gemini_summary.json) · [Benchmark report](../benchmarks/RESULTS.md) · [Dataset inventory](../benchmarks/DATASETS.md)
 
 ## Engineering reviewer notes
 
 - **What runs:** canonical Kaggle notebook with embedded browser UI and FastAPI voice/work routes. Separate modules in `src/rizzler/` validate contracts and patterns; they are not yet used as a fully extracted service runtime.
 - **What was tested:** offline Python/JS syntax, contract/state/secret tests, artifact structural tests and mocked work jobs.
-- **What is not verified:** live V9 Kaggle/phone E2E p50/p95 voice latency, interruption under echo/noise, multi-user concurrency and full-scale enterprise security.
-- **Metrics:** historical Gemini-only TTFT median ~1.0 second; the 300 ms first-audio figure is a target, not a measured accomplishment.
+- **What is not verified:** live V9 Kaggle/phone E2E p50/p95 **first-audible** voice latency, interruption under echo/noise, multi-user concurrency and full-scale enterprise security.
+- **Metrics:** Verified ASR subset WER **3.115% LibriSpeech / 4.833% FLEURS** and Gemini median TTFT **621.79 ms**; **300 ms first-audio remains a goal**, not a measured accomplishment.
 
 This positioning foregrounds real architecture and working artifacts without inventing production adoption, reliability guarantees or benchmark wins.
 

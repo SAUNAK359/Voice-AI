@@ -1,75 +1,77 @@
 # Benchmark results — Rizzler Voice AI
 
-**Project:** Rizzler V9 · Real-time Voice AI + Gemini Work Agent  
-**Evidence status:** Historical API timing observations and offline software tests are available. **No verified V9 Kaggle GPU end-to-end voice benchmark has been published.**
+**Evidence:** First live Kaggle model measurements were published on **8 November 2026**. They measure **GPU ASR inference** and **cloud Gemini time-to-first-text**, *not* user-perceived microphone-to-speaker response time.
 
-## 1. Recorded model latency (historical)
+## 1. Measured CUDA speech recognition — T4, 50 utterances per dataset
 
-TTFT = *time to first visible generated text*. These are older Gemini API timing summaries, **not first audible response** or V9 end-to-end latency. Raw per-request Gemini traces were not retained in this repository.
+| Dataset / test split | Evaluated clips | WER ↓ | CER ↓ | Inference p50 ↓ | Inference p95 ↓ | Real-time factor ↓ | Failed clips |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **LibriSpeech test-clean** | **50** | **3.115%** | **1.233%** | **329.58 ms** | **420.04 ms** | **0.0524** | **0** |
+| **Google FLEURS en_us / test** | **50** | **4.833%** | **2.527%** | **360.42 ms** | **424.31 ms** | **0.0385** | **0** |
 
-| Test configuration | Requests | Median TTFT | P95 TTFT | Evidence |
-| --- | ---: | ---: | ---: | --- |
-| Gemini Flash-Lite — warm streaming requests | 20 | **1,012.7 ms** | **1,136.0 ms** | Historical reported aggregate |
-| Gemini — persistent API client | 10 | **960.3 ms** | **1,076.3 ms** | Historical reported aggregate |
-| Gemini — fresh API client | 10 | **1,051.0 ms** | **1,241.8 ms** | Historical reported aggregate |
+**Model:** Whisper `turbo` (large-v3-turbo), Faster-Whisper 1.2.1 / CTranslate2 4.8.5, FP16, CUDA on **Tesla T4 GPU 0**. An additional T4 was available but not used. Dataset streaming source revisions, normalization, word/character edit totals, and individual failed-sample counts are recorded in the [raw metrics](results/asr_t4_534e70b217/asr_results.json) and [machine manifest](results/asr_t4_534e70b217/run_manifest.json).
 
-**Interpretation:** First text in these historical samples took roughly one second at the median. These small, non-randomized batches do **not** establish that the persistent client is consistently faster, or that the current V9 system has the same performance.
+**Methodology limitations:** Each result covers the **first 50 valid streamed utterances** from the named test split, not the full benchmark split and not a randomized sample. Inference latency excludes downloads, dataset decoding, browser voice activity detection, microphone capture, and playback. RTF is cumulative inference seconds divided by audio seconds, not elapsed time for an end-to-end service. WER and CER use corpus-level edit counts after Unicode NFKC, case-folding, punctuation/whitespace normalization. No retained audio or transcripts are published.
 
-## 2. Documented failed voice run (not a performance success)
+## 2. Measured Gemini streaming response latency — live API
 
-| Test | Samples | Observed measurement | Outcome |
-| --- | ---: | --- | --- |
-| Legacy speech recognition (older `small.en` setup) | 1 | ASR: **5,380.5 ms** | Failed turn |
-| Legacy complete turn | 1 | Duration: **9,248.4 ms** | Failed: Gemini HTTP 503 |
+| Model | Requests | Median TTFT ↓ | P95 TTFT ↓ | P99 TTFT ↓ | Success |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| **gemini-3.5-flash-lite** | **50** | **621.79 ms** | **969.71 ms** | **1,191.86 ms** | **50/50** |
 
-Source: [redacted raw event](data/legacy_failed_turn.jsonl) dated **2026-11-04**. The run was from an older voice/TTS stack, not the V9 Whisper Turbo + KittenTTS configuration. **Exclude this event from successful-turn latency statistics.**
+**Source:** [live metrics JSON](results/kaggle_20261108_130822_2882d8/gemini_summary.json) and [request-level measurements](results/kaggle_20261108_130822_2882d8/gemini_requests.jsonl), from **10 benchmark prompts × 5 repeats**, plus 2 warmups. The **564 ms median TTFT target was not met**. TTFT is first visible text from a streaming REST request; **it is not first audible audio**, and Gemini inference runs on Google's cloud rather than on Kaggle GPUs.
 
-## 3. Current V9 evaluation status
+## 3. Older reported Gemini timing summaries (not V9 measurements)
 
-| System component | Target measurement | Verified V9 result | Current status |
-| --- | --- | --- | --- |
-| End-to-end voice | First **audible** audio, p50/p95/p99 | — | Not yet measured on Kaggle + browser |
-| Whisper Turbo ASR | WER, CER, p50/p95 inference time | — | No labeled speech evaluation completed |
-| Gemini voice model | TTFT, timeouts, response correctness | — | V9-specific cloud benchmark pending |
-| KittenTTS | First PCM latency, real-time factor | — | Live synthesis benchmark pending |
-| Interruption / barge-in | Time to stop old playback, stale-audio rate | — | Browser-device trials pending |
-| GPU efficiency | Peak VRAM, utilization, throughput | — | Kaggle telemetry benchmark pending |
-| Work Agent | Correct task completion, retries, tool-call validity | — | Real Gemini workload benchmark pending |
-| Artifact studio | Format validity + factual/visual quality | — | Offline examples exist; complete evaluation pending |
-| Concurrent sessions | Success rate and p95 under load | — | Multi-session test pending |
+| Configuration | Requests | Historical median TTFT | Historical P95 TTFT |
+| --- | ---: | ---: | ---: |
+| Prior Flash-Lite warm streaming | 20 | 1,012.7 ms | 1,136.0 ms |
+| Prior persistent API client | 10 | 960.3 ms | 1,076.3 ms |
+| Prior fresh API client | 10 | 1,051.0 ms | 1,241.8 ms |
 
-A dash means **not measured**, not zero or failure. The previously discussed **300 ms first-audio objective is aspirational**, not an achieved result.
+Raw per-request traces were not retained for these older summaries. They should **not** be treated as controlled A/B evidence or directly compared to the newer experiment as an optimization claim.
 
-## 4. Which datasets were actually used?
+## 4. Historic failed turn — retained separately
 
-| Data source / fixture | Used? | What it supports |
-| --- | --- | --- |
-| Historical Gemini API request batches (20, 10, 10) | **Yes** | Reported TTFT summaries; no attached raw request trace |
-| [Legacy failed voice JSONL event](data/legacy_failed_turn.jsonl) | **Yes** | Reproducible analysis of one failed voice turn |
-| Synthetic CSV/Excel-style fixture data | **Yes — offline only** | Testing analysis and visualization renderers; not a public accuracy dataset |
-| Synthetic report/presentation fixture content | **Yes — offline only** | PDF, DOCX, PPTX, XLSX and PNG output examples; not a live Gemini research benchmark |
-| LibriSpeech / Mozilla Common Voice / Google FLEURS | **No** | Candidate datasets for future ASR accuracy testing |
-| Labeled research/reasoning golden set | **No** | Not yet established for the Work Agent |
+| Older run | Sample | Value | Status |
+| --- | ---: | ---: | --- |
+| Legacy `small.en` ASR | 1 failed turn | 5,380.5 ms | Failed |
+| Legacy full turn | 1 failed turn | 9,248.4 ms | Gemini 503 |
 
-See the [dataset inventory, sample provenance and planned evaluation inputs](DATASETS.md). The synthetic examples are documented in [examples/README.md](../examples/README.md).
+Source: [redacted event](data/legacy_failed_turn.jsonl), 4 November 2026. The original LibriSpeech/FLEURS CUDA-library failures were also resolved in a subsequent run, but **failed attempts remain separate from successfully scored clips**.
 
-## 5. Reproduce results from real event data
+## 5. Evaluation coverage / outstanding tests
+
+| Area | Current status |
+| --- | --- |
+| Whisper Turbo ASR | **Measured on two small labeled English test subsets** |
+| Gemini streaming text TTFT | **Measured on 50 requests** |
+| Common Voice | **Not evaluated**; authorized dataset was not attached |
+| Full LibriSpeech/FLEURS test sets | **Not evaluated**; first 50 valid clips only |
+| Browser first-audible end-to-end response | **Not measured** |
+| TTS/KittenTTS live voice quality and first PCM | **Not measured** |
+| Barge-in under real microphone/echo | **Not measured** |
+| Work Agent live accuracy / concurrency | **Not measured** |
+| Generated artifact structural tests | **Offline test fixtures only** |
+
+The previously discussed 300 ms first-audio aspiration is **not** an achieved result. A server-reported first audio frame must not be labeled as browser first audible playback.
+
+## 6. Reproduction
 
 ```bash
-python scripts/benchmark.py benchmarks/data/legacy_failed_turn.jsonl \
-  --output /tmp/rizzler_legacy_metrics.json
+# Historical failure analysis only
+python scripts/benchmark.py benchmarks/data/legacy_failed_turn.jsonl
+
+# On a Kaggle T4 with CUDA 12 cuBLAS/cuDNN discoverable and an existing checkout:
+python scripts/run_kaggle_benchmarks.py \
+  --output-dir benchmarks/results/<unique_run_id> \
+  --asr-only --asr-samples 50 --whisper-model turbo
+
+# For a separate Gemini run with GEMINI_API_KEY in Kaggle Secrets:
+python scripts/benchmark_gemini.py \
+  --model gemini-3.5-flash-lite --repeat 5 --warmup 2
 ```
 
-The existing summarizer counts only `outcome=ok` rows toward successful latency aggregates. It must **not** reinterpret a failed turn as a successful performance observation.
+Follow [the Kaggle launch instructions](KAGGLE_RUN.md) to set the required CUDA library search paths, use secrets safely, and publish only redacted metrics.
 
-For a future V9 Kaggle benchmark, collect consented, redacted `turn_complete` events from actual inference; pair server timestamps with **browser playback timestamps** for user-perceived response time. Record hardware, model IDs, warm/cold policy, number of runs, success/failure counts, p50/p95/p99, and test conditions.
-
-**Measurement boundaries:** VAD = last spoken PCM to endpoint; ASR = endpoint to final transcript; Gemini TTFT = API request to first text; TTS = first phrase to first PCM; first audible audio = final user speech to actual browser playback; barge-in = interruption speech onset to old playback stopped. Server PCM send time is **not** browser audible time.
-
-## 6. Recruiter and engineering interpretation
-
-- **Implemented:** Voice / agent architecture, reproducible offline checks, CI, artifact renderers, event-based benchmark reporting.
-- **Evidence available:** Earlier Gemini API latency summaries and a redacted failed voice trace.
-- **Not yet demonstrated:** V9 end-to-end speech latency, ASR error rates, production-scale concurrency and live Work Agent quality.
-
-This distinction prevents misleading performance claims while keeping the project's architecture and measurable engineering work easy to assess.
+[Dataset inventory](DATASETS.md) · [Benchmark protocol](PROTOCOL.md) · [Repository README](../README.md)

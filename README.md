@@ -93,19 +93,29 @@ See [the complete specialist skill contracts](docs/skills.md) and [offline sampl
 
 ## Benchmarks and evaluation data
 
-**Recorded historical Gemini latency** — time to first text (TTFT), **not V9 microphone-to-speaker response time**:
+### Verified live measurements — Kaggle, 8 November 2026
 
-| Historical Gemini test | Requests | Median TTFT | P95 TTFT |
+| Benchmark | Evaluation set | Samples | Median latency | P95 latency | Quality |
+| --- | --- | ---: | ---: | ---: | --- |
+| **Whisper Turbo CUDA ASR** | LibriSpeech test-clean (first 50 valid clips) | 50 | **329.58 ms** | **420.04 ms** | **3.115% WER / 1.233% CER** |
+| **Whisper Turbo CUDA ASR** | FLEURS en_us test (first 50 valid clips) | 50 | **360.42 ms** | **424.31 ms** | **4.833% WER / 2.527% CER** |
+| **Gemini streaming API** | 10 fixed prompts × 5 repeats | 50 | **621.79 ms TTFT** | **969.71 ms TTFT** | **50/50 successful** |
+
+**ASR environment:** Faster-Whisper 1.2.1, CTranslate2 4.8.5, `turbo` (Whisper large-v3-turbo), FP16 on **NVIDIA Tesla T4 GPU 0**; real-time factors **0.0524** (LibriSpeech) and **0.0385** (FLEURS). The second T4 was detected but not used for inference. **Gemini is a cloud API** and its timings are *time to first visible text*, not first spoken sound.
+
+**Evaluation scope:** These are small, non-randomized **first-50-utterance subsets**, not full-dataset ASR scores or browser-to-speaker latency. Earlier broken ASR runs are retained as failed attempts, not included in successful performance. The **564 ms Gemini median TTFT goal was not met**; 621.79 ms was observed. Common Voice was not attached.
+
+[Full benchmark results](benchmarks/RESULTS.md) · [Dataset provenance](benchmarks/DATASETS.md) · [Run ASR evidence](benchmarks/results/asr_t4_534e70b217/asr_results.json) · [Run Gemini evidence](benchmarks/results/kaggle_20261108_130822_2882d8/gemini_summary.json).
+
+### Historical API comparisons (separate experimental runs)
+
+| Gemini configuration | Samples | Historical median TTFT | Historical P95 TTFT |
 | --- | ---: | ---: | ---: |
-| Flash-Lite warm streaming | 20 | **1,012.7 ms** | **1,136.0 ms** |
-| Persistent API client | 10 | **960.3 ms** | **1,076.3 ms** |
-| Fresh API client | 10 | **1,051.0 ms** | **1,241.8 ms** |
+| Flash-Lite warm streaming | 20 | 1,012.7 ms | 1,136.0 ms |
+| Persistent client | 10 | 960.3 ms | 1,076.3 ms |
+| Fresh client | 10 | 1,051.0 ms | 1,241.8 ms |
 
-**Evaluation data used:** Historical Gemini request aggregates (raw per-request trace unavailable), **one redacted failed legacy voice event**, and synthetic tabular/document fixtures for offline rendering and contract tests. The legacy event logged **5,380.5 ms ASR** and **9,248.4 ms total failed-turn time** after a Gemini 503; it is **not a successful latency result**.
-
-**Not yet measured:** V9 end-to-end audible latency, Whisper WER/CER, barge-in p95, concurrent users, V9 GPU memory, and live Gemini Work Agent success. LibriSpeech, Common Voice, and FLEURS are **planned datasets, not used datasets**.
-
-Read the [results and methodology](benchmarks/RESULTS.md), [actual and planned datasets](benchmarks/DATASETS.md), or the [benchmark quick guide](benchmarks/README.md). Results are labeled by provenance and should not be interpreted as production-grade SLAs.
+Historical request-level traces are unavailable, so these are not controlled performance comparisons with the newer live run.
 
 ## Quality and verification
 

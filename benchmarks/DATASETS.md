@@ -1,6 +1,6 @@
 # Dataset and evaluation input inventory
 
-Rizzler is a **voice AI application**, not a model-training release. The data below were used for *evaluation and implementation testing*, not to train Whisper, Gemini, or KittenTTS.
+Rizzler is a **voice AI application**, not a model-training release. The data below were used for *evaluation and implementation testing*, not to train Whisper, Gemini, or KittenTTS. This inventory distinguishes historical aggregates, synthetic fixtures, and measured live inference.
 
 ## Used in the repository or preceding development
 
@@ -16,19 +16,28 @@ Rizzler is a **voice AI application**, not a model-training release. The data be
 
 The packaged examples in [`examples/`](../examples/README.md) demonstrate **artifact format and layout**. No private speech recordings, API keys, or transcripts should be committed for public benchmarking.
 
+## New measured public audio evaluations — 8 November 2026
+
+| Dataset / split | Evaluated audio | Model and device | Provenance |
+| --- | --- | --- | --- |
+| **LibriSpeech test-clean** (`openslr/librispeech_asr`, `clean`/`test`) | **50 first valid utterances** | Whisper Turbo FP16, Tesla T4 CUDA:0 | [ASR metrics](results/asr_t4_534e70b217/asr_results.json) |
+| **Google FLEURS English (US)** (`google/fleurs`, `en_us`/`test`) | **50 first valid utterances** | Whisper Turbo FP16, Tesla T4 CUDA:0 | [ASR metrics](results/asr_t4_534e70b217/asr_results.json) |
+| **Gemini streaming prompts** (10 fixed repository prompts × 5) | **50 live API calls + 2 warmups** | Gemini cloud API, separate from Kaggle GPUs | [Gemini summary](results/kaggle_20261108_130822_2882d8/gemini_summary.json) |
+
+These are evaluation inputs, **not model-training datasets**. The ASR sample selection was a small deterministic subset and not a full test-set comparison. Dataset source revisions and error totals are retained with the metrics.
+
 ## Not used yet — planned public datasets
 
 | Proposed dataset | Intended benchmark | Current status |
 | --- | --- | --- |
-| LibriSpeech | English ASR WER/CER on labeled audio | **Not evaluated** |
 | Mozilla Common Voice | Accent and microphone robustness | **Not evaluated** |
-| Google FLEURS | Multilingual speech recognition | **Not evaluated** |
+| Other FLEURS language splits | Multilingual speech recognition beyond English (US) | **Not evaluated** |
 | Controlled noise-augmented speech set | ASR robustness under SNR shifts | **Not created/evaluated** |
 | Human-reviewed voice + reasoning tasks | Response correctness, hallucination and instruction-following | **No gold labels yet** |
 | Golden Work Agent task set | Tool success, factuality, numeric correctness and artifact coverage | **No curated benchmark yet** |
 | Device-recorded interruption trials | Barge-in and playback cancellation | **No complete device-run trace yet** |
 
-Do not describe these planned datasets as already used, trained on, or benchmarked.
+Do not describe remaining planned datasets as used or evaluated. The two English audio subsets above **have** now been evaluated; their full test splits have not.
 
 ## Evidence policy
 

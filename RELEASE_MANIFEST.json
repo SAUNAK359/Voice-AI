@@ -54,8 +54,8 @@
     },
     {
       "path": "benchmarks/DATASETS.md",
-      "bytes": 3494,
-      "sha256": "f59019f13404edb228a80560cb00c3429b37f95424eff59c710a3292dd38b64a"
+      "bytes": 4655,
+      "sha256": "23b9eb9f661a5997bd6038afd3da7383ee84444709e69559ee697db2f0e5c7bc"
     },
     {
       "path": "benchmarks/README.md",
@@ -64,8 +64,8 @@
     },
     {
       "path": "benchmarks/RESULTS.md",
-      "bytes": 5708,
-      "sha256": "fb4bf1a8c31caf1d75d3de81781570802a046f2f4b424abf095c7d135c9d3c26"
+      "bytes": 5256,
+      "sha256": "3b2b41ab8a716b371f512f25e3c5b731f1701ac9755f73d57008c12594a82e62"
     },
     {
       "path": "CHANGELOG.md",
@@ -99,8 +99,8 @@
     },
     {
       "path": "docs/project-brief.md",
-      "bytes": 3700,
-      "sha256": "548bce5c813c718124ca4f73e302289f3e072ce252eddfc692bbd4afb5b3e3c1"
+      "bytes": 4041,
+      "sha256": "b160b0550032afcf816a03feff081de6c25e8db754745fdb0cddb39eda5387eb"
     },
     {
       "path": "docs/publishing.md",
@@ -179,8 +179,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 10500,
-      "sha256": "3f4d4b8728feb6393a52b5d4a530679ba022cad3f754c2e63a9053b4790ce0d4"
+      "bytes": 11262,
+      "sha256": "1c756a833cde8d656785142c90e07b9575d743e4947155859e00fbee1b236e27"
     },
     {
       "path": "schemas/work-handoff-example.json",
