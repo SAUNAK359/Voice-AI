@@ -64,6 +64,17 @@ flowchart TB
 
 For the **full voice block diagram, sequence diagram, interruption state machine and timing boundaries**, see [Voice AI pipeline](docs/voice-pipeline.md). For **asynchronous orchestration and the artifact production flow**, see [Work Agent architecture](docs/work-agent-architecture.md). For a concise reviewer summary, see [Project brief](docs/project-brief.md). System limitations and production migration are documented in [architecture.md](docs/architecture.md).
 
+## Installing the portable core
+
+The repository includes `setup.py` for compatibility with traditional setuptools workflows. `pyproject.toml` remains the canonical source of package metadata. Install the lightweight, CPU-testable orchestration contracts with:
+
+```bash
+python -m pip install .
+python -c "import rizzler; print(rizzler.__version__)"
+```
+
+This package is **not** the complete CUDA/voice server installation: to run the microphone, Whisper Turbo, Gemini and KittenTTS pipeline, follow the [Kaggle setup](docs/kaggle-setup.md) and run the notebook. No API keys are needed for installing the portable core.
+
 ## Getting started on Kaggle
 
 1. Create a Kaggle notebook, enable **Internet** and an **NVIDIA GPU** (T4/P100 where supported).
