@@ -1,0 +1,81 @@
+{
+  "common_voice_attached": {
+    "note": "Mozilla Common Voice requires user-authorized download and Kaggle attachment",
+    "status": "not_run_missing_dataset"
+  },
+  "fleurs_en_us_test": {
+    "audio_seconds": 474.96,
+    "cer": 0.02527,
+    "character_edit_distance": 131,
+    "dataset_id": "fleurs_en_us_test",
+    "device": "cuda:0",
+    "failed_or_skipped": 0,
+    "failure_causes": {},
+    "failure_stages": {},
+    "failure_types": {},
+    "latency_ms_p50": 360.42,
+    "latency_ms_p95": 424.31,
+    "model": "turbo",
+    "normalization": "Unicode NFKC, casefold, punctuation to spaces, whitespace collapse",
+    "real_time_factor": 0.0385,
+    "reference_characters": 5184,
+    "reference_words": 1076,
+    "references_missing": 0,
+    "sample_limit": 50,
+    "source": {
+      "config": "en_us",
+      "dataset": "google/fleurs",
+      "provider": "huggingface",
+      "revision_sha": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "selection": "first N valid streamed utterances; small smoke subset",
+      "split": "test"
+    },
+    "status": "measured_live_cuda_subset",
+    "transcripts_or_audio_published": false,
+    "utterances_scored": 50,
+    "utterances_total": 50,
+    "wer": 0.04833,
+    "word_edit_distance": 52
+  },
+  "librispeech_test_clean": {
+    "audio_seconds": 328.27,
+    "cer": 0.01233,
+    "character_edit_distance": 50,
+    "dataset_id": "librispeech_test_clean",
+    "device": "cuda:0",
+    "failed_or_skipped": 0,
+    "failure_causes": {},
+    "failure_stages": {},
+    "failure_types": {},
+    "latency_ms_p50": 329.58,
+    "latency_ms_p95": 420.04,
+    "model": "turbo",
+    "normalization": "Unicode NFKC, casefold, punctuation to spaces, whitespace collapse",
+    "real_time_factor": 0.0524,
+    "reference_characters": 4055,
+    "reference_words": 931,
+    "references_missing": 0,
+    "sample_limit": 50,
+    "source": {
+      "config": "clean",
+      "dataset": "openslr/librispeech_asr",
+      "provider": "huggingface",
+      "revision_sha": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+      "selection": "first N valid streamed utterances; small smoke subset",
+      "split": "test"
+    },
+    "status": "measured_live_cuda_subset",
+    "transcripts_or_audio_published": false,
+    "utterances_scored": 50,
+    "utterances_total": 50,
+    "wer": 0.03115,
+    "word_edit_distance": 29
+  },
+  "whisper_model": {
+    "compute_type": "float16",
+    "cuda_device": 0,
+    "note": "Torch memory metric excludes CTranslate2 GPU allocations",
+    "requested": "turbo",
+    "torch_allocated_peak_mib": 0.0
+  }
+}

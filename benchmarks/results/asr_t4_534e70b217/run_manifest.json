@@ -1,0 +1,91 @@
+{
+  "benchmark_config": {
+    "asr_max_per_dataset": 50,
+    "common_voice_attached": false,
+    "gemini_model": "gemini-3.5-flash-lite",
+    "gemini_warmups": 2,
+    "measured_gemini_requests": 50
+  },
+  "git_base_commit": "fe134b26f6ee4d124881d4045a89988f9a0a38f1",
+  "git_push": "performed_separately_by_user_Kaggle_cell",
+  "jobs": {
+    "asr": {
+      "datasets": {
+        "common_voice_attached": "not_run_missing_dataset",
+        "fleurs_en_us_test": "measured_live_cuda_subset",
+        "librispeech_test_clean": "measured_live_cuda_subset"
+      },
+      "status": "completed"
+    },
+    "gemini": {
+      "status": "skipped_by_configuration"
+    },
+    "offline": {
+      "status": "skipped_by_configuration"
+    }
+  },
+  "libraries": {
+    "ctranslate2": "4.8.5",
+    "datasets": "3.6.0",
+    "faster-whisper": "1.2.1",
+    "huggingface-hub": "1.33.0",
+    "numpy": "2.1.3",
+    "torch": "2.11.0+cu130"
+  },
+  "machine": {
+    "devices": [
+      {
+        "index": 0,
+        "name": "Tesla T4",
+        "total_vram_gb": 14.56
+      },
+      {
+        "index": 1,
+        "name": "Tesla T4",
+        "total_vram_gb": 14.56
+      }
+    ],
+    "torch": "2.11.0+cu130",
+    "torch_cuda_available": true,
+    "torch_cuda_build": "13.0"
+  },
+  "nvidia_smi_after": [
+    {
+      "gpu_utilization_percent": 49,
+      "index": 0,
+      "temperature_c": 79,
+      "used_mib": 2165
+    },
+    {
+      "gpu_utilization_percent": 0,
+      "index": 1,
+      "temperature_c": 42,
+      "used_mib": 3
+    }
+  ],
+  "nvidia_smi_before": [
+    {
+      "gpu_utilization_percent": 0,
+      "index": 0,
+      "temperature_c": 64,
+      "used_mib": 2059
+    },
+    {
+      "gpu_utilization_percent": 0,
+      "index": 1,
+      "temperature_c": 42,
+      "used_mib": 3
+    }
+  ],
+  "run_id": "asr_t4_534e70b217",
+  "safety": {
+    "benchmark_execution_is_not_end_to_end_browser_latency": true,
+    "recorded_api_keys": false,
+    "recorded_audio": false,
+    "recorded_prompts": false,
+    "recorded_transcripts": false
+  },
+  "source": "Kaggle NVIDIA CUDA T4 session with live Gemini and public dataset samples",
+  "utc_end": "2026-11-08T13:34:48.823881+00:00",
+  "utc_start": "2026-11-08T13:33:49.746308+00:00"
+}
