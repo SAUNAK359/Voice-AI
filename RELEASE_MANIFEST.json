@@ -8,6 +8,11 @@
       "sha256": "878e228ce9ad1950eb4d1352565ecc201c81a277d25c31684ec3226d4275726c"
     },
     {
+      "path": ".github/dependabot.yml",
+      "bytes": 112,
+      "sha256": "eada67e1b7f73d16a4c240ede6193c4852a2b0887e678a23dc7a3462810502e7"
+    },
+    {
       "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
       "bytes": 600,
       "sha256": "ed9f18efe26dbf05ef94a5a0d3ae32a82258d0ed530d3ce58695f70e8ec759b4"
@@ -18,14 +23,9 @@
       "sha256": "03443f2a3a64bb088f03b05ef9a5522bea84d13344d405082bc7d9569f037d68"
     },
     {
-      "path": ".github/dependabot.yml",
-      "bytes": 112,
-      "sha256": "eada67e1b7f73d16a4c240ede6193c4852a2b0887e678a23dc7a3462810502e7"
-    },
-    {
       "path": ".github/workflows/ci.yml",
-      "bytes": 1930,
-      "sha256": "a8ef513a72fd981c8d052b60edcae3cc8d935a171b835c0cb949cfb9bc7230be"
+      "bytes": 2188,
+      "sha256": "a9e847545f32dce80591ee6c80feb25513ec56913b2403729f4c0eb236749b59"
     },
     {
       "path": ".github/workflows/codeql.yml",
@@ -38,39 +38,9 @@
       "sha256": "6eefc6023f91d30c764a40647b81c06dc18a8d883cd88a5e1fdc808b2a4ed44a"
     },
     {
-      "path": "CHANGELOG.md",
-      "bytes": 956,
-      "sha256": "d455642ab4389e382d72c951768eecdc4de6a8c2948e18ffb0ce0afd46e22d36"
-    },
-    {
-      "path": "CONTRIBUTING.md",
-      "bytes": 986,
-      "sha256": "6f7fc1f4fb34af1505f97662e5a0d47d9b85a9d76d81594914248bf68cc46a8e"
-    },
-    {
-      "path": "Makefile",
-      "bytes": 426,
-      "sha256": "0a46cd73ffce82f50a229b3a4bee6c794b7800c5d07816fab30909ea62eec71f"
-    },
-    {
-      "path": "README.md",
-      "bytes": 9442,
-      "sha256": "a4e6d4acec84997bf1d91ebbc38323de0e68f5962ba568c4c49151691ebf2a0e"
-    },
-    {
-      "path": "SECURITY.md",
-      "bytes": 2141,
-      "sha256": "ddf1300bea784ca96d58eef5e395d910b74825e48c2af1f917f1d72a167e8e93"
-    },
-    {
       "path": "assets/artifact-preview.jpg",
       "bytes": 223518,
       "sha256": "4d9c1ff3712c3457810ca43788e6fc9bf7f8857d7b97c7c87b71b7c7197c5bf9"
-    },
-    {
-      "path": "benchmarks/RESULTS.md",
-      "bytes": 3208,
-      "sha256": "0be1fdfae2c0c93205d2966ffb8ae7eff418964aeead8a488e8ac53b07dad709"
     },
     {
       "path": "benchmarks/data/legacy_failed_turn.jsonl",
@@ -81,6 +51,21 @@
       "path": "benchmarks/data/legacy_failed_turn.summary.json",
       "bytes": 1211,
       "sha256": "8e60ef2f5da42c09ae0225a335e64bb3cedc7419dab06acae7a9cc39791b9dc0"
+    },
+    {
+      "path": "benchmarks/RESULTS.md",
+      "bytes": 3208,
+      "sha256": "0be1fdfae2c0c93205d2966ffb8ae7eff418964aeead8a488e8ac53b07dad709"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 956,
+      "sha256": "d455642ab4389e382d72c951768eecdc4de6a8c2948e18ffb0ce0afd46e22d36"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "bytes": 986,
+      "sha256": "6f7fc1f4fb34af1505f97662e5a0d47d9b85a9d76d81594914248bf68cc46a8e"
     },
     {
       "path": "docs/api.md",
@@ -138,11 +123,6 @@
       "sha256": "c37ad4de9ad932c4b7a4b6e5c5aceacb8ca03af2e0edd472f6e852703067a35a"
     },
     {
-      "path": "examples/README.md",
-      "bytes": 970,
-      "sha256": "7bac02248279b7da983b00e3c06b797091e6441db505a7cdb4a62a67132a6621"
-    },
-    {
       "path": "examples/dataset-quality-example.png",
       "bytes": 61614,
       "sha256": "aa46cf849284d72e4232955f815e9ff28e4e56913744809aee8f6831fd66f22b"
@@ -168,6 +148,16 @@
       "sha256": "759721890752432df0c0423525e5c64238a013a4f8e41fdefdf16b7c6ca45201"
     },
     {
+      "path": "examples/README.md",
+      "bytes": 970,
+      "sha256": "7bac02248279b7da983b00e3c06b797091e6441db505a7cdb4a62a67132a6621"
+    },
+    {
+      "path": "Makefile",
+      "bytes": 426,
+      "sha256": "0a46cd73ffce82f50a229b3a4bee6c794b7800c5d07816fab30909ea62eec71f"
+    },
+    {
       "path": "notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb",
       "bytes": 312269,
       "sha256": "87b9541c3125108228d69aff3f8680cf2255db0da9ec3b40665bae08ac8e85d4"
@@ -176,6 +166,11 @@
       "path": "pyproject.toml",
       "bytes": 514,
       "sha256": "d36300d9af54eb5ad5d31ef3cf63752268daa3f04043afd05f5cd7b783434ee8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 10061,
+      "sha256": "053455410917e86ecc3ee9874d7920c4892a3cb25fc99926aa38ba2aaa7745d6"
     },
     {
       "path": "schemas/work-handoff-example.json",
@@ -221,6 +216,16 @@
       "path": "scripts/verify_release.py",
       "bytes": 813,
       "sha256": "64203ffc15a7bcd5e783c58cb9775d7d31df46403baa5cee82d4a119205bb812"
+    },
+    {
+      "path": "SECURITY.md",
+      "bytes": 2141,
+      "sha256": "ddf1300bea784ca96d58eef5e395d910b74825e48c2af1f917f1d72a167e8e93"
+    },
+    {
+      "path": "setup.py",
+      "bytes": 505,
+      "sha256": "c85edfc55590b33d97da6655467d0310f5613eea91baf73b9ecdf87d6d0f8da0"
     },
     {
       "path": "src/rizzler/__init__.py",
