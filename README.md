@@ -6,7 +6,7 @@
 
 **A Kaggle GPU prototype with a continuous voice interface and a separate long-running research and deliverables engine.**
 
-[Voice Pipeline](docs/voice-pipeline.md) · [Work Agent](docs/work-agent-architecture.md) · [Architecture](docs/architecture.md) · [Project Brief](docs/project-brief.md) · [Kaggle Quickstart](docs/kaggle-setup.md) · [17 Skills](docs/skills.md) · [Benchmarks](benchmarks/RESULTS.md) · [Security](SECURITY.md)
+[Voice Pipeline](docs/voice-pipeline.md) · [Work Agent](docs/work-agent-architecture.md) · [Architecture](docs/architecture.md) · [Project Brief](docs/project-brief.md) · [Kaggle Quickstart](docs/kaggle-setup.md) · [17 Skills](docs/skills.md) · [Benchmarks](benchmarks/RESULTS.md) · [Datasets](benchmarks/DATASETS.md) · [Security](SECURITY.md)
 
 </div>
 
@@ -91,16 +91,21 @@ The Work Agent currently exposes **17 governed skills** with individual formatti
 
 See [the complete specialist skill contracts](docs/skills.md) and [offline sample deliverables](examples/README.md). Factuality and visual polish still require human review for consequential work.
 
-## Benchmarks: measured data, not aspirations
+## Benchmarks and evaluation data
 
-| Run | Metric | Observed | Evidence |
-| --- | --- | --- | --- |
-| Historical Gemini Flash-Lite, 20 warm calls | TTFT median / p95 | **1012.7 / 1136.0 ms** | Previously reported benchmark summary; raw samples not attached |
-| Historical Gemini persistent client, 10 calls | TTFT median / p95 | **960.3 / 1076.3 ms** | Previously reported benchmark summary; different sample size |
-| Legacy 2026-11-04 voice test, 1 failed turn | ASR / full failed turn | **5380.5 / 9248.4 ms** | Redacted event log in `benchmarks/data/` |
-| **V9 live Kaggle voice E2E** | First audible sound, p50/p95 | **Not measured** | Requires instrumented Kaggle and real browser |
+**Recorded historical Gemini latency** — time to first text (TTFT), **not V9 microphone-to-speaker response time**:
 
-**The historical numbers are not V9 performance claims.** The 300 ms first-audio value in the notebook is a *stretch target*, not a measured result. See [results and reproducibility](benchmarks/RESULTS.md).
+| Historical Gemini test | Requests | Median TTFT | P95 TTFT |
+| --- | ---: | ---: | ---: |
+| Flash-Lite warm streaming | 20 | **1,012.7 ms** | **1,136.0 ms** |
+| Persistent API client | 10 | **960.3 ms** | **1,076.3 ms** |
+| Fresh API client | 10 | **1,051.0 ms** | **1,241.8 ms** |
+
+**Evaluation data used:** Historical Gemini request aggregates (raw per-request trace unavailable), **one redacted failed legacy voice event**, and synthetic tabular/document fixtures for offline rendering and contract tests. The legacy event logged **5,380.5 ms ASR** and **9,248.4 ms total failed-turn time** after a Gemini 503; it is **not a successful latency result**.
+
+**Not yet measured:** V9 end-to-end audible latency, Whisper WER/CER, barge-in p95, concurrent users, V9 GPU memory, and live Gemini Work Agent success. LibriSpeech, Common Voice, and FLEURS are **planned datasets, not used datasets**.
+
+Read the [results and methodology](benchmarks/RESULTS.md), [actual and planned datasets](benchmarks/DATASETS.md), or the [benchmark quick guide](benchmarks/README.md). Results are labeled by provenance and should not be interpreted as production-grade SLAs.
 
 ## Quality and verification
 

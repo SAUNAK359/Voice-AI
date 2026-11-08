@@ -20,6 +20,18 @@
 
 Designed and implemented **Rizzler**, a Gemini-powered real-time voice AI and asynchronous task-execution prototype. Built a browser-to-FastAPI speech pipeline with Whisper Turbo CUDA recognition, streamed model responses, KittenTTS male speech, interruption handling and HTTPS fallback. Integrated a separate schema-governed Work Agent for research, structured analysis, document generation and persistent job-status reporting. Packaged a Kaggle-ready notebook with GitHub Actions, security checks, benchmark provenance and testable modules.
 
+## Benchmark evidence and dataset disclosure
+
+| Historical measurement | Sample size | Median | P95 | Scope |
+| --- | ---: | ---: | ---: | --- |
+| Gemini Flash-Lite TTFT | 20 | 1,012.7 ms | 1,136.0 ms | API text latency only |
+| Gemini persistent-client TTFT | 10 | 960.3 ms | 1,076.3 ms | API text latency only |
+| Gemini fresh-client TTFT | 10 | 1,051.0 ms | 1,241.8 ms | API text latency only |
+
+**Data used:** Historical model request summaries, one failed legacy voice JSONL trace, and synthetic tabular/content fixtures for offline tests. **Data not used yet:** LibriSpeech, Common Voice, FLEURS or a labeled golden Work Agent benchmark. There is **no verified V9 first-audible p50/p95 measurement**; 300 ms remains a stretch goal.
+
+[Benchmark tables](../benchmarks/RESULTS.md) · [Dataset inventory](../benchmarks/DATASETS.md)
+
 ## Engineering reviewer notes
 
 - **What runs:** canonical Kaggle notebook with embedded browser UI and FastAPI voice/work routes. Separate modules in `src/rizzler/` validate contracts and patterns; they are not yet used as a fully extracted service runtime.
