@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rizzler-voice-intelligence"
+version = "0.9.1"
+description = "Provider-neutral orchestration contracts and tests for the Rizzler voice/work agent showcase"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "Rizzler Project Contributors"}]
+keywords = ["voice-assistant", "gemini", "kaggle", "work-agent", "agentic-ai"]
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]

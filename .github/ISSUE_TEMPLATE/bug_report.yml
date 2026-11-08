@@ -1,0 +1,27 @@
+name: Bug report
+about: Report a reproducible product failure
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 'Never paste API keys or private voice transcripts.'
+  - type: textarea
+    id: problem
+    attributes:
+      label: What failed?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime (Kaggle Python, GPU, package versions)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs

@@ -1,0 +1,52 @@
+name: Rizzler CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  static-contract-tests:
+    name: Offline checks / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11','3.12','3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Check Python syntax
+        run: python -m compileall -q src scripts tests
+      - name: Verify packaged release manifest
+        run: python scripts/verify_release.py
+      - name: Check notebook syntax, execution order, model prerequisites
+        run: python scripts/validate_notebook.py
+      - name: Run deterministic security, jobs, state, metrics tests
+        run: python -m unittest discover -s tests -v
+      - name: Check for leaked API keys and notebook outputs
+        run: python scripts/scan_secrets.py
+      - name: Audit observed legacy benchmark events (without guessing success)
+        run: python scripts/benchmark.py benchmarks/data/legacy_failed_turn.jsonl --output /tmp/rizzler_ci_metrics.json
+      - name: Ensure metrics report is machine-readable
+        run: python -m json.tool /tmp/rizzler_ci_metrics.json > /dev/null
+  frontend-syntax:
+    name: Frontend JS syntax / Node 22
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate extracted frontend JS
+        run: node --check web/app.js
+      - name: Validate generated UI snapshot matches notebook
+        run: python scripts/build_frontend.py --check
+      - name: Validate expected frontend DOM bindings
+        run: python scripts/validate_frontend.py

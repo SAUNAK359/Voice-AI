@@ -1,0 +1,51 @@
+{
+  "kind": "observed-notebook-events",
+  "source": "benchmarks/data/legacy_failed_turn.jsonl",
+  "statistics": {
+    "turns": 1,
+    "successful": 0,
+    "failed": 1,
+    "stages": {
+      "asr_ms": {
+        "count": 0,
+        "median_ms": null,
+        "p95_ms": null,
+        "min_ms": null,
+        "max_ms": null
+      },
+      "gemini_ttft_ms": {
+        "count": 0,
+        "median_ms": null,
+        "p95_ms": null,
+        "min_ms": null,
+        "max_ms": null
+      },
+      "tts_first_pcm_ms": {
+        "count": 0,
+        "median_ms": null,
+        "p95_ms": null,
+        "min_ms": null,
+        "max_ms": null
+      },
+      "post_pause_first_audio_ms": {
+        "count": 0,
+        "median_ms": null,
+        "p95_ms": null,
+        "min_ms": null,
+        "max_ms": null
+      },
+      "e2e_ms": {
+        "count": 0,
+        "median_ms": null,
+        "p95_ms": null,
+        "min_ms": null,
+        "max_ms": null
+      }
+    }
+  },
+  "caveats": [
+    "Only rows with outcome=ok contribute to stage latency summaries.",
+    "No browser-audio-played timestamp unless instrumented by frontend.",
+    "This is not a GPU performance measurement unless events came from a live GPU run."
+  ]
+}

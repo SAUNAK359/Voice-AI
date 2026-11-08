@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "request_id": "00000000-0000-4000-8000-000000000001",
+  "session_id": "example_private_session",
+  "objective": "Research the use of GPU inference in enterprise voice assistants and create a PDF, slide deck, and analytical workbook.",
+  "user_utterance": "Prepare a research package for this project.",
+  "context": {
+    "summary": "Synthetic example; no real user data.",
+    "conversation": [],
+    "artifact_ids": [],
+    "parent_job_id": null
+  },
+  "permissions": {
+    "web_search": true,
+    "dataset_read": false,
+    "artifact_write": true,
+    "automation_propose": false,
+    "external_actions": false
+  },
+  "deliverables": [
+    "answer",
+    "research",
+    "pdf",
+    "pptx",
+    "xlsx"
+  ],
+  "constraints": {
+    "deadline_utc": null,
+    "max_wall_seconds": 540,
+    "max_tool_calls": 8,
+    "max_output_files": 12,
+    "sources_required": true
+  },
+  "priority": "normal"
+}
