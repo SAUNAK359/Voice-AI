@@ -1,0 +1,45 @@
+{
+  "kind": "offline_artifact_structural_check",
+  "files": 6,
+  "valid": 6,
+  "invalid": 0,
+  "limitations": "Structural checks only; do not establish content correctness or visual quality",
+  "results": [
+    {
+      "name": "README.md",
+      "format": ".md",
+      "valid": true,
+      "check": "nonblank_utf8"
+    },
+    {
+      "name": "dataset-quality-example.png",
+      "format": ".png",
+      "valid": true,
+      "check": "png_magic_only"
+    },
+    {
+      "name": "decision-intelligence.docx",
+      "format": ".docx",
+      "valid": true,
+      "check": "zip_crc_and_ooxml_structure"
+    },
+    {
+      "name": "decision-intelligence.pdf",
+      "format": ".pdf",
+      "valid": true,
+      "check": "pdf_magic_only"
+    },
+    {
+      "name": "decision-intelligence.pptx",
+      "format": ".pptx",
+      "valid": true,
+      "check": "zip_crc_and_ooxml_structure"
+    },
+    {
+      "name": "decision-intelligence.xlsx",
+      "format": ".xlsx",
+      "valid": true,
+      "check": "zip_crc_and_ooxml_structure"
+    }
+  ]
+}

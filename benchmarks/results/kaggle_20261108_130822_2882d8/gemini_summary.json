@@ -1,0 +1,33 @@
+{
+  "run_id": "d5f0c6aa6f584c29a65abfdf3e3c0ab4",
+  "provenance": "live_gemini_api_rest_sse",
+  "run_utc": "2026-11-08T13:10:40.468763+00:00",
+  "configuration": {
+    "model": "gemini-3.5-flash-lite",
+    "prompts": 10,
+    "repeat": 5,
+    "warmup": 2,
+    "goal_ms": 564,
+    "measurement": "request_to_first_visible_text"
+  },
+  "statistics": {
+    "status": "measured",
+    "samples": 50,
+    "successful": 50,
+    "failed": 0,
+    "success_rate": 1.0,
+    "ttft_ms": {
+      "p50": 621.79,
+      "p95": 969.71,
+      "p99": 1191.86,
+      "min": 451.63,
+      "max": 1191.86
+    },
+    "goal": {
+      "metric": "median_ttft_ms",
+      "target_ms": 564,
+      "evaluation": "not_met"
+    },
+    "warning": null
+  }
+}

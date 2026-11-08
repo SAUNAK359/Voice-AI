@@ -1,0 +1,14 @@
+{
+  "dataset_id": "synthetic_offline_smoke_not_real_asr_accuracy",
+  "status": "evaluated_inputs_not_verified_dataset_origin",
+  "utterances_total": 3,
+  "utterances_scored": 3,
+  "references_missing": 0,
+  "wer": 0.1,
+  "cer": 0.06,
+  "reference_words": 10,
+  "reference_characters": 50,
+  "word_edit_distance": 1,
+  "character_edit_distance": 3,
+  "normalization": "Unicode NFKC, casefold, punctuation to spaces, whitespace collapse"
+}

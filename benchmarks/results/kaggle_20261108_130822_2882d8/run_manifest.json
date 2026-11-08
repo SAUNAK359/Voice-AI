@@ -1,0 +1,109 @@
+{
+  "benchmark_config": {
+    "asr_max_per_dataset": 20,
+    "common_voice_attached": false,
+    "gemini_model": "gemini-3.5-flash-lite",
+    "gemini_warmups": 2,
+    "measured_gemini_requests": 50
+  },
+  "git_base_commit": "597dd310b7ca26f9f3ff84761544910075b5ad60",
+  "git_push": "performed_separately_by_user_Kaggle_cell",
+  "jobs": {
+    "asr": {
+      "datasets": {
+        "common_voice_attached": "not_run_missing_dataset",
+        "fleurs_en_us_test": "failed_no_audio_transcriptions",
+        "librispeech_test_clean": "failed_no_audio_transcriptions"
+      },
+      "status": "completed"
+    },
+    "gemini": {
+      "exit_code": 0,
+      "measurement": "live_rest_stream_to_first_visible_text_not_audio",
+      "model": "gemini-3.5-flash-lite",
+      "status": "completed",
+      "summary_available": true
+    },
+    "offline": {
+      "artifact_structure": {
+        "exit_code": 0,
+        "note": "offline_fixture_or_legacy_trace_not_live_model_benchmark",
+        "status": "completed"
+      },
+      "legacy_failed_turn_summary": {
+        "exit_code": 0,
+        "note": "offline_fixture_or_legacy_trace_not_live_model_benchmark",
+        "status": "completed"
+      },
+      "synthetic_asr_scorer": {
+        "exit_code": 0,
+        "note": "offline_fixture_or_legacy_trace_not_live_model_benchmark",
+        "status": "completed"
+      }
+    }
+  },
+  "libraries": {
+    "ctranslate2": "4.8.5",
+    "datasets": "3.6.0",
+    "faster-whisper": "1.2.1",
+    "huggingface-hub": "1.33.0",
+    "numpy": "2.1.3",
+    "torch": "2.11.0+cu130"
+  },
+  "machine": {
+    "devices": [
+      {
+        "index": 0,
+        "name": "Tesla T4",
+        "total_vram_gb": 14.56
+      },
+      {
+        "index": 1,
+        "name": "Tesla T4",
+        "total_vram_gb": 14.56
+      }
+    ],
+    "torch": "2.11.0+cu130",
+    "torch_cuda_available": true,
+    "torch_cuda_build": "13.0"
+  },
+  "nvidia_smi_after": [
+    {
+      "gpu_utilization_percent": 0,
+      "index": 0,
+      "temperature_c": 43,
+      "used_mib": 107
+    },
+    {
+      "gpu_utilization_percent": 0,
+      "index": 1,
+      "temperature_c": 42,
+      "used_mib": 3
+    }
+  ],
+  "nvidia_smi_before": [
+    {
+      "gpu_utilization_percent": 0,
+      "index": 0,
+      "temperature_c": 39,
+      "used_mib": 3
+    },
+    {
+      "gpu_utilization_percent": 0,
+      "index": 1,
+      "temperature_c": 42,
+      "used_mib": 3
+    }
+  ],
+  "run_id": "kaggle_20261108_130822_2882d8",
+  "safety": {
+    "benchmark_execution_is_not_end_to_end_browser_latency": true,
+    "recorded_api_keys": false,
+    "recorded_audio": false,
+    "recorded_prompts": false,
+    "recorded_transcripts": false
+  },
+  "source": "Kaggle NVIDIA CUDA T4 session with live Gemini and public dataset samples",
+  "utc_end": "2026-11-08T13:11:12.373185+00:00",
+  "utc_start": "2026-11-08T13:08:24.287412+00:00"
+}
