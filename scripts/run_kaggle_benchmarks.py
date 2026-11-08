@@ -51,6 +51,32 @@ def vers(name):
         return None
 
 
+def ensure_ct2_cuda_libraries(load_library=None):
+    """Fail before downloading datasets if the CUDA 12 libraries are not loadable.
+
+    Check from the benchmark process itself. Kaggle may have a CUDA-enabled
+    PyTorch build while the CTranslate2 CUDA 12 shared libraries are absent.
+    LD_LIBRARY_PATH must be set BEFORE this Python interpreter starts.
+    """
+    import ctypes
+    loader = load_library or ctypes.CDLL
+    missing = []
+    for name in ("libcublas.so.12", "libcudnn.so.9"):
+        try:
+            loader(name)
+        except OSError:
+            missing.append(name)
+    if missing:
+        raise RuntimeError(
+            "CTranslate2 CUDA dependencies unavailable: " + ", ".join(missing)
+            + ". Install nvidia-cublas-cu12 and nvidia-cudnn-cu12 (9.x), "
+            + "then relaunch the Python benchmark subprocess with the "
+            + "nvidia/cublas/lib and nvidia/cudnn/lib directories "
+            + "included in LD_LIBRARY_PATH."
+        )
+    return True
+
+
 def gpu_metadata():
     import torch
     if not torch.cuda.is_available():
@@ -198,6 +224,7 @@ def common_voice_corpus(root: Path):
 
 
 def assess_asr(out: Path, max_per_dataset: int, cv_root: Path | None, model_name: str):
+    ensure_ct2_cuda_libraries()
     import numpy as np
     import torch
     from faster_whisper import WhisperModel
@@ -310,7 +337,10 @@ def assess_asr(out: Path, max_per_dataset: int, cv_root: Path | None, model_name
                                "cuda_device": 0, "torch_allocated_peak_mib": round(torch.cuda.max_memory_allocated(0) / (1024**2), 2),
                                "note": "Torch memory metric excludes CTranslate2 GPU allocations"}
     write_json(out / "asr_results.json", stats)
-    return {"status": "completed", "datasets": {k: v.get("status", "metadata") for k, v in stats.items() if k != "whisper_model"}}
+    per_dataset = {k: v.get("status", "metadata") for k, v in stats.items() if k != "whisper_model"}
+    succeeded = any(value == "measured_live_cuda_subset" for value in per_dataset.values())
+    return {"status": "completed" if succeeded else "failed_no_successful_asr_samples",
+            "datasets": per_dataset}
 
 
 def main():
