@@ -1,0 +1,10 @@
+{"id":"quick_001","prompt":"In one sentence, explain the difference between RAM and VRAM."}
+{"id":"quick_002","prompt":"What is 17 multiplied by 19? Reply with the number only."}
+{"id":"quick_003","prompt":"Name two practical causes of slow speech recognition inference."}
+{"id":"reason_001","prompt":"A service processes 12 requests per second with an average duration of 0.5 seconds. Estimate average in-flight requests using Little's law. Explain briefly."}
+{"id":"reason_002","prompt":"Describe two trade-offs between streaming speech recognition and endpoint-based transcription, in two sentences."}
+{"id":"code_001","prompt":"Write a Python function that safely computes median for a nonempty list of finite floats. No imports except statistics."}
+{"id":"tech_001","prompt":"Explain time to first token versus end-to-end latency in exactly two sentences."}
+{"id":"tech_002","prompt":"Give three factors that can make client-observed audio latency higher than model inference latency."}
+{"id":"voice_001","prompt":"How would you verify that stale text-to-speech audio is never played after a user interruption?"}
+{"id":"voice_002","prompt":"In one short paragraph, explain why a browser microphone requires HTTPS or localhost."}

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "type": "engineering_targets_not_measured_results",
+  "targets": {
+    "gemini_ttft_p50_ms": 564
+  },
+  "minimum_successful_samples_for_target_assessment": 30,
+  "evidence_required": "real Gemini streaming requests with a complete redacted JSONL trace",
+  "performance_claim": "none"
+}
