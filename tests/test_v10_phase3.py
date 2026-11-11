@@ -168,3 +168,45 @@ def test_no_thinking_mode_by_default_and_adaptive_budget():
     assert llm.calls[0][1] == "deep"
     assert route("Explain why this architecture scales").output_tokens == 900
     assert config().gemini_enable_thinking is False
+
+def test_thought_parts_never_become_spoken_tokens():
+    class ThoughtLLM(FakeLLM):
+        async def _chunks(self, model, contents, plan):
+            self.calls.append((model, plan.tier, contents))
+            parts = [SimpleNamespace(text="private hidden thought", thought=True),
+                     SimpleNamespace(text="Visible response", thought=False)]
+            yield SimpleNamespace(text="private hidden thoughtVisible response",
+                                  candidates=[SimpleNamespace(content=SimpleNamespace(parts=parts))],
+                                  usage_metadata=None)
+    llm = ThoughtLLM(config(), [])
+    assert collect(llm) == "Visible response"
+
+
+def test_bounded_preflight_only_claims_accessible_models():
+    llm = GeminiLLM(config(gemini_fallback_models=("fallback-model",)))
+    class FakeModels:
+        async def get(self, model):
+            if model == "fallback-model":
+                raise ResponseError(404)
+            return SimpleNamespace(name=model)
+    llm._client = SimpleNamespace(aio=SimpleNamespace(models=FakeModels()))
+    outcome = asyncio.run(llm.check_models())
+    assert outcome == {"gemini-3.5-flash-lite": True, "fallback-model": False}
+
+
+def test_cancelled_stream_never_counts_success():
+    class CancelLLM(FakeLLM):
+        async def _chunks(self, model, contents, plan):
+            self.calls.append((model, plan.tier, contents))
+            yield SimpleNamespace(text="first", usage_metadata=None)
+            raise asyncio.CancelledError()
+    llm = CancelLLM(config(), [])
+    async def run():
+        output = []
+        with pytest.raises(asyncio.CancelledError):
+            async for part in llm.stream("hello", []):
+                output.append(part)
+        return output
+    assert asyncio.run(run()) == ["first"]
+    assert llm.telemetry.rows[-1]["outcome"] == "cancelled"
+    assert llm.telemetry.summary()["successful"] == 0
