@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 
-_NUM = re.compile(r"(?<![\w.])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\w.])")
+_NUM = re.compile(r"(?<![\w.])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?!\w)")
 _CHOICE = re.compile(r"(?:^|\b(?:answer|option|choice)\s*(?::|is)\s*)([A-J])\b", re.I)
 
 
