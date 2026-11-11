@@ -33,7 +33,8 @@ class StaleLease(Exception):
 
 
 class WorkStore:
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, upload_scanner=None, object_store=None):
+        self.upload_scanner, self.objects = upload_scanner, object_store
         self.root = Path(root).expanduser().resolve()
         if not self.root.is_absolute():
             raise ValueError("Work root must be absolute")
@@ -248,6 +249,9 @@ class WorkStore:
                     temp.unlink(missing_ok=True)
                     raise ValueError("Artifact publish checksum mismatch")
                 temp.replace(target / receipt.name)
+                if self.objects is not None:
+                    self.objects.put(f"artifacts/{row['owner']}/{jid}/{receipt.name}",
+                                     target / receipt.name, receipt.sha256, receipt.byte_size)
                 c.execute("""INSERT INTO artifacts(id,job_id,kind,name,sha256,size,at)
                              VALUES(?,?,?,?,?,?,?)""",(
                     secrets.token_hex(16), jid, receipt.kind, p.name, receipt.sha256,
@@ -293,7 +297,16 @@ class WorkStore:
             if row is None: raise Missing("Artifact not found")
             p=self.root/"artifacts"/row["owner"]/row["job_id"]/row["name"]
             p=p.resolve()
-            if (self.root.resolve() not in p.parents or not p.is_file() or
+            if self.root.resolve() not in p.parents:
+                raise Missing("Unsafe artifact storage path")
+            if not p.exists() and self.objects is not None:
+                from .work_objects import StorageUnavailable
+                try:
+                    self.objects.get(f"artifacts/{row['owner']}/{row['job_id']}/{row['name']}",
+                                     p, row["sha256"], row["size"])
+                except StorageUnavailable:
+                    raise Missing("Artifact unavailable") from None
+            if (not p.is_file() or
                     p.stat().st_size!=row["size"] or
                     hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
                 raise Missing("Artifact integrity check failed")
@@ -315,12 +328,23 @@ class WorkStore:
             if not zipfile.is_zipfile(io.BytesIO(data)):
                 raise ValueError("Invalid XLSX")
             with zipfile.ZipFile(io.BytesIO(data)) as z:
-                if z.testzip() is not None or "xl/workbook.xml" not in z.namelist() or len(z.namelist())>500:
+                files = z.infolist()
+                names = z.namelist()
+                if z.testzip() is not None or "xl/workbook.xml" not in names or len(names)>500:
                     raise ValueError("Invalid or oversized XLSX archive")
-                if sum(i.file_size for i in z.infolist())>50_000_000:
+                if sum(i.file_size for i in files)>50_000_000:
                     raise ValueError("Inflated XLSX exceeds 50MB")
+                for item in files:
+                    parts = item.filename.replace("\\\\", "/").split("/")
+                    if (item.filename.startswith("/") or ".." in parts or
+                        item.filename.lower().endswith(("vbaproject.bin", ".exe", ".dll")) or
+                        item.filename.startswith("xl/externalLinks/") or
+                        (item.external_attr >> 16) & 0o170000 == 0o120000):
+                        raise ValueError("Unsafe XLSX archive entry")
         else:
             raise ValueError("Only CSV or XLSX uploads supported")
+        if self.upload_scanner is not None:
+            self.upload_scanner(data)
         with self._tx() as c:
             count=c.execute("SELECT count(*) FROM uploads WHERE owner=?",(owner,)).fetchone()[0]
             if count >= 30: raise Conflict("Upload quota exceeded")
@@ -329,6 +353,9 @@ class WorkStore:
         path.mkdir(parents=True,exist_ok=True,mode=0o700)
         final=path/(uid+Path(name).suffix.lower())
         final.write_bytes(data)
+        if self.objects is not None:
+            self.objects.put(f"uploads/{owner}/{final.name}",
+                             final, hashlib.sha256(data).hexdigest(), len(data))
         with self._tx() as c:
             c.execute("INSERT INTO uploads VALUES(?,?,?,?,?,?)",
                       (uid,owner,name,hashlib.sha256(data).hexdigest(),len(data),time.time()))
@@ -339,7 +366,15 @@ class WorkStore:
             row=c.execute("SELECT * FROM uploads WHERE id=? AND owner=?",(uid,owner)).fetchone()
             if row is None: raise Missing("Upload not found")
             p=(self.root/"uploads"/owner/(uid+Path(row["name"]).suffix.lower())).resolve()
-            if (self.root not in p.parents or not p.is_file() or
+            if self.root not in p.parents:
+                raise Missing("Unsafe upload storage path")
+            if not p.exists() and self.objects is not None:
+                from .work_objects import StorageUnavailable
+                try:
+                    self.objects.get(f"uploads/{owner}/{p.name}",p,row["sha256"],row["size"])
+                except StorageUnavailable:
+                    raise Missing("Upload unavailable") from None
+            if (not p.is_file() or
                     p.stat().st_size!=row["size"] or
                     hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
                 raise Missing("Upload corrupted")

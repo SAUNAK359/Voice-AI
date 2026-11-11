@@ -10,3 +10,10 @@ legacy
 examples
 notebooks
 tests
+
+# Never transmit local production credentials to Docker build contexts.
+.env.*
+*.pem
+*.key
+**/secrets.json
+**/credentials.json

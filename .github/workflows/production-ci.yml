@@ -1,0 +1,61 @@
+name: Rizzler Production Configuration
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  deployment-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate production Python syntax
+        run: python -m compileall -q src/rizzler
+      - name: Check Compose topology without deploying secrets
+        env:
+          RIZZLER_DOMAIN: rizzler.example.test
+        run: |
+          cp deploy/production.env.example .env.production
+          docker compose -f compose.production.yml config --quiet
+          rm .env.production
+      - name: Verify deployment contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          f = Path("Dockerfile").read_text()
+          d = Path("deploy/Caddyfile").read_text()
+          if "USER rizzler" not in f or 'CMD ["python", "-m", "rizzler"]' not in f:
+              raise SystemExit("Dockerfile missing nonroot app")
+          if "reverse_proxy api:8000" not in d or "respond @internal 404" not in d:
+              raise SystemExit("Gateway internal route protections absent")
+          print("Deployment topology contract OK; no live deployment is implied.")
+          PY
+
+  postgres-ledger:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: rizzler_test
+          POSTGRES_USER: rizzler
+          POSTGRES_PASSWORD: test-only-ci-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rizzler -d rizzler_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      RIZZLER_TEST_POSTGRES_URL: postgresql://rizzler:test-only-ci-password@localhost:5432/rizzler_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PostgreSQL and work test dependencies
+        run: pip install -e '.[test,work]' -r requirements-identity.txt
+      - name: Exercise PostgreSQL concurrency and fenced jobs
+        run: python -m pytest -q tests/test_phase5_postgres.py

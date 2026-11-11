@@ -167,7 +167,13 @@ def main():
     p.add_argument("--once",action="store_true")
     args=p.parse_args()
     if not args.root: p.error("Set --root on a persistent disk")
-    store=WorkStore(args.root)
+    from .work_objects import from_environment
+    objects = from_environment()
+    if os.environ.get("RIZZLER_DATABASE_URL"):
+        from .work_postgres import PostgresWorkStore
+        store=PostgresWorkStore(args.root,os.environ["RIZZLER_DATABASE_URL"],object_store=objects)
+    else:
+        store=WorkStore(args.root,object_store=objects)
     asyncio.run(WorkWorker(store).once() if args.once else serve(store))
 
 

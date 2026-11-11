@@ -1,6 +1,7 @@
 """Authenticated Work Agent endpoints; bearer identity is separate from voice key."""
 from __future__ import annotations
 import json
+import asyncio
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -8,12 +9,16 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from .work_auth import verify_token
+from .identity import Identity
 from .work_skills import SKILLS
 from .work_store import WorkStore, Conflict, Missing
+from .upload_scan import ScanUnavailable
 
-def router(store: WorkStore, signing_key: str) -> APIRouter:
+def router(store: WorkStore, signing_key: str, identity: Identity | None = None) -> APIRouter:
     api=APIRouter(prefix="/api/work",tags=["work"])
     def owner(req: Request):
+        if identity is not None:
+            return identity.owner(req, mutate=req.method not in ("GET", "HEAD", "OPTIONS"))
         try:
             # Bearer tokens cannot be minted via the public voice-key endpoint.
             return verify_token(req.headers.get("authorization"), signing_key)
@@ -21,6 +26,8 @@ def router(store: WorkStore, signing_key: str) -> APIRouter:
             raise HTTPException(status_code=401,detail="Invalid work authorization")
 
     def same_origin(req: Request):
+        if identity is not None:
+            return  # Strict origin and CSRF validated by identity.owner(mutate=True).
         origin=req.headers.get("origin")
         if origin:
             parsed=urlparse(origin)
@@ -118,7 +125,11 @@ def router(store: WorkStore, signing_key: str) -> APIRouter:
             raw.extend(chunk)
             if len(raw)>8_000_000:
                 raise HTTPException(status_code=413,detail="Upload too large")
-        try:return store.register_upload(who,req.headers.get("x-file-name",""),bytes(raw))
+        try:
+            return await asyncio.to_thread(
+                store.register_upload, who, req.headers.get("x-file-name",""), bytes(raw))
+        except ScanUnavailable:
+            raise HTTPException(status_code=503,detail="Upload rejected or scanner unavailable") from None
         except Conflict:
             raise HTTPException(status_code=429,detail="Upload quota exceeded")
         except (ValueError,UnicodeError):

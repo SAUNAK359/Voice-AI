@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from os import environ
 import re
+import secrets
 
 
 @dataclass(frozen=True)
@@ -59,7 +60,9 @@ class Settings:
             value = environ.get(name, '').strip()
             return float(value) if value else None
         return cls(
-            access_key=environ.get('RIZZLER_ACCESS_KEY', ''),
+            access_key=environ.get('RIZZLER_ACCESS_KEY', '') if
+                environ.get('RIZZLER_DEPLOYMENT_MODE', 'demo') != 'production'
+                else secrets.token_urlsafe(32),
             gemini_api_key=environ.get('GEMINI_API_KEY', ''),
             gemini_model=environ.get('RIZZLER_GEMINI_MODEL', 'gemini-3.5-flash-lite'),
             gemini_fallback_models=fallback,

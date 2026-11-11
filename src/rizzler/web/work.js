@@ -1,7 +1,14 @@
 (()=>{'use strict';const $=id=>document.getElementById(id);
-let token='';function el(tag,text){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;return x}
-function auth(){token=$('work-token').value.trim();if(!token)throw Error('Work token required');return {'Authorization':'Bearer '+token}}
+let token='',production=false;
+const csrf=()=>decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'');
+function el(tag,text){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;return x}
+function auth(){
+ if(production)return {'x-csrf-token':csrf()};
+ token=$('work-token').value.trim();if(!token)throw Error('Work token required');
+ return {'Authorization':'Bearer '+token}
+}
 async function call(path,opts={}){const r=await fetch('/api/work'+path,{...opts,headers:{...auth(),...(opts.headers||{})}});
+ if(r.status===401&&production){location.replace('/auth/login');throw Error('Session expired')}
  if(!r.ok)throw Error('Request failed ('+r.status+')');if(r.headers.get('content-type')?.includes('application/json'))return r.json();return r}
 function err(x){$('work-error').textContent=x?.message||String(x)}
 async function refresh(){try{const data=await call('/jobs');const pane=$('jobs');pane.replaceChildren();
@@ -42,4 +49,17 @@ async function schedules(){try{
   p.append(row)
  }}catch(e){err(e)}}
 $('reload-work').onclick=()=>{refresh();schedules()};
+(async()=>{
+ try{
+  const res=await fetch('/api/runtime'),data=await res.json();
+  production=data.mode==='production';
+  if(production){
+   const current=await fetch('/auth/session');
+   if(!current.ok){location.replace('/auth/login');return}
+   $('work-token').hidden=true;$('work-token-label').hidden=true;
+   $('work-auth-hint').textContent='Signed in securely; your jobs and files are private.';
+  }
+  refresh();schedules();
+ }catch(e){err(e)}
+})();
 })();

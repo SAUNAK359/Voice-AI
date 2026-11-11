@@ -5,36 +5,80 @@ import base64
 import json
 import secrets
 import struct
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from os import environ
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from .config import Settings
 from .providers import WhisperASR, GeminiLLM, KittenSpeech
 from .sessions import Sessions
 from .voice import VoiceEngine, ProviderSet
 from .security import validate_session_id
+from .identity import Identity, OIDCSettings
+from .operations import Operations
 
 WEB = Path(__file__).with_name('web')
 
 
 def create_app(settings: Settings | None = None, providers: ProviderSet | None = None) -> FastAPI:
-    cfg = settings or Settings.from_env()  # Fail closed without demo access key.
+    mode = environ.get("RIZZLER_DEPLOYMENT_MODE", "demo").lower()
+    if mode not in ("demo", "production"):
+        raise ValueError("Invalid deployment mode")
+    production = mode == "production"
+    cfg = settings or Settings.from_env()
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
     engine, sessions = VoiceEngine(cfg, models), Sessions()
+    operations = Operations()
+    ops_token = environ.get("RIZZLER_OPERATIONS_TOKEN", "")
+    if production and (len(ops_token) < 32 or ops_token == environ.get("RIZZLER_SESSION_SIGNING_KEY", "")):
+        raise ValueError("Production requires an independent operations secret")
     work_root = environ.get("RIZZLER_WORK_ROOT", "")
     work_signing_key = environ.get("RIZZLER_WORK_SIGNING_KEY", "")
     if bool(work_root) != bool(work_signing_key):
         raise ValueError("Configure both RIZZLER_WORK_ROOT and RIZZLER_WORK_SIGNING_KEY")
+    if production and (not work_root or not work_signing_key):
+        raise ValueError("Production requires durable Work Agent storage and signing key")
+    identity = None
+    if production:
+        if not Path(work_root).is_absolute():
+            raise ValueError("Production work root must be absolute")
+        keys = ("ISSUER", "AUTHORIZE_URL", "TOKEN_URL", "JWKS_URL",
+                "CLIENT_ID", "REDIRECT_URI")
+        values = {key.lower(): environ.get("RIZZLER_OIDC_" + key, "") for key in keys}
+        identity = Identity(
+            OIDCSettings(**values, client_secret=environ.get("RIZZLER_OIDC_CLIENT_SECRET", "")),
+            Path(work_root), environ.get("RIZZLER_SESSION_SIGNING_KEY", ""))
     if work_root:
-        from .work_store import WorkStore
+        from .work_objects import from_environment
+        object_store = from_environment()
+        if environ.get("RIZZLER_DATABASE_URL"):
+            from .work_postgres import PostgresWorkStore as WorkStore
+        else:
+            from .work_store import WorkStore
         from .work_auth import _secret
         _secret(work_signing_key)
-        work = WorkStore(work_root)
+        if production:
+            from .upload_scan import scan_clamd
+            scanner_host = environ.get("RIZZLER_CLAMD_HOST", "")
+            if not scanner_host:
+                raise ValueError("Production requires RIZZLER_CLAMD_HOST")
+            try:
+                scanner_port = int(environ.get("RIZZLER_CLAMD_PORT", "3310"))
+            except ValueError:
+                raise ValueError("Invalid malware scanner port") from None
+            def scanner(data):
+                return scan_clamd(data, scanner_host, scanner_port)
+            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], upload_scanner=scanner, object_store=object_store)
+                    if environ.get("RIZZLER_DATABASE_URL") else
+                    WorkStore(work_root, upload_scanner=scanner, object_store=object_store))
+        else:
+            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], object_store=object_store)
+                    if environ.get("RIZZLER_DATABASE_URL") else WorkStore(work_root, object_store=object_store))
     else:
         work = None
 
@@ -47,10 +91,12 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app = FastAPI(title='Rizzler Voice AI', version='1.0.0', lifespan=lifespan,
                   docs_url=None, redoc_url=None)
     app.state.settings, app.state.sessions = cfg, sessions
-    app.state.work = work
+    app.state.operations = operations
+    app.state.work, app.state.identity = work, identity
+    app.state.production = production
     if work:
         from .work_api import router
-        app.include_router(router(work, work_signing_key))
+        app.include_router(router(work, work_signing_key, identity=identity))
 
         @app.get('/work')
         def work_dashboard():
@@ -58,7 +104,16 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     @app.middleware('http')
     async def protect_response(request: Request, call_next):
-        response = await call_next(request)
+        began = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            operations.record(request.method, "unhandled", 500,
+                              (time.perf_counter()-began)*1000)
+            raise
+        route = request.scope.get("route")
+        operations.record(request.method, getattr(route, "path", "unknown"),
+                          response.status_code, (time.perf_counter()-began)*1000)
         response.headers.update({
             'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
@@ -66,9 +121,13 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
               "style-src 'self'; connect-src 'self' ws: wss:; img-src 'self'; "
               "worker-src 'self'; base-uri 'none'; frame-ancestors 'none'",
         })
+        if production:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
     def auth(request: Request, session_required: bool = False) -> str | None:
+        if identity is not None:
+            return identity.owner(request, mutate=request.method not in ("GET", "HEAD", "OPTIONS"))
         token = request.headers.get('x-rizzler-key', '')
         if not secrets.compare_digest(token, cfg.access_key):
             raise HTTPException(status_code=401, detail='Invalid access key')
@@ -78,6 +137,79 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             except ValueError:
                 raise HTTPException(status_code=400, detail='Invalid session identifier')
         return None
+
+    @app.get('/internal/metrics')
+    def internal_metrics(request: Request):
+        presented = request.headers.get("authorization", "")
+        expected = "Bearer " + ops_token
+        if not ops_token or not secrets.compare_digest(presented, expected):
+            raise HTTPException(status_code=401, detail="Unauthorized") from None
+        return operations.snapshot()
+
+    @app.get('/ready')
+    def ready():
+        try:
+            if production and (identity is None or work is None):
+                raise RuntimeError("Required services unavailable")
+            if work:
+                with work._tx() as db:
+                    db.execute("SELECT 1").fetchone()
+            if identity:
+                with identity.sessions._db() as db:
+                    db.execute("SELECT 1").fetchone()
+            return {"ready": True, "mode": mode}
+        except Exception:
+            raise HTTPException(status_code=503, detail="Dependency not ready") from None
+
+    @app.get('/api/runtime')
+    def runtime():
+        return {"mode": mode, "work_enabled": work is not None}
+
+    if identity is not None:
+        @app.get('/auth/login')
+        def login():
+            return identity.login()
+
+        @app.get('/auth/callback')
+        async def callback(request: Request):
+            params = request.query_params
+            try:
+                token, csrf = await identity.exchange(
+                    params.get("code", ""), params.get("state", ""),
+                    request.cookies.get("rizzler_oidc_flow", ""), params.get("iss"))
+            except Exception:
+                # Never expose provider tokens, exception bodies or identity details.
+                raise HTTPException(status_code=401, detail="Identity verification failed") from None
+            response = RedirectResponse("/", status_code=303)
+            identity._cookies(response, token, csrf)
+            response.delete_cookie("rizzler_oidc_flow", path="/", secure=True, samesite="lax")
+            return response
+
+        @app.get('/auth/session')
+        def session_status(request: Request):
+            owner = identity.owner(request)
+            return {"authenticated": True, "mode": "production", "subject": owner}
+
+        @app.post('/auth/refresh')
+        def refresh(request: Request):
+            identity.owner(request, mutate=True)
+            try:
+                token, csrf = identity.sessions.rotate(
+                    request.cookies.get("rizzler_session", ""),
+                    request.headers.get("x-csrf-token", ""))
+            except PermissionError:
+                raise HTTPException(status_code=401, detail="Session expired") from None
+            response = JSONResponse({"refreshed": True})
+            identity._cookies(response, token, csrf)
+            return response
+
+        @app.post('/auth/logout')
+        def logout(request: Request):
+            identity.owner(request, mutate=True)
+            identity.sessions.revoke(request.cookies.get("rizzler_session", ""))
+            response = JSONResponse({"logged_out": True})
+            identity.clear_cookies(response)
+            return response
 
     @app.get('/')
     def index():
@@ -194,11 +326,20 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             await ws.accept()
             try:
                 first = await asyncio.wait_for(ws.receive_json(), 8)
-                if first.get('type') != 'auth' or not secrets.compare_digest(
-                    str(first.get('token', '')), cfg.access_key):
+                if first.get('type') != 'auth':
                     await ws.close(code=1008)
                     return
-                sid = validate_session_id(first.get('client_id', ''))
+                if identity is not None:
+                    try:
+                        sid = identity.ws_owner(ws)
+                    except PermissionError:
+                        await ws.close(code=1008)
+                        return
+                else:
+                    if not secrets.compare_digest(str(first.get('token', '')), cfg.access_key):
+                        await ws.close(code=1008)
+                        return
+                    sid = validate_session_id(first.get('client_id', ''))
                 rate = int(first.get('sample_rate', 48000))
                 if not 8000 <= rate <= 96000:
                     await ws.close(code=1008)
