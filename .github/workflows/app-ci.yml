@@ -19,7 +19,7 @@ jobs:
       - name: Install lean app and test dependencies
         run: pip install -e '.[test]'
       - name: Run app-only tests (no cloud credentials or GPU)
-        run: python -m pytest -q tests/test_app_phase0.py tests/test_v10_phase1.py tests/test_v10_phase2.py
+        run: python -m pytest -q tests/test_app_phase0.py tests/test_v10_phase1.py tests/test_v10_phase2.py tests/test_v10_phase3.py
       - name: Check source syntax
         run: python -m compileall -q src/rizzler
       - uses: actions/setup-node@v4
