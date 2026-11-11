@@ -7,6 +7,7 @@ import secrets
 import struct
 from contextlib import asynccontextmanager
 from pathlib import Path
+from os import environ
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -25,6 +26,17 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     cfg = settings or Settings.from_env()  # Fail closed without demo access key.
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
     engine, sessions = VoiceEngine(cfg, models), Sessions()
+    work_root = environ.get("RIZZLER_WORK_ROOT", "")
+    work_signing_key = environ.get("RIZZLER_WORK_SIGNING_KEY", "")
+    if bool(work_root) != bool(work_signing_key):
+        raise ValueError("Configure both RIZZLER_WORK_ROOT and RIZZLER_WORK_SIGNING_KEY")
+    if work_root:
+        from .work_store import WorkStore
+        from .work_auth import _secret
+        _secret(work_signing_key)
+        work = WorkStore(work_root)
+    else:
+        work = None
 
     @asynccontextmanager
     async def lifespan(app):
@@ -35,6 +47,14 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app = FastAPI(title='Rizzler Voice AI', version='1.0.0', lifespan=lifespan,
                   docs_url=None, redoc_url=None)
     app.state.settings, app.state.sessions = cfg, sessions
+    app.state.work = work
+    if work:
+        from .work_api import router
+        app.include_router(router(work, work_signing_key))
+
+        @app.get('/work')
+        def work_dashboard():
+            return FileResponse(WEB / 'work.html')
 
     @app.middleware('http')
     async def protect_response(request: Request, call_next):
