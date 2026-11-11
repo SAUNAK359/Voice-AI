@@ -8,12 +8,15 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from .work_auth import verify_token
+from .identity import Identity
 from .work_skills import SKILLS
 from .work_store import WorkStore, Conflict, Missing
 
-def router(store: WorkStore, signing_key: str) -> APIRouter:
+def router(store: WorkStore, signing_key: str, identity: Identity | None = None) -> APIRouter:
     api=APIRouter(prefix="/api/work",tags=["work"])
     def owner(req: Request):
+        if identity is not None:
+            return identity.owner(req, mutate=req.method not in ("GET", "HEAD", "OPTIONS"))
         try:
             # Bearer tokens cannot be minted via the public voice-key endpoint.
             return verify_token(req.headers.get("authorization"), signing_key)
@@ -21,6 +24,8 @@ def router(store: WorkStore, signing_key: str) -> APIRouter:
             raise HTTPException(status_code=401,detail="Invalid work authorization")
 
     def same_origin(req: Request):
+        if identity is not None:
+            return  # Strict origin and CSRF validated by identity.owner(mutate=True).
         origin=req.headers.get("origin")
         if origin:
             parsed=urlparse(origin)
