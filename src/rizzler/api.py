@@ -51,7 +51,20 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         from .work_store import WorkStore
         from .work_auth import _secret
         _secret(work_signing_key)
-        work = WorkStore(work_root)
+        if production:
+            from .upload_scan import scan_clamd
+            scanner_host = environ.get("RIZZLER_CLAMD_HOST", "")
+            if not scanner_host:
+                raise ValueError("Production requires RIZZLER_CLAMD_HOST")
+            try:
+                scanner_port = int(environ.get("RIZZLER_CLAMD_PORT", "3310"))
+            except ValueError:
+                raise ValueError("Invalid malware scanner port") from None
+            def scanner(data):
+                return scan_clamd(data, scanner_host, scanner_port)
+            work = WorkStore(work_root, upload_scanner=scanner)
+        else:
+            work = WorkStore(work_root)
     else:
         work = None
 
@@ -100,6 +113,21 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             except ValueError:
                 raise HTTPException(status_code=400, detail='Invalid session identifier')
         return None
+
+    @app.get('/ready')
+    def ready():
+        try:
+            if production and (identity is None or work is None):
+                raise RuntimeError("Required services unavailable")
+            if work:
+                with work._tx() as db:
+                    db.execute("SELECT 1").fetchone()
+            if identity:
+                with identity.sessions._db() as db:
+                    db.execute("SELECT 1").fetchone()
+            return {"ready": True, "mode": mode}
+        except Exception:
+            raise HTTPException(status_code=503, detail="Dependency not ready") from None
 
     @app.get('/api/runtime')
     def runtime():

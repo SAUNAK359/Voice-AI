@@ -1,6 +1,7 @@
 """Authenticated Work Agent endpoints; bearer identity is separate from voice key."""
 from __future__ import annotations
 import json
+import asyncio
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -11,6 +12,7 @@ from .work_auth import verify_token
 from .identity import Identity
 from .work_skills import SKILLS
 from .work_store import WorkStore, Conflict, Missing
+from .upload_scan import ScanUnavailable
 
 def router(store: WorkStore, signing_key: str, identity: Identity | None = None) -> APIRouter:
     api=APIRouter(prefix="/api/work",tags=["work"])
@@ -123,7 +125,11 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
             raw.extend(chunk)
             if len(raw)>8_000_000:
                 raise HTTPException(status_code=413,detail="Upload too large")
-        try:return store.register_upload(who,req.headers.get("x-file-name",""),bytes(raw))
+        try:
+            return await asyncio.to_thread(
+                store.register_upload, who, req.headers.get("x-file-name",""), bytes(raw))
+        except ScanUnavailable:
+            raise HTTPException(status_code=503,detail="Upload rejected or scanner unavailable") from None
         except Conflict:
             raise HTTPException(status_code=429,detail="Upload quota exceeded")
         except (ValueError,UnicodeError):
