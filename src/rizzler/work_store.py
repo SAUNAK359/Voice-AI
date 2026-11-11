@@ -222,10 +222,22 @@ class WorkStore:
             completion_gate(handoff, receipts, "completed")
             if not isinstance(result,str) or not result.strip():
                 raise ValueError("No substantive result")
+            # Publish into the owned durable directory only after validating the
+            # current lease, inside the exclusive DB transaction. Crash-before-
+            # commit files remain unindexed; retries may safely replace them.
+            target = self.root / "artifacts" / row["owner"] / jid
+            target.mkdir(parents=True, exist_ok=True, mode=0o700)
             for receipt in receipts:
                 p = storage / (receipt.kind + "." + receipt.kind)
                 if not p.is_file() or p.stat().st_size != receipt.byte_size or hashlib.sha256(p.read_bytes()).hexdigest()!=receipt.sha256:
                     raise ValueError("Artifact bytes do not match receipt")
+                import shutil
+                temp = target / (receipt.name + "." + secrets.token_hex(8) + ".tmp")
+                shutil.copyfile(p, temp)
+                if hashlib.sha256(temp.read_bytes()).hexdigest()!=receipt.sha256:
+                    temp.unlink(missing_ok=True)
+                    raise ValueError("Artifact publish checksum mismatch")
+                temp.replace(target / receipt.name)
                 c.execute("""INSERT INTO artifacts(id,job_id,kind,name,sha256,size,at)
                              VALUES(?,?,?,?,?,?,?)""",(
                     secrets.token_hex(16), jid, receipt.kind, p.name, receipt.sha256,
