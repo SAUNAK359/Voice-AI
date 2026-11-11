@@ -6,7 +6,7 @@
 - Seventeen registered capabilities (including control-plane skills), twelve real artifact formats, deterministic CSV/XLSX profiling, provider-grounded research that fails closed if citations are missing, and Gemini-generated text.
 - SQLite WAL durable job ledger on a persistent volume, owner-scoped uploads/downloads/events, idempotent admission, atomic worker claims, leases, heartbeats and fencing.
 - Restart recovery (max three attempts), cooperative cancellation, staged artifacts with SHA256 receipts and verified publication.
-- Job dashboard served at /work and explicit automation approval proposals, which do **not** schedule anything automatically.
+- Job dashboard served at /work and explicit bounded recurring schedules only after owner approval, with durable idempotent enqueue, run caps and disable.
 
 ## Install and run
 
@@ -46,6 +46,6 @@ Research requires actual Gemini grounding URL metadata; an ungrounded research r
 
 The code is a **single-host release candidate, not production-certified multi-tenant infrastructure**. Public production still needs trusted login/issuer, revocation, storage encryption, malware scanning, file lifecycle policies, backed-up persistent storage and supervised processes. Distributed deployment requires PostgreSQL/managed object storage; SQLite remains per-host. Independently render and visually inspect PDF/DOCX/PPTX/XLSX, verify Office formula recalculation and actual Gemini grounding, complete fault injection and latency/load tests.
 
-The 17 registry entries include task management and voice status. Automatically narrated progress, independently verified 17 specialist models and a 24/7 automation scheduler are **not** claimed implemented. Approved proposals are explicitly marked approved_not_scheduled.
+The 17 registry entries include task management and voice status. Automatically narrated progress, independently verified 17 specialist models and a 24/7 automation scheduler are **not** claimed implemented. Approved proposals run only while the supervised worker is active. A maximum of 30 future runs can be approved and missed intervals coalesce without burst backlogs.
 
 The API is disabled when RIZZLER_WORK_ROOT and RIZZLER_WORK_SIGNING_KEY are both absent and fails startup if only one is present. Offline CI does not prove live Gemini or production quality.

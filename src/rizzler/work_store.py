@@ -67,7 +67,9 @@ class WorkStore:
             CREATE TABLE IF NOT EXISTS proposals(
               id TEXT PRIMARY KEY, owner TEXT NOT NULL, job_id TEXT NOT NULL,
               cadence_minutes INTEGER NOT NULL, status TEXT NOT NULL,
-              at REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
+              at REAL NOT NULL, next_run REAL NOT NULL DEFAULT 0,
+              runs INTEGER NOT NULL DEFAULT 0, max_runs INTEGER NOT NULL DEFAULT 10,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             """)
 
     @contextmanager
@@ -331,21 +333,74 @@ class WorkStore:
                 raise Missing("Upload corrupted")
             return p
 
-    def proposal(self,owner,jid,cadence_minutes):
+    def proposal(self,owner,jid,cadence_minutes,max_runs=10):
         if type(cadence_minutes) is not int or not 60<=cadence_minutes<=43200:
             raise ValueError("Cadence outside 1h to 30 days")
-        self.get(owner,jid)
+        if type(max_runs) is not int or not 1<=max_runs<=30:
+            raise ValueError("Maximum scheduled runs must be 1 to 30")
+        job=self.get(owner,jid)
+        if job["status"]!="completed":
+            raise Conflict("Schedule only verified completed work")
         pid=secrets.token_hex(16)
         with self._tx() as c:
-            c.execute("INSERT INTO proposals VALUES(?,?,?,?,?,?)",
-                      (pid,owner,jid,cadence_minutes,"pending_approval",time.time()))
-        return {"id":pid,"status":"pending_approval"}
+            c.execute("""INSERT INTO proposals(id,owner,job_id,cadence_minutes,status,at,max_runs)
+                         VALUES(?,?,?,?,'pending_approval',?,?)""",
+                      (pid,owner,jid,cadence_minutes,time.time(),max_runs))
+        return {"id":pid,"status":"pending_approval","max_runs":max_runs}
+
+    def list_proposals(self,owner):
+        with self._tx() as c:
+            return [dict(row) for row in c.execute("""SELECT id,job_id,cadence_minutes,status,
+                next_run,runs,max_runs FROM proposals WHERE owner=? ORDER BY at DESC LIMIT 50""",
+                (owner,))]
 
     def approve_proposal(self,owner,pid):
         with self._tx() as c:
             row=c.execute("SELECT * FROM proposals WHERE id=? AND owner=?",(pid,owner)).fetchone()
             if not row: raise Missing("Proposal not found")
             if row["status"]!="pending_approval": raise Conflict("Proposal not pending")
-            # An approval is NOT a scheduler deployment. Avoid false claims.
-            c.execute("UPDATE proposals SET status='approved_not_scheduled' WHERE id=?",(pid,))
-            return {"id":pid,"status":"approved_not_scheduled"}
+            now=time.time()
+            c.execute("UPDATE proposals SET status='active',next_run=? WHERE id=?",
+                      (now+row["cadence_minutes"]*60,pid))
+            return {"id":pid,"status":"active","next_run":now+row["cadence_minutes"]*60}
+
+    def disable_proposal(self,owner,pid):
+        with self._tx() as c:
+            row=c.execute("SELECT * FROM proposals WHERE id=? AND owner=?",(pid,owner)).fetchone()
+            if not row: raise Missing("Proposal not found")
+            if row["status"] not in ("active","pending_approval"):
+                raise Conflict("Proposal no longer editable")
+            c.execute("UPDATE proposals SET status='disabled' WHERE id=?",(pid,))
+            return {"id":pid,"status":"disabled"}
+
+    def schedule_due(self,limit=5):
+        """Idempotent recurring-job enqueue. One pending invocation per cadence.
+
+        Missed periods are coalesced to one run rather than causing a burst.
+        All scheduling and interval updates happen in one DB transaction.
+        """
+        now=time.time()
+        created=[]
+        with self._tx() as c:
+            due=c.execute("""SELECT p.*,j.payload,j.fingerprint
+                FROM proposals p JOIN jobs j ON j.id=p.job_id
+                WHERE p.status='active' AND p.next_run<=?
+                ORDER BY p.next_run LIMIT ?""",(now,limit)).fetchall()
+            for row in due:
+                active=c.execute("""SELECT count(*) FROM jobs
+                    WHERE owner=? AND status IN ('queued','running')""",
+                    (row["owner"],)).fetchone()[0]
+                if active>=20:
+                    continue
+                index=row["runs"]+1
+                key="schedule_"+row["id"]+"_"+str(index)
+                jid=secrets.token_hex(16)
+                c.execute("""INSERT INTO jobs(id,owner,idem,fingerprint,payload,status,stage,created,updated)
+                             VALUES(?,?,?,?,?,'queued','accepted',?,?)""",
+                          (jid,row["owner"],key,row["fingerprint"],row["payload"],now,now))
+                self._event(c,jid,"queued","Approved schedule enqueued task")
+                new_state="exhausted" if index>=row["max_runs"] else "active"
+                c.execute("""UPDATE proposals SET runs=?,next_run=?,status=? WHERE id=?""",
+                    (index,now+row["cadence_minutes"]*60,new_state,row["id"]))
+                created.append(jid)
+        return created

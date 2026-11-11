@@ -28,5 +28,18 @@ $('submit-work').onclick=async()=>{try{let uploads=[],file=$('upload').files[0];
  const unique=crypto.randomUUID().replaceAll('-','');const item=await call('/jobs',{method:'POST',
  headers:{'idempotency-key':unique,'content-type':'application/json'},body:JSON.stringify(payload)});
  $('work-error').textContent='Queued: '+item.id;refresh();details(item.id)}catch(e){err(e)}};
-$('reload-work').onclick=refresh;
+async function schedules(){try{
+ const data=await call('/automation-proposals');
+ const p=$('schedules');if(!p)return;p.replaceChildren();
+ for(const x of data.proposals){
+  const row=el('p',x.status+' · '+x.runs+'/'+x.max_runs+' runs every '+x.cadence_minutes+' min');
+  if(x.status==='pending_approval'){const b=el('button','Approve');
+   b.onclick=async()=>{await call('/automation-proposals/'+x.id+'/approve',{method:'POST'});schedules()};
+   row.append(b)}
+  if(['pending_approval','active'].includes(x.status)){const b=el('button','Disable');
+   b.onclick=async()=>{await call('/automation-proposals/'+x.id+'/disable',{method:'POST'});schedules()};
+   row.append(b)}
+  p.append(row)
+ }}catch(e){err(e)}}
+$('reload-work').onclick=()=>{refresh();schedules()};
 })();

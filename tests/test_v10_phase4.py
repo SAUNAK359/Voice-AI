@@ -226,15 +226,36 @@ def test_no_fabricated_dataset_charts(store):
     assert store.get("owner_1",j["id"])["status"]=="failed"
 
 
-def test_automation_only_approval_no_scheduling(store):
+def test_approved_automation_idempotent_scheduling_and_disable(store,monkeypatch):
+    import rizzler.work_store as module
     j=basic(store)
-    proposal=store.proposal("owner_1",j["id"],1440)
+    with pytest.raises(Conflict):
+        store.proposal("owner_1",j["id"],1440)
+    asyncio.run(WorkWorker(store,composer=text_composer).once())
+    assert store.get("owner_1",j["id"])["status"]=="completed"
+    proposal=store.proposal("owner_1",j["id"],60,max_runs=2)
     with pytest.raises(Missing):
         store.approve_proposal("owner_2",proposal["id"])
+    clock=[time.time()]
+    monkeypatch.setattr(module.time,"time",lambda:clock[0])
     approved=store.approve_proposal("owner_1",proposal["id"])
-    assert approved["status"]=="approved_not_scheduled"
+    assert approved["status"]=="active"
+    assert store.schedule_due()==[]
+    clock[0]+=3601
+    first=store.schedule_due()
+    assert len(first)==1 and store.schedule_due()==[]
+    # Coalesce a missed interval; the second approval run exhausts schedule.
+    clock[0]+=3601
+    second=store.schedule_due()
+    assert len(second)==1 and first!=second
+    assert store.list_proposals("owner_1")[0]["status"]=="exhausted"
+    clock[0]+=86400
+    assert store.schedule_due()==[]
     with pytest.raises(Conflict):
         store.approve_proposal("owner_1",proposal["id"])
+    another=store.proposal("owner_1",j["id"],1440,max_runs=3)
+    store.approve_proposal("owner_1",another["id"])
+    assert store.disable_proposal("owner_1",another["id"])["status"]=="disabled"
 
 
 def test_lease_fence_rejects_duplicate_commit(store):

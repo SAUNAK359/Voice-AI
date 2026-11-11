@@ -129,11 +129,22 @@ def router(store: WorkStore, signing_key: str) -> APIRouter:
             raw=await req.body()
             if len(raw)>1024:raise ValueError("Proposal too large")
             values=json.loads(raw)
-            return store.proposal(who,jid,values["cadence_minutes"])
+            return store.proposal(who,jid,values["cadence_minutes"],values.get("max_runs",10))
         except Missing:
             raise HTTPException(status_code=404,detail="Job not found")
         except (KeyError,ValueError,TypeError):
             raise HTTPException(status_code=400,detail="Invalid proposal")
+
+    @api.get("/automation-proposals")
+    def proposals(req: Request):
+        return {"proposals":store.list_proposals(owner(req))}
+
+    @api.post("/automation-proposals/{pid}/disable")
+    def disable(req: Request,pid: str):
+        who=owner(req);same_origin(req)
+        try:return store.disable_proposal(who,pid)
+        except Missing:raise HTTPException(status_code=404,detail="Proposal not found")
+        except Conflict:raise HTTPException(status_code=409,detail="Proposal no longer editable")
 
     @api.post("/automation-proposals/{pid}/approve")
     def approve(req: Request,pid: str):

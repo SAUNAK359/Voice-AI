@@ -159,6 +159,7 @@ class WorkWorker:
 async def serve(store,interval=1):
     worker=WorkWorker(store)
     while True:
+        store.schedule_due()
         if not await worker.once():
             await asyncio.sleep(interval)
 
