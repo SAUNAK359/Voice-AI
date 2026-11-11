@@ -37,7 +37,7 @@
   class TurnFence {
     constructor() { this.generation = 0; this.epoch = 0; }
     next() { this.generation += 1; this.epoch += 1; return this.generation; }
-    cancel() { this.epoch += 1; }
+    cancel() { this.generation += 1; this.epoch += 1; }
     accepts(sequence, epoch) {
       return Number.isSafeInteger(sequence) && sequence === this.generation &&
         (epoch === undefined || epoch === this.epoch);
