@@ -222,10 +222,14 @@ def test_refresh_logout_revocation_and_private_cookies(prod):
     old = prod.cookies.get("rizzler_session")
     resp = prod.post("/auth/refresh", headers=headers)
     assert resp.status_code == 200
-    assert prod.cookies.get("rizzler_session") != old
+    assert resp.cookies.get("rizzler_session") != old
     assert "httponly" in resp.headers["set-cookie"].lower()
     with pytest.raises(PermissionError):
         prod.app.state.identity.sessions.validate(old)
+    # TestClient's manually inserted domainless cookie differs from a
+    # browser's host-scoped Set-Cookie. Keep only the rotated response cookies.
+    prod.cookies.clear()
+    prod.cookies.update(resp.cookies)
     new_headers = {"origin": ORIGIN, "x-csrf-token": prod.cookies.get("rizzler_csrf")}
     assert prod.post("/auth/logout", headers=new_headers).status_code == 200
     assert prod.get("/auth/session").status_code == 401
