@@ -76,11 +76,11 @@ class _Tx:
 
 
 class PostgresWorkStore(WorkStore):
-    def __init__(self, root: str | Path, dsn: str, upload_scanner=None):
+    def __init__(self, root: str | Path, dsn: str, upload_scanner=None, object_store=None):
         if not isinstance(dsn, str) or not dsn.startswith(("postgresql://", "postgres://")):
             raise ValueError("PostgreSQL DSN required")
         self.dsn = dsn
-        super().__init__(root, upload_scanner=upload_scanner)
+        super().__init__(root, upload_scanner=upload_scanner, object_store=object_store)
 
     @contextmanager
     def _tx(self):

@@ -54,6 +54,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             OIDCSettings(**values, client_secret=environ.get("RIZZLER_OIDC_CLIENT_SECRET", "")),
             Path(work_root), environ.get("RIZZLER_SESSION_SIGNING_KEY", ""))
     if work_root:
+        from .work_objects import from_environment
+        object_store = from_environment()
         if environ.get("RIZZLER_DATABASE_URL"):
             from .work_postgres import PostgresWorkStore as WorkStore
         else:
@@ -71,12 +73,12 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 raise ValueError("Invalid malware scanner port") from None
             def scanner(data):
                 return scan_clamd(data, scanner_host, scanner_port)
-            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], upload_scanner=scanner)
+            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], upload_scanner=scanner, object_store=object_store)
                     if environ.get("RIZZLER_DATABASE_URL") else
-                    WorkStore(work_root, upload_scanner=scanner))
+                    WorkStore(work_root, upload_scanner=scanner, object_store=object_store))
         else:
-            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"])
-                    if environ.get("RIZZLER_DATABASE_URL") else WorkStore(work_root))
+            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], object_store=object_store)
+                    if environ.get("RIZZLER_DATABASE_URL") else WorkStore(work_root, object_store=object_store))
     else:
         work = None
 
