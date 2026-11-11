@@ -251,6 +251,14 @@ class WorkStore:
             c.execute("""UPDATE jobs SET status='completed',stage='completed',
                 result=?,lease_owner=NULL,lease_until=0,updated=? WHERE id=?""",
                 (result[:10000],time.time(),jid))
+            # An automation plan creates a *pending* proposal only after verified
+            # completion. Scheduled repetitions must never create new schedules.
+            if "automation_plan" in h["deliverables"] and not row["idem"].startswith("schedule_"):
+                c.execute("""INSERT INTO proposals(
+                    id,owner,job_id,cadence_minutes,status,at,max_runs)
+                    VALUES(?,?,?,1440,'pending_approval',?,10)""",
+                    (secrets.token_hex(16),row["owner"],jid,time.time()))
+                self._event(c,jid,"automation_plan","Draft schedule pending owner approval")
             self._event(c,jid,"completed","All required outputs verified")
 
     def fail(self,jid,worker,fence,error_code="execution_error"):
