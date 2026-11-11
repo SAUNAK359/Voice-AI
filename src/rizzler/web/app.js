@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 const {VoiceGate,TurnFence,TimingLedger,scheduleBlock}=window.RizzlerVoice;
 const s={ws:null,mode:'offline',key:'',session:false,muted:false,recording:false,
- rate:48000,ctx:null,media:null,src:null,worklet:null,pre:[],preBytes:0,
+ rate:48000,ctx:null,media:null,src:null,worklet:null,pre:[],preBytes:0,recent:[],recentBytes:0,
  chunks:[],chunkBytes:0,playing:new Set(),nextAudio:0,
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
@@ -63,9 +63,10 @@ async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortContr
  }catch(e){if(e.name!=='AbortError'&&s.fence.accepts(seq)){s.ledger.cancel(seq);status('error','Request failed: '+e.message)}}
  finally{if(s.request===ctrl)s.request=null}}
 function sendWs(msg){if(s.mode!=='ws'||s.ws?.readyState!==1)return false;s.ws.send(JSON.stringify(msg));return true}
-function start(){if(s.recording||s.muted||!s.session)return;
- interrupt();const seq=s.fence.next();s.recording=true;s.chunks=s.pre.slice();s.chunkBytes=s.preBytes;s.done=false;
- if(sendWs({type:'speech_start',generation:seq}))for(const x of s.pre){if(s.ws.bufferedAmount<256000)s.ws.send(x)}
+function start(manual=false){if(s.recording||s.muted||!s.session)return;
+ interrupt();const seq=s.fence.next();const initial=manual?s.recent:s.pre;
+ s.recording=true;s.chunks=initial.slice();s.chunkBytes=initial.reduce((n,x)=>n+x.length,0);s.done=false;
+ if(sendWs({type:'speech_start',generation:seq}))for(const x of initial){if(s.ws.bufferedAmount<256000)s.ws.send(x)}
  status('listening','Capturing speech…');
 }
 function finish(){if(!s.recording)return;s.recording=false;
@@ -92,6 +93,8 @@ function onSamples(samples){if(!s.session||s.muted)return;
      }
    }
  }
+ s.recent.push(raw);s.recentBytes+=raw.length;
+ while(s.recentBytes>s.rate*2*3&&s.recent.length){s.recentBytes-=s.recent.shift().length}
  s.pre.push(raw);s.preBytes+=raw.length;
  const maxPre=Math.floor(s.rate*2*.30);
  while(s.preBytes>maxPre&&s.pre.length){s.preBytes-=s.pre.shift().length}
@@ -149,8 +152,8 @@ $('unlock').addEventListener('submit',async e=>{
 $('connect').addEventListener('click',()=>s.session?disconnect():$('modal').classList.remove('hidden'));
 $('mute').addEventListener('click',()=>{s.muted=!s.muted;$('mute').textContent=s.muted?'Unmute':'Mute';
  if(s.muted){interrupt();s.recording=false;s.gate.reset();status('muted','Microphone muted')}else status('listening','Speak naturally')});
-$('send').addEventListener('click',()=>{if(s.recording){finish();return}if(!s.pre.length)return;
- start();finish()});
+$('send').addEventListener('click',()=>{if(s.recording){finish();return}if(s.recentBytes<s.rate*2*.35)return;
+ start(true);finish()});
 $('reset').addEventListener('click',async()=>{interrupt();s.history.clear();$('messages').replaceChildren();s.ledger.cancel(s.fence.generation);
  if(!sendWs({type:'new_conversation'}))await fetch('/api/reset',{method:'POST',headers:headers()}).catch(()=>{});
  status('listening','New conversation')});
