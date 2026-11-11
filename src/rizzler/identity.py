@@ -14,6 +14,7 @@ import secrets
 import sqlite3
 import time
 from dataclasses import dataclass
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
@@ -55,6 +56,8 @@ class OIDCSettings:
                 raise ValueError("OIDC endpoints must be explicit HTTPS URLs")
         if not self.client_id or len(self.client_id) > 256:
             raise ValueError("Invalid OIDC client ID")
+        if urlparse(self.redirect_uri).path != "/auth/callback":
+            raise ValueError("OIDC redirect must terminate at /auth/callback")
 
 
 class SessionStore:
@@ -70,11 +73,16 @@ class SessionStore:
                 expires INTEGER NOT NULL, created INTEGER NOT NULL)""")
             con.execute("CREATE INDEX IF NOT EXISTS sessions_owner ON sessions(owner,created)")
 
+    @contextmanager
     def _db(self):
         con = sqlite3.connect(self.path, timeout=15)
-        con.execute("PRAGMA journal_mode=WAL")
-        con.execute("PRAGMA busy_timeout=15000")
-        return con
+        try:
+            con.execute("PRAGMA journal_mode=WAL")
+            con.execute("PRAGMA busy_timeout=15000")
+            with con:
+                yield con
+        finally:
+            con.close()
 
     def issue(self, owner: str, ttl: int = 3600) -> tuple[str, str]:
         if not re.fullmatch(r"u_[a-f0-9]{40}", owner) or not 60 <= ttl <= 86400:
@@ -229,7 +237,9 @@ class Identity:
             if mutate:
                 csrf = request.headers.get("x-csrf-token", "")
                 origin = request.headers.get("origin")
-                if not origin or origin.rstrip("/") != str(request.base_url).rstrip("/"):
+                redirect = urlparse(self.settings.redirect_uri)
+                public_origin = f"{redirect.scheme}://{redirect.netloc}"
+                if not origin or origin != public_origin:
                     raise PermissionError("Request origin rejected")
                 if not csrf or not hmac.compare_digest(csrf, request.cookies.get(_CSRF, "")):
                     raise PermissionError("CSRF cookie mismatch")
