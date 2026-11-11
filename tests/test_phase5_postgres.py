@@ -88,3 +88,38 @@ def test_postgres_fenced_recovery_and_cancel(store, monkeypatch):
     store.cancel("owner_1", job["id"])
     store.fail(job["id"], "new", new["fence"])
     assert store.get("owner_1", job["id"])["status"] == "cancelled"
+
+
+def test_postgres_and_s3_across_independent_worker_roots(store, tmp_path):
+    """API and worker have no shared artifacts directory."""
+    from pathlib import Path
+    from rizzler.work_objects import S3Objects
+    from rizzler.artifacts import verify_artifact
+    class FakeS3:
+        def __init__(self): self.data = {}
+        def upload_fileobj(self, stream, bucket, key, ExtraArgs):
+            self.data[key] = (stream.read(), ExtraArgs["Metadata"])
+        def head_object(self, Bucket, Key):
+            raw, meta = self.data[Key]
+            return {"ContentLength": len(raw), "Metadata": meta}
+        def download_file(self, bucket, key, filename):
+            Path(filename).write_bytes(self.data[key][0])
+    remote = S3Objects("private-test-bucket", client=FakeS3())
+    api = PostgresWorkStore(tmp_path/"api", DSN, object_store=remote)
+    worker = PostgresWorkStore(tmp_path/"worker", DSN, object_store=remote)
+    upload = api.register_upload("owner_1", "dataset.csv", b"name,value\\nA,10\\nB,15\\n")
+    job = api.submit("owner_1", "Generate a verified report for the dataset.",
+                     ["md"], "separatehost001", [upload["id"]])
+    assert not (worker.root / "uploads").exists()
+    assert b"name,value" in worker.upload("owner_1", upload["id"]).read_bytes()
+    claim = worker.claim("worker-B", 30)
+    assert claim["id"] == job["id"]
+    stage = tmp_path/"stage-remote"
+    stage.mkdir()
+    output = stage/"md.md"
+    output.write_text("# Analysis\\nGrounded dataset summary for an independent worker.", encoding="utf-8")
+    receipt = verify_artifact(output, "md")
+    worker.finish(job["id"], "worker-B", claim["fence"], "Completed verified analysis.",
+                  [receipt], stage)
+    remote_download, _ = api.artifact("owner_1", api.artifacts("owner_1",job["id"])[0]["id"])
+    assert remote_download.read_bytes() == output.read_bytes()
