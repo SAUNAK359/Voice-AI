@@ -274,3 +274,66 @@ def test_concurrent_same_idempotency_key_returns_single_job(store):
         ids=list(pool.map(submit,range(12)))
     assert len(set(ids))==1
     assert len(store.list_jobs("owner_1"))==1
+
+
+def test_automation_plan_creates_pending_proposal_only_after_completion(store):
+    job=basic(store,idem="automation_plan_001",formats=["md","automation_plan"])
+    assert store.list_proposals("owner_1")==[]
+    worker=WorkWorker(store,composer=text_composer)
+    assert asyncio.run(worker.once())
+    completed=store.get("owner_1",job["id"])
+    assert completed["status"]=="completed",completed
+    proposals=store.list_proposals("owner_1")
+    assert len(proposals)==1 and proposals[0]["status"]=="pending_approval"
+    assert proposals[0]["job_id"]==job["id"]
+    # A repeated worker pass must not duplicate proposals or outputs.
+    assert not asyncio.run(worker.once())
+    assert len(store.list_proposals("owner_1"))==1
+    approved=store.approve_proposal("owner_1",proposals[0]["id"])
+    assert approved["status"]=="active"
+
+
+def test_approved_scheduled_repetition_does_not_create_another_proposal(store,monkeypatch):
+    import rizzler.work_store as module
+    job=basic(store,idem="automation_plan_002",formats=["md","automation_plan"])
+    asyncio.run(WorkWorker(store,composer=text_composer).once())
+    proposal=store.list_proposals("owner_1")[0]
+    clock=[time.time()]
+    monkeypatch.setattr(module.time,"time",lambda:clock[0])
+    store.approve_proposal("owner_1",proposal["id"])
+    clock[0]+=86401
+    recurring=store.schedule_due()
+    assert len(recurring)==1
+    asyncio.run(WorkWorker(store,composer=text_composer).once())
+    assert store.get("owner_1",recurring[0])["status"]=="completed"
+    assert len(store.list_proposals("owner_1"))==1
+
+
+def test_expired_exhausted_task_does_not_starve_new_queued_work(store,monkeypatch):
+    import rizzler.work_store as module
+    clock=[1000.0]
+    monkeypatch.setattr(module.time,"time",lambda:clock[0])
+    exhausted=basic(store,idem="exhausted_001")
+    for i in range(3):
+        claimed=store.claim("worker_"+str(i),lease_seconds=10)
+        assert claimed["id"]==exhausted["id"]
+        clock[0]+=11
+    pending=basic(store,idem="queued_following_exhaustion")
+    next_job=store.claim("healthy_worker",lease_seconds=10)
+    assert next_job["id"]==pending["id"]
+    assert store.get("owner_1",exhausted["id"])["status"]=="failed"
+
+
+def test_cancelled_recovered_task_does_not_block_subsequent_claim(store,monkeypatch):
+    import rizzler.work_store as module
+    clock=[1000.0]
+    monkeypatch.setattr(module.time,"time",lambda:clock[0])
+    stopped=basic(store,idem="cancelled_recovery_001")
+    claimed=store.claim("lost_worker",lease_seconds=10)
+    store.cancel("owner_1",stopped["id"])
+    clock[0]+=11
+    next_job=basic(store,idem="next_after_cancelled")
+    assert store.claim("replacement",lease_seconds=10)["id"]==next_job["id"]
+    assert store.get("owner_1",stopped["id"])["status"]=="cancelled"
+    with pytest.raises(StaleLease):
+        store.renew(stopped["id"],"lost_worker",claimed["fence"])

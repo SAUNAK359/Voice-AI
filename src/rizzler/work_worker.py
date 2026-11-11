@@ -116,9 +116,6 @@ class WorkWorker:
                 self.store.renew(jid,self.identity,fence,stage="planning")
                 text=await self.composer(payload["objective"],summary)
                 sources=[]
-            if "automation_plan" in formats:
-                # Deliberately no automatic recurring execution.
-                self.store.proposal(owner,jid,1440)
             if summary:
                 text += "\n\n## Dataset quality (computed, not model-generated)\n"+json.dumps(summary,indent=2)
             self.store.renew(jid,self.identity,fence,stage="rendering")
