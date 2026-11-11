@@ -66,6 +66,23 @@ services:
     depends_on:
       api: {condition: service_healthy}
 
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:17
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      POSTGRES_DB: rizzler
+      POSTGRES_USER: rizzler
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rizzler -d rizzler"]
+      interval: 10s
+      retries: 5
+
   antivirus:
     image: clamav/clamav:stable
     restart: unless-stopped
@@ -80,6 +97,7 @@ networks:
 
 volumes:
   work_data: {}
+  postgres_data: {}
   model_cache: {}
   work_backups: {}
   antivirus_defs: {}
