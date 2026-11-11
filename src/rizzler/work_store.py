@@ -1,0 +1,332 @@
+"""Single-host durable SQLite job ledger, fenced leases, ownership and receipts.
+
+Exactly-once *commit* is enforced; external provider calls can be re-executed
+after process crashes. The DB and files MUST live on a persistent host volume.
+"""
+from __future__ import annotations
+import hashlib
+import json
+import re
+import secrets
+import sqlite3
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+from .contracts import Handoff, ArtifactReceipt, FILE_FORMATS
+
+KEY_RE = re.compile(r"^[A-Za-z0-9_-]{8,96}$")
+STAGES = {"planning", "research", "analysis", "rendering", "validating"}
+TERMINAL = {"completed", "failed", "cancelled"}
+
+
+class Conflict(Exception):
+    pass
+
+
+class Missing(Exception):
+    pass
+
+
+class StaleLease(Exception):
+    pass
+
+
+class WorkStore:
+    def __init__(self, root: str | Path):
+        self.root = Path(root).expanduser().resolve()
+        if not self.root.is_absolute():
+            raise ValueError("Work root must be absolute")
+        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.db = self.root / "jobs.sqlite3"
+        with self._tx() as c:
+            c.executescript("""
+            CREATE TABLE IF NOT EXISTS jobs(
+              id TEXT PRIMARY KEY, owner TEXT NOT NULL, idem TEXT NOT NULL,
+              fingerprint TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL,
+              stage TEXT NOT NULL, result TEXT NOT NULL DEFAULT '',
+              error_code TEXT NOT NULL DEFAULT '', created REAL NOT NULL,
+              updated REAL NOT NULL, lease_owner TEXT, lease_until REAL NOT NULL DEFAULT 0,
+              fence INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
+              cancel_requested INTEGER NOT NULL DEFAULT 0,
+              UNIQUE(owner, idem));
+            CREATE INDEX IF NOT EXISTS jobs_queue ON jobs(status,lease_until,created);
+            CREATE TABLE IF NOT EXISTS events(
+              seq INTEGER PRIMARY KEY AUTOINCREMENT, job_id TEXT NOT NULL,
+              stage TEXT NOT NULL, message TEXT NOT NULL, at REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS events_job ON events(job_id,seq);
+            CREATE TABLE IF NOT EXISTS uploads(
+              id TEXT PRIMARY KEY, owner TEXT NOT NULL, name TEXT NOT NULL,
+              sha256 TEXT NOT NULL, size INTEGER NOT NULL, at REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS artifacts(
+              id TEXT PRIMARY KEY, job_id TEXT NOT NULL, kind TEXT NOT NULL,
+              name TEXT NOT NULL, sha256 TEXT NOT NULL, size INTEGER NOT NULL,
+              at REAL NOT NULL, UNIQUE(job_id,kind),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS proposals(
+              id TEXT PRIMARY KEY, owner TEXT NOT NULL, job_id TEXT NOT NULL,
+              cadence_minutes INTEGER NOT NULL, status TEXT NOT NULL,
+              at REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
+            """)
+
+    @contextmanager
+    def _tx(self):
+        con = sqlite3.connect(self.db, timeout=15, isolation_level=None)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA foreign_keys=ON")
+        con.execute("PRAGMA busy_timeout=15000")
+        con.execute("PRAGMA journal_mode=WAL")
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            yield con
+            con.commit()
+        except BaseException:
+            con.rollback()
+            raise
+        finally:
+            con.close()
+
+    @staticmethod
+    def _event(c, jid, stage, message):
+        c.execute("INSERT INTO events(job_id,stage,message,at) VALUES(?,?,?,?)",
+                  (jid, stage, message[:180], time.time()))
+
+    def submit(self, owner: str, objective: str, formats: list[str],
+               idem: str, uploads: list[str] | None = None) -> dict:
+        if not isinstance(idem, str) or not KEY_RE.fullmatch(idem):
+            raise ValueError("Idempotency-Key must be 8-96 safe characters")
+        if not isinstance(formats, list) or not all(isinstance(f, str) for f in formats):
+            raise ValueError("Invalid deliverables")
+        Handoff(session_id=owner, objective=objective,
+                deliverables=tuple(formats)).validate()
+        if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
+            raise ValueError("Invalid upload references")
+        payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        jid, t = secrets.token_hex(16), time.time()
+        with self._tx() as c:
+            existing = c.execute("SELECT * FROM jobs WHERE owner=? AND idem=?",
+                                 (owner, idem)).fetchone()
+            if existing:
+                if existing["fingerprint"] != fingerprint:
+                    raise Conflict("Idempotency key belongs to another request")
+                return self._view(existing)
+            if uploads:
+                q = ",".join("?" * len(uploads))
+                n = c.execute(f"SELECT count(*) FROM uploads WHERE owner=? AND id IN ({q})",
+                              [owner, *uploads]).fetchone()[0]
+                if n != len(uploads):
+                    raise Missing("Upload not found")
+            c.execute("""INSERT INTO jobs(id,owner,idem,fingerprint,payload,status,stage,created,updated)
+                         VALUES(?,?,?,?,?,'queued','accepted',?,?)""",
+                      (jid, owner, idem, fingerprint, canonical, t, t))
+            self._event(c, jid, "queued", "Accepted and queued")
+            return self._view(c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone())
+
+    @staticmethod
+    def _view(row):
+        return {key: row[key] for key in (
+            "id", "status", "stage", "result", "error_code", "created", "updated",
+            "attempts", "cancel_requested")}
+
+    def get(self, owner: str, jid: str):
+        with self._tx() as c:
+            row = c.execute("SELECT * FROM jobs WHERE owner=? AND id=?", (owner, jid)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            return self._view(row)
+
+    def list_jobs(self, owner: str):
+        with self._tx() as c:
+            return [self._view(row) for row in c.execute(
+                "SELECT * FROM jobs WHERE owner=? ORDER BY created DESC LIMIT 50", (owner,))]
+
+    def events(self, owner: str, jid: str, after: int = 0):
+        self.get(owner, jid)
+        with self._tx() as c:
+            return [dict(x) for x in c.execute(
+                "SELECT seq,stage,message,at FROM events WHERE job_id=? AND seq>? ORDER BY seq LIMIT 200",
+                (jid, after))]
+
+    def cancel(self, owner: str, jid: str):
+        with self._tx() as c:
+            row = c.execute("SELECT * FROM jobs WHERE owner=? AND id=?", (owner, jid)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            if row["status"] == "queued":
+                c.execute("UPDATE jobs SET status='cancelled',stage='cancelled',updated=? WHERE id=?",
+                          (time.time(), jid))
+                self._event(c, jid, "cancelled", "Cancelled before execution")
+            elif row["status"] == "running":
+                c.execute("UPDATE jobs SET cancel_requested=1,updated=? WHERE id=?",
+                          (time.time(), jid))
+                self._event(c, jid, "cancelling", "Cancellation requested")
+            return self._view(c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone())
+
+    def claim(self, worker: str, lease_seconds: float = 30):
+        now = time.time()
+        with self._tx() as c:
+            row = c.execute("""SELECT * FROM jobs WHERE status='queued' OR
+                (status='running' AND lease_until < ?) ORDER BY created LIMIT 1""",
+                (now,)).fetchone()
+            if not row:
+                return None
+            jid = row["id"]
+            if row["cancel_requested"]:
+                c.execute("""UPDATE jobs SET status='cancelled',stage='cancelled',
+                             lease_owner=NULL,lease_until=0,updated=? WHERE id=?""", (now,jid))
+                self._event(c,jid,"cancelled","Cancelled during recovery")
+                return None
+            if row["attempts"] >= 3:
+                c.execute("""UPDATE jobs SET status='failed',stage='failed',
+                    error_code='max_attempts',lease_owner=NULL,lease_until=0,updated=? WHERE id=?""",
+                          (now,jid))
+                self._event(c,jid,"failed","Execution retries exhausted")
+                return None
+            fence = row["fence"] + 1
+            c.execute("""UPDATE jobs SET status='running',stage='planning',
+                  lease_owner=?,lease_until=?,fence=?,attempts=attempts+1,updated=?
+                  WHERE id=?""",(worker, now+lease_seconds, fence, now, jid))
+            self._event(c,jid,"running","Worker leased task")
+            return {"id": jid,"owner": row["owner"],"fence": fence,
+                    "payload": json.loads(row["payload"])}
+
+    def _active(self, c, jid, worker, fence):
+        row = c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+        if not row or row["status"]!="running" or row["lease_owner"]!=worker or row["fence"]!=fence or row["lease_until"]<=time.time():
+            raise StaleLease("Worker no longer owns task")
+        if row["cancel_requested"]:
+            raise InterruptedError("Task cancelled")
+        return row
+
+    def renew(self, jid, worker, fence, stage=None, lease_seconds=30):
+        with self._tx() as c:
+            row = self._active(c,jid,worker,fence)
+            if stage is not None and stage not in STAGES:
+                raise ValueError("Invalid stage")
+            now = time.time()
+            c.execute("UPDATE jobs SET lease_until=?,stage=?,updated=? WHERE id=?",
+                      (now+lease_seconds,stage or row["stage"],now,jid))
+            if stage is not None and stage != row["stage"]:
+                self._event(c,jid,stage,"Stage started")
+
+    def finish(self, jid, worker, fence, result, receipts: list[ArtifactReceipt], storage: Path):
+        from .contracts import completion_gate
+        with self._tx() as c:
+            row = self._active(c,jid,worker,fence)
+            h = json.loads(row["payload"])
+            handoff = Handoff(session_id=row["owner"],objective=h["objective"],
+                              deliverables=tuple(h["deliverables"]))
+            completion_gate(handoff, receipts, "completed")
+            if not isinstance(result,str) or not result.strip():
+                raise ValueError("No substantive result")
+            for receipt in receipts:
+                p = storage / (receipt.kind + "." + receipt.kind)
+                if not p.is_file() or p.stat().st_size != receipt.byte_size or hashlib.sha256(p.read_bytes()).hexdigest()!=receipt.sha256:
+                    raise ValueError("Artifact bytes do not match receipt")
+                c.execute("""INSERT INTO artifacts(id,job_id,kind,name,sha256,size,at)
+                             VALUES(?,?,?,?,?,?,?)""",(
+                    secrets.token_hex(16), jid, receipt.kind, p.name, receipt.sha256,
+                    receipt.byte_size,time.time()))
+            c.execute("""UPDATE jobs SET status='completed',stage='completed',
+                result=?,lease_owner=NULL,lease_until=0,updated=? WHERE id=?""",
+                (result[:10000],time.time(),jid))
+            self._event(c,jid,"completed","All required outputs verified")
+
+    def fail(self,jid,worker,fence,error_code="execution_error"):
+        with self._tx() as c:
+            try:
+                row=self._active(c,jid,worker,fence)
+                state="failed"
+            except InterruptedError:
+                state="cancelled"
+            except StaleLease:
+                return
+            c.execute("""UPDATE jobs SET status=?,stage=?,error_code=?,
+                lease_owner=NULL,lease_until=0,updated=? WHERE id=? AND fence=?""",
+                (state,state,error_code if state=="failed" else "",time.time(),jid,fence))
+            self._event(c,jid,state,"Execution "+state)
+
+    def artifacts(self,owner,jid):
+        self.get(owner,jid)
+        with self._tx() as c:
+            return [dict(row) for row in c.execute(
+                "SELECT id,kind,name,sha256,size FROM artifacts WHERE job_id=? ORDER BY kind",(jid,))]
+
+    def artifact(self,owner,artifact_id):
+        with self._tx() as c:
+            row=c.execute("""SELECT a.*,j.owner,j.status FROM artifacts a JOIN jobs j ON j.id=a.job_id
+                WHERE a.id=? AND j.owner=? AND j.status='completed'""",
+                (artifact_id,owner)).fetchone()
+            if row is None: raise Missing("Artifact not found")
+            p=self.root/"artifacts"/row["owner"]/row["job_id"]/row["name"]
+            p=p.resolve()
+            if (self.root.resolve() not in p.parents or not p.is_file() or
+                    p.stat().st_size!=row["size"] or
+                    hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
+                raise Missing("Artifact integrity check failed")
+            return p,dict(row)
+
+    def register_upload(self,owner,name,data:bytes):
+        from .security import safe_upload_name
+        safe_upload_name(name)
+        if not 10 <= len(data) <= 8_000_000:
+            raise ValueError("Upload must be 10 bytes to 8 MB")
+        if name.lower().endswith(".csv"):
+            import csv
+            rows=csv.reader(data.decode("utf-8-sig").splitlines())
+            header=next(rows,None)
+            if not header or len(header)>50: raise ValueError("Invalid CSV header")
+        elif name.lower().endswith(".xlsx"):
+            import zipfile
+            import io
+            if not zipfile.is_zipfile(io.BytesIO(data)):
+                raise ValueError("Invalid XLSX")
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                if z.testzip() is not None or "xl/workbook.xml" not in z.namelist() or len(z.namelist())>500:
+                    raise ValueError("Invalid or oversized XLSX archive")
+                if sum(i.file_size for i in z.infolist())>50_000_000:
+                    raise ValueError("Inflated XLSX exceeds 50MB")
+        else:
+            raise ValueError("Only CSV or XLSX uploads supported")
+        uid=secrets.token_hex(16)
+        path=self.root/"uploads"/owner
+        path.mkdir(parents=True,exist_ok=True,mode=0o700)
+        final=path/(uid+Path(name).suffix.lower())
+        final.write_bytes(data)
+        with self._tx() as c:
+            c.execute("INSERT INTO uploads VALUES(?,?,?,?,?,?)",
+                      (uid,owner,name,hashlib.sha256(data).hexdigest(),len(data),time.time()))
+        return {"id":uid,"name":name,"bytes":len(data)}
+
+    def upload(self,owner,uid):
+        with self._tx() as c:
+            row=c.execute("SELECT * FROM uploads WHERE id=? AND owner=?",(uid,owner)).fetchone()
+            if row is None: raise Missing("Upload not found")
+            p=(self.root/"uploads"/owner/(uid+Path(row["name"]).suffix.lower())).resolve()
+            if (self.root not in p.parents or not p.is_file() or
+                    p.stat().st_size!=row["size"] or
+                    hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
+                raise Missing("Upload corrupted")
+            return p
+
+    def proposal(self,owner,jid,cadence_minutes):
+        if type(cadence_minutes) is not int or not 60<=cadence_minutes<=43200:
+            raise ValueError("Cadence outside 1h to 30 days")
+        self.get(owner,jid)
+        pid=secrets.token_hex(16)
+        with self._tx() as c:
+            c.execute("INSERT INTO proposals VALUES(?,?,?,?,?,?)",
+                      (pid,owner,jid,cadence_minutes,"pending_approval",time.time()))
+        return {"id":pid,"status":"pending_approval"}
+
+    def approve_proposal(self,owner,pid):
+        with self._tx() as c:
+            row=c.execute("SELECT * FROM proposals WHERE id=? AND owner=?",(pid,owner)).fetchone()
+            if not row: raise Missing("Proposal not found")
+            if row["status"]!="pending_approval": raise Conflict("Proposal not pending")
+            # An approval is NOT a scheduler deployment. Avoid false claims.
+            c.execute("UPDATE proposals SET status='approved_not_scheduled' WHERE id=?",(pid,))
+            return {"id":pid,"status":"approved_not_scheduled"}
