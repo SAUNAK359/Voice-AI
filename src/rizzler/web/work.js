@@ -15,6 +15,11 @@ async function details(id){try{const [job,ev,art]=await Promise.all([
  btn.onclick=async()=>{try{const r=await call('/artifacts/'+a.id);const blob=await r.blob(),url=URL.createObjectURL(blob);
  const link=document.createElement('a');link.href=url;link.download=a.name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){err(e)}};
  pane.append(btn)}
+ const speak=el('button','Speak verified status');
+ speak.onclick=async()=>{try{const data=await call('/jobs/'+id+'/voice-status');
+ if(!('speechSynthesis' in window))throw Error('Browser speech not supported');
+ speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(data.text))}
+ catch(e){err(e)}};pane.append(speak);
  if(!['completed','failed','cancelled'].includes(job.status)){const b=el('button','Cancel job');b.onclick=async()=>{await call('/jobs/'+id+'/cancel',{method:'POST'});details(id)};pane.append(b)}
  }catch(e){err(e)}}
 $('submit-work').onclick=async()=>{try{let uploads=[],file=$('upload').files[0];

@@ -113,6 +113,10 @@ class WorkStore:
                 if existing["fingerprint"] != fingerprint:
                     raise Conflict("Idempotency key belongs to another request")
                 return self._view(existing)
+            active=c.execute("""SELECT count(*) FROM jobs WHERE owner=?
+                AND status IN ('queued','running')""",(owner,)).fetchone()[0]
+            if active >= 20:
+                raise Conflict("Too many active jobs")
             if uploads:
                 q = ",".join("?" * len(uploads))
                 n = c.execute(f"SELECT count(*) FROM uploads WHERE owner=? AND id IN ({q})",
@@ -303,6 +307,9 @@ class WorkStore:
                     raise ValueError("Inflated XLSX exceeds 50MB")
         else:
             raise ValueError("Only CSV or XLSX uploads supported")
+        with self._tx() as c:
+            count=c.execute("SELECT count(*) FROM uploads WHERE owner=?",(owner,)).fetchone()[0]
+            if count >= 30: raise Conflict("Upload quota exceeded")
         uid=secrets.token_hex(16)
         path=self.root/"uploads"/owner
         path.mkdir(parents=True,exist_ok=True,mode=0o700)

@@ -62,6 +62,29 @@ def router(store: WorkStore, signing_key: str) -> APIRouter:
         try:return store.get(owner(req),jid)
         except Missing:raise HTTPException(status_code=404,detail="Job not found")
 
+    @api.get("/jobs/{jid}/voice-status")
+    def voice_status(req: Request, jid: str):
+        try:
+            who=owner(req)
+            j=store.get(who,jid)
+            events=store.events(who,jid)
+            stage=events[-1]["stage"] if events else j["stage"]
+            state=j["status"]
+            if state=="completed":
+                count=len(store.artifacts(who,jid))
+                line=f"Work completed. {count} verified downloadable artifacts are ready."
+            elif state=="failed":
+                line="The job failed. The recorded error status is "+j["error_code"]+"."
+            elif state=="cancelled":
+                line="The job was cancelled. No completed deliverables are claimed."
+            elif j["cancel_requested"]:
+                line="Cancellation is pending. The worker has not acknowledged it yet."
+            else:
+                line="The job is "+state+". Last recorded stage: "+stage+"."
+            return {"job_id":jid,"status":state,"text":line}
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found")
+
     @api.get("/jobs/{jid}/events")
     def events(req: Request,jid: str,after: int=0):
         if after<0:raise HTTPException(status_code=400,detail="Invalid sequence")

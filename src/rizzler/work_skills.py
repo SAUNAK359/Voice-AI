@@ -46,8 +46,10 @@ def read_dataset(path: Path) -> tuple[list[str], list[list[str]]]:
         workbook = load_workbook(path,read_only=True,data_only=True)
         try:
             ws = workbook.active
+            if ws.max_row > 10001 or ws.max_column > 50:
+                raise ValueError("XLSX exceeds 10000 rows or 50 columns")
             table=[["" if v is None else str(v) for v in row]
-                   for row in ws.iter_rows(values_only=True,max_row=10001,max_col=51)]
+                   for row in ws.iter_rows(values_only=True,max_row=ws.max_row,max_col=ws.max_column)]
         finally:
             workbook.close()
     else:
@@ -178,11 +180,16 @@ def render_one(kind: str, output: Path, title: str, content: str,
         cover=p.slides.add_slide(p.slide_layouts[0])
         cover.shapes.title.text=title
         cover.placeholders[1].text="Rizzler Work Agent • Verified report content"
-        for h,b in sections[:18]:
+        if len(sections)>24:
+            raise ValueError("Too many presentation sections")
+        for h,b in sections:
             slide=p.slides.add_slide(p.slide_layouts[1])
             slide.shapes.title.text=h
             body=slide.placeholders[1]
-            body.text=b[:850]
+            # A slide cannot silently discard source content.
+            if len(b)>850:
+                raise ValueError("Slide section exceeds 850 characters; revise source")
+            body.text=b
             for para in body.text_frame.paragraphs:para.font.size=Pt(18)
         if source_urls:
             s=p.slides.add_slide(p.slide_layouts[1]);s.shapes.title.text="Sources"
