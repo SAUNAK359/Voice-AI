@@ -210,3 +210,11 @@ def test_cancelled_stream_never_counts_success():
     assert asyncio.run(run()) == ["first"]
     assert llm.telemetry.rows[-1]["outcome"] == "cancelled"
     assert llm.telemetry.summary()["successful"] == 0
+
+def test_transient_failure_fallback_after_one_retry():
+    llm = FakeLLM(config(gemini_fallback_models=("recovery-model",)),
+                  [ResponseError(503), ResponseError(503), ["Recovered through fallback"]])
+    assert collect(llm) == "Recovered through fallback"
+    assert [name for name, _, _ in llm.calls] == [
+        "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "recovery-model"]
+    assert llm.telemetry.rows[-1]["attempts"] == 3
