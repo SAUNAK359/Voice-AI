@@ -1,5 +1,12 @@
 """Phase-0 app contract tests: no GPU, network or real secrets required."""
 from __future__ import annotations
+# Legacy source CI intentionally installs --no-deps; the separate app CI installs
+# [test] and executes all integration tests. Explicitly skip only in the
+# dependency-free legacy test matrix, rather than import-failing discovery.
+import importlib.util
+import unittest
+if any(importlib.util.find_spec(pkg) is None for pkg in ("numpy", "pytest", "fastapi", "httpx")):
+    raise unittest.SkipTest("App integration dependencies unavailable; covered by Rizzler App CI")
 import asyncio
 import base64
 import secrets
