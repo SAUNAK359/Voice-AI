@@ -33,7 +33,8 @@ class StaleLease(Exception):
 
 
 class WorkStore:
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, upload_scanner=None):
+        self.upload_scanner = upload_scanner
         self.root = Path(root).expanduser().resolve()
         if not self.root.is_absolute():
             raise ValueError("Work root must be absolute")
@@ -315,12 +316,23 @@ class WorkStore:
             if not zipfile.is_zipfile(io.BytesIO(data)):
                 raise ValueError("Invalid XLSX")
             with zipfile.ZipFile(io.BytesIO(data)) as z:
-                if z.testzip() is not None or "xl/workbook.xml" not in z.namelist() or len(z.namelist())>500:
+                files = z.infolist()
+                names = z.namelist()
+                if z.testzip() is not None or "xl/workbook.xml" not in names or len(names)>500:
                     raise ValueError("Invalid or oversized XLSX archive")
-                if sum(i.file_size for i in z.infolist())>50_000_000:
+                if sum(i.file_size for i in files)>50_000_000:
                     raise ValueError("Inflated XLSX exceeds 50MB")
+                for item in files:
+                    parts = item.filename.replace("\\\\", "/").split("/")
+                    if (item.filename.startswith("/") or ".." in parts or
+                        item.filename.lower().endswith(("vbaproject.bin", ".exe", ".dll")) or
+                        item.filename.startswith("xl/externalLinks/") or
+                        (item.external_attr >> 16) & 0o170000 == 0o120000):
+                        raise ValueError("Unsafe XLSX archive entry")
         else:
             raise ValueError("Only CSV or XLSX uploads supported")
+        if self.upload_scanner is not None:
+            self.upload_scanner(data)
         with self._tx() as c:
             count=c.execute("SELECT count(*) FROM uploads WHERE owner=?",(owner,)).fetchone()[0]
             if count >= 30: raise Conflict("Upload quota exceeded")
