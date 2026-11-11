@@ -1,14 +1,16 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const {VoiceGate,TurnFence,TimingLedger,scheduleBlock}=window.RizzlerVoice;
-const s={ws:null,mode:'offline',key:'',session:false,muted:false,recording:false,
+const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:false,recording:false,
  rate:48000,ctx:null,media:null,src:null,worklet:null,pre:[],preBytes:0,recent:[],recentBytes:0,
  chunks:[],chunkBytes:0,playing:new Set(),nextAudio:0,
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
-const headers=()=>({'x-rizzler-key':s.key,'x-session-id':s.sessionId});
+const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
+const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
+  {'x-rizzler-key':s.key,'x-session-id':s.sessionId};
 function status(p,d=''){document.body.className=p;$('phase').textContent=p[0].toUpperCase()+p.slice(1);$('detail').textContent=d}
 function message(role,text,seq){const id=role+seq;let el=s.history.get(id);if(!el){document.querySelector('.empty')?.remove();el=document.createElement('article');el.className='bubble '+role;const label=document.createElement('small');label.textContent=role==='user'?'You':'Rizzler';const body=document.createElement('div');el.append(label,body);$('messages').append(el);s.history.set(id,el)}el.lastChild.textContent=text;$('messages').scrollTop=$('messages').scrollHeight}
 function noteLatency(){const q=s.ledger.summary();const extra=q.n?` · Output-start proxy p50 ${q.p50} / p95 ${q.p95} / p99 ${q.p99} ms (n=${q.n})`:'';$('clientmetrics').textContent='Browser pause-to-scheduled-playback (not physically measured speaker audio)'+extra}
@@ -138,17 +140,43 @@ async function disconnect(){s.session=false;s.recording=false;clearTimeout(s.rec
  await s.ctx?.close();s.ctx=null;s.mode='offline';$('connection').textContent='Disconnected';status('offline','Session ended');
  $('connect').textContent='Connect microphone';for(const id of ['mute','send','reset'])$(id).disabled=true;
 }
-$('unlock').addEventListener('submit',async e=>{
- e.preventDefault();s.key=$('key').value;
- try{const r=await fetch('/api/auth',{method:'POST',headers:headers()});if(!r.ok)throw Error('Invalid access key');
- if(!window.isSecureContext)throw Error('Microphone requires HTTPS or localhost');
- await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
- s.session=true;$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
- for(const id of ['mute','send','reset'])$(id).disabled=false;
- status('listening','Ready. Speak naturally.');noteLatency();
- if(s.mode==='http')scheduleReconnect();
- }catch(err){$('error').textContent=err.message;s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}});
-$('connect').addEventListener('click',()=>s.session?disconnect():$('modal').classList.remove('hidden'));
+async function connectSession(){
+ try{
+   if(!s.production){
+     const r=await fetch('/api/auth',{method:'POST',headers:headers()});
+     if(!r.ok)throw Error('Invalid access key');
+   }
+   if(!window.isSecureContext)throw Error('Microphone requires HTTPS or localhost');
+   await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
+   s.session=true;$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
+   for(const id of ['mute','send','reset'])$(id).disabled=false;
+   status('listening','Ready. Speak naturally.');noteLatency();
+   if(s.mode==='http')scheduleReconnect();
+ }catch(err){$('error').textContent=err.message;status('error',err.message);
+   s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
+}
+$('unlock').addEventListener('submit',async e=>{e.preventDefault();s.key=$('key').value;await connectSession()});
+$('connect').addEventListener('click',()=>s.session?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
+$('logout').addEventListener('click',async()=>{
+  await disconnect();
+  if(!s.production){$('modal').classList.remove('hidden');return}
+  await fetch('/auth/logout',{method:'POST',headers:headers()}).catch(()=>{});
+  location.replace('/auth/login');
+});
+(async()=>{
+ try{
+  const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
+  const d=await r.json();s.production=d.mode==='production';
+  $('work-link').hidden=!d.work_enabled;
+  $('logout').hidden=!s.production;
+  if(s.production){
+    const who=await fetch('/auth/session');
+    if(!who.ok){location.replace('/auth/login');return}
+    $('modal').classList.add('hidden');
+    status('offline','Signed in. Select Connect microphone to start.');
+  }
+ }catch(e){status('error','Cannot verify runtime access')}
+})();
 $('mute').addEventListener('click',()=>{s.muted=!s.muted;$('mute').textContent=s.muted?'Unmute':'Mute';
  if(s.muted){interrupt();s.recording=false;s.gate.reset();status('muted','Microphone muted')}else status('listening','Speak naturally')});
 $('send').addEventListener('click',()=>{if(s.recording){finish();return}if(s.recentBytes<s.rate*2*.35)return;

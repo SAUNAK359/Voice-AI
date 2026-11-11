@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rizzler Work Agent</title><link rel="stylesheet" href="/static/style.css"></head>
 <body><div class="shell"><header><div class="brand"><div class="logo">R/</div><div><strong>RIZZLER WORK</strong><span>Independent durable job service</span></div></div><a href="/" style="color:#56d9f6">Voice</a></header>
-<main style="grid-template-columns:1fr 1fr"><section class="voice" style="align-items:stretch;text-align:left;min-height:440px"><h1>New work</h1><p>Paste a short-lived token issued by your trusted login. The voice access key cannot access private workspaces.</p>
-<label for="work-token">Work bearer token</label><input type="password" id="work-token" autocomplete="off" placeholder="Short-lived bearer token">
+<main style="grid-template-columns:1fr 1fr"><section class="voice" style="align-items:stretch;text-align:left;min-height:440px"><h1>New work</h1><p id="work-auth-hint">Paste a short-lived token issued by your trusted login. The voice access key cannot access private workspaces.</p>
+<label for="work-token" id="work-token-label">Work bearer token</label><input type="password" id="work-token" autocomplete="off" placeholder="Short-lived bearer token">
 <label for="objective">Objective</label><textarea id="objective" rows="5" maxlength="8000" placeholder="Analyze my uploaded dataset, then prepare a report..."></textarea>
 <label for="deliverables">Output formats (comma-separated)</label><input id="deliverables" value="pdf,docx,md" aria-label="Deliverable formats">
 <label for="upload">Optional CSV/XLSX source file (8 MB limit)</label><input type="file" id="upload" accept=".csv,.xlsx">

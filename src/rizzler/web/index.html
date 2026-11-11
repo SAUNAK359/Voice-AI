@@ -3,14 +3,14 @@
 <meta name="theme-color" content="#09131b"><title>Rizzler — Voice AI</title>
 <link rel="stylesheet" href="/static/style.css"></head>
 <body><div class="shell">
-<header><div class="brand"><div class="logo">R/</div><div><strong>RIZZLER</strong><span>Voice AI · Application V1</span></div></div><div id="connection" role="status">Disconnected</div></header>
+<header><div class="brand"><div class="logo">R/</div><div><strong>RIZZLER</strong><span>Voice AI · Application V1</span></div></div><nav><a href="/work" id="work-link" hidden>Work Agent</a> <button id="logout" hidden type="button">Sign out</button></nav><div id="connection" role="status">Disconnected</div></header>
 <main><section class="voice" aria-label="Voice conversation">
 <div class="orb" id="orb" aria-hidden="true"><div class="orb-inner"></div></div>
 <h1 id="phase">Voice assistant</h1><p id="detail">Enter the private access key to begin.</p>
 <div class="buttons"><button id="connect">Connect microphone</button><button id="mute" disabled>Mute</button><button id="send" disabled>Send now</button><button id="reset" disabled>New conversation</button></div>
 <div class="small">Low-latency WebSocket with HTTP fallback · Browser requires HTTPS or localhost</div>
 </section><section class="chat" aria-label="Transcript and replies"><h2>Conversation</h2><div id="messages" aria-live="polite" aria-relevant="additions text"><p class="empty">Your conversation will appear here.</p></div><div class="metrics" id="metrics">Latency metrics appear after a completed turn. Server-side timing does not measure speaker output.</div><div class="metrics" id="clientmetrics">Browser output-start latency not yet measured.</div></section></main>
-<footer><span>Phase 2 · Voice reliability preview</span><span>Work Agent migration remains a separate milestone</span></footer>
+<footer><span>Rizzler V10 · Voice and Work Agent</span><span>Production sign-in uses an external identity provider</span></footer>
 </div>
 <div id="modal" class="overlay"><form id="unlock" class="dialog"><h2>Start private Rizzler session</h2><p>Enter <code>RIZZLER_ACCESS_KEY</code>. This key stays in your browser memory and is not stored.</p><label for="key">Access key</label><input id="key" type="password" autocomplete="off" required minlength="16" placeholder="Private server key"><button type="submit">Connect</button><div id="error" role="alert"></div></form></div>
 <script src="/static/voice-core.js" defer></script><script src="/static/app.js" defer></script></body></html>
