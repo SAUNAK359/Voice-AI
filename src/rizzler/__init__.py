@@ -1,6 +1,2 @@
-"""Rizzler's testable, provider-independent orchestration contracts.
-
-The Kaggle notebook remains the executable GPU demo; these modules establish
-independent invariants for state, security, handoffs and benchmarking.
-"""
-__version__ = '0.9.1'
+"""Rizzler — app-first, notebook-optional voice AI engineering project."""
+__version__ = '1.0.0'

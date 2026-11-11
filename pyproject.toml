@@ -4,13 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rizzler-voice-intelligence"
-version = "0.9.1"
-description = "Provider-neutral orchestration contracts and tests for the Rizzler voice/work agent showcase"
+version = "1.0.0"
+description = "Lean FastAPI application for Rizzler voice AI, with optional NVIDIA GPU speech dependencies"
 readme = "README.md"
 requires-python = ">=3.11"
-authors = [{name = "Rizzler Project Contributors"}]
-keywords = ["voice-assistant", "gemini", "kaggle", "work-agent", "agentic-ai"]
-dependencies = []
+authors = [{name="Rizzler Project Contributors"}]
+keywords = ["voice-ai", "fastapi", "gemini", "whisper", "agentic-ai"]
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "numpy>=1.26,<3"]
+
+[project.optional-dependencies]
+voice = ["google-genai>=1.45,<3", "faster-whisper==1.2.1", "kittenml==0.9.7", "onnxruntime>=1.20,<2", "scipy>=1.11,<2"]
+cuda12 = ["nvidia-cublas-cu12>=12,<13", "nvidia-cudnn-cu12>=9,<10"]
+test = ["pytest>=8,<10", "httpx>=0.27,<1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+rizzler = ["web/*.html", "web/*.css", "web/*.js"]

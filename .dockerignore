@@ -1,0 +1,12 @@
+.git
+.github
+.env
+*.ipynb
+__pycache__
+.pytest_cache
+*.pyc
+benchmarks
+legacy
+examples
+notebooks
+tests
