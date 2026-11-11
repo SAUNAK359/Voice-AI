@@ -311,3 +311,54 @@ def test_operations_aggregate_does_not_record_sensitive_query_ids():
     assert report["http_latency_ms"]["samples"]==2
     assert "secret_owner" not in json.dumps(report)
     assert all("{" not in row["route"] for row in report["requests_by_route_class"])
+
+
+def test_private_object_storage_roundtrip_and_integrity(tmp_path):
+    from rizzler.work_objects import S3Objects, StorageUnavailable
+    from rizzler.artifacts import verify_artifact
+    from rizzler.work_store import Missing
+
+    class FakeS3:
+        def __init__(self):self.objects={}
+        def upload_fileobj(self, f, bucket, key, ExtraArgs):
+            self.objects[key]=(f.read(), ExtraArgs["Metadata"])
+        def head_object(self, Bucket, Key):
+            body,meta=self.objects[Key]
+            return {"ContentLength":len(body),"Metadata":meta}
+        def download_file(self, bucket, key, filename):
+            Path(filename).write_bytes(self.objects[key][0])
+
+    fake=FakeS3()
+    remote=S3Objects("private-rizzler-tests",client=fake)
+    work=WorkStore(tmp_path/"store",object_store=remote)
+    upload=work.register_upload(OWNER_A,"sales.csv",b"region,value\nNorth,50\nSouth,60\n")
+    source=work.upload(OWNER_A,upload["id"])
+    raw=source.read_bytes()
+    source.unlink()
+    assert work.upload(OWNER_A,upload["id"]).read_bytes()==raw
+
+    job=work.submit(OWNER_A,"Create the verified independent report.",["md"],"cloudstore_001",[upload["id"]])
+    claim=work.claim("s3-worker",lease_seconds=30)
+    stage=tmp_path/"staged"
+    stage.mkdir()
+    file=stage/"md.md"
+    file.write_text("# Report\nVerified content from a private storage-backed job.",encoding="utf-8")
+    receipt=verify_artifact(file,"md")
+    work.finish(job["id"],"s3-worker",claim["fence"],"Completed output.",[receipt],stage)
+    record=work.artifacts(OWNER_A,job["id"])[0]
+    final=work.artifact(OWNER_A,record["id"])[0]
+    final.unlink()
+    assert work.artifact(OWNER_A,record["id"])[0].read_bytes()==file.read_bytes()
+    with pytest.raises(Missing):
+        work.artifact(OWNER_B,record["id"])
+
+    # Corrupt remote data is never served if the local verified cache is gone.
+    final=work.artifact(OWNER_A,record["id"])[0]
+    final.unlink()
+    key=remote._key(f"artifacts/{OWNER_A}/{job['id']}/md.md")
+    body,meta=fake.objects[key]
+    fake.objects[key]=(b"tampered-but-same-size"[:len(body)].ljust(len(body),b"x"),meta)
+    with pytest.raises(Missing):
+        work.artifact(OWNER_A,record["id"])
+    with pytest.raises(ValueError):
+        remote._key("../evil")
