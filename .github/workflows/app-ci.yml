@@ -29,3 +29,6 @@ jobs:
         run: |
           node --check src/rizzler/web/app.js
           node --check src/rizzler/web/capture.js
+          node --check src/rizzler/web/voice-core.js
+      - name: Browser voice regression tests
+        run: node --test tests/test_voice_core.cjs
