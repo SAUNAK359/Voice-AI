@@ -28,7 +28,7 @@ jobs:
           from pathlib import Path
           f = Path("Dockerfile").read_text()
           d = Path("deploy/Caddyfile").read_text()
-          if "USER rizzler" not in f or "python -m rizzler" not in f:
+          if "USER rizzler" not in f or 'CMD ["python", "-m", "rizzler"]' not in f:
               raise SystemExit("Dockerfile missing nonroot app")
           if "reverse_proxy api:8000" not in d or "respond @internal 404" not in d:
               raise SystemExit("Gateway internal route protections absent")
