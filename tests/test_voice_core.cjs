@@ -55,3 +55,21 @@ test('latency ledger records output-start proxy, calculates nearest-rank percent
   l.cancel(8);
   assert.equal(l.complete(8), null);
 });
+
+test('100 cancelled turns never accept old sequence numbers', () => {
+  const fence = new TurnFence();
+  for (let i = 0; i < 100; i++) {
+    const sequence = fence.next(), epoch = fence.epoch;
+    assert.ok(fence.accepts(sequence, epoch));
+    fence.cancel();
+    assert.ok(!fence.accepts(sequence));
+    assert.ok(!fence.accepts(sequence, epoch));
+  }
+});
+
+test('invalid signal samples cannot trigger utterances', () => {
+  const gate = new VoiceGate(16000);
+  for (const input of [NaN, Infinity, -Infinity]) assert.equal(gate.feed(input, 20), null);
+  assert.equal(gate.feed(0.8, 0), null);
+  assert.equal(gate.active, false);
+});
