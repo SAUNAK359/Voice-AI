@@ -30,7 +30,7 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'metrics':{const m=msg.data||{};
  $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · Gemini first text ${m.llm_first_text_ms??'—'} ms · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
  s.ledger.server(seq,m.post_pause_first_audio_ms);break}
- case'done':s.done=true;if(!s.playing.size&&!s.recording)status('listening','Ask a follow-up.');break;
+ case'done':s.done=true;if(s.ledger.complete(seq)!==null)noteLatency();if(!s.playing.size&&!s.recording)status('listening','Ask a follow-up.');break;
  case'error':s.ledger.cancel(seq);stopAudio();status('error',msg.message||'Voice turn failed');break;
  }}
 function playback(samples,seq,rate=24000){if(!s.fence.accepts(seq)||seq!==s.allowSeq||s.recording||!s.ctx||!samples.length)return;
@@ -41,8 +41,6 @@ function playback(samples,seq,rate=24000){if(!s.fence.accepts(seq)||seq!==s.allo
  if(s.ledger.turns.get(seq)?.output===null){ // Scheduling-based estimate; physical first audible requires loopback.
    const estimated=now()+Math.max(0,timeline.start-ctx.currentTime)*1000;
    s.ledger.output(seq,estimated);
-   const value=s.ledger.complete(seq);
-   if(value!==null)noteLatency();
  }
  node.onended=()=>{s.playing.delete(node);node.disconnect();if(epoch===s.epoch&&s.done&&!s.playing.size&&!s.recording)status('listening','Ask a follow-up.')};
  node.start(timeline.start);
@@ -60,6 +58,7 @@ async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortContr
  const pcm=Uint8Array.from(atob(m.audio_b64),c=>c.charCodeAt(0));
  if(!pcm.length||pcm.length%2)throw Error('Invalid response PCM');
  playback(new Int16Array(pcm.buffer),seq,m.sample_rate);
+ if(s.ledger.complete(seq)!==null)noteLatency();
  }catch(e){if(e.name!=='AbortError'&&s.fence.accepts(seq)){s.ledger.cancel(seq);status('error','Request failed: '+e.message)}}
  finally{if(s.request===ctrl)s.request=null}}
 function sendWs(msg){if(s.mode!=='ws'||s.ws?.readyState!==1)return false;s.ws.send(JSON.stringify(msg));return true}
