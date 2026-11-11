@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "description": "Local source package integrity manifest (not a signature)",
+  "description": "Integrity inventory of the original showcase plus updated application package files; run scripts/sync_release_manifest.py after reviewing migration to include newly added files.",
   "files": [
     {
       "path": ".env.example",
-      "bytes": 364,
-      "sha256": "878e228ce9ad1950eb4d1352565ecc201c81a277d25c31684ec3226d4275726c"
+      "bytes": 390,
+      "sha256": "7a6780e9c80a7130918a88f29d17881ba49cabc17d25f597aff0b469967eb00e"
     },
     {
       "path": ".github/dependabot.yml",
@@ -174,8 +174,8 @@
     },
     {
       "path": "pyproject.toml",
-      "bytes": 514,
-      "sha256": "d36300d9af54eb5ad5d31ef3cf63752268daa3f04043afd05f5cd7b783434ee8"
+      "bytes": 954,
+      "sha256": "78ceab49235d6b694efdae9fcb3a52fcf0f7fbcdf4b9474a6e8cf8f221a2fc74"
     },
     {
       "path": "README.md",
@@ -234,13 +234,13 @@
     },
     {
       "path": "setup.py",
-      "bytes": 505,
-      "sha256": "c85edfc55590b33d97da6655467d0310f5613eea91baf73b9ecdf87d6d0f8da0"
+      "bytes": 115,
+      "sha256": "ef14de2db8953057ed4983a39954039e1abad875d7633be1e1c879736ed078f9"
     },
     {
       "path": "src/rizzler/__init__.py",
-      "bytes": 244,
-      "sha256": "b42d4abe97030c0fd94835fc7ddf0202493b1b229fdaa71eaf348d15e0cdfccc"
+      "bytes": 99,
+      "sha256": "221be19b3a0de4341df75e9393bb73a0cc53e372e39526728ddc126573e824cf"
     },
     {
       "path": "src/rizzler/artifacts.py",

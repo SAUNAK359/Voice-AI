@@ -1,0 +1,31 @@
+name: Rizzler App CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install lean app and test dependencies
+        run: pip install -e '.[test]'
+      - name: Run app-only tests (no cloud credentials or GPU)
+        run: python -m pytest -q tests/test_app_phase0.py
+      - name: Check source syntax
+        run: python -m compileall -q src/rizzler
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check browser JS syntax
+        run: |
+          node --check src/rizzler/web/app.js
+          node --check src/rizzler/web/capture.js
