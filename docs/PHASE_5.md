@@ -8,10 +8,13 @@ CSRF/origin validation on writes, fail-closed ClamAV upload scanning, HTTPS
 reverse-proxy Compose service, health/readiness, process-local operations
 telemetry and SHA-256-verified offline backup/restore.
 
-**This is a single-host deployment reference, not a proven multi-region,
-multi-tenant SaaS release.** PostgreSQL, replicated object storage, continuous
-backups and independently verified model quality remain explicit acceptance
-gates before calling a distributed deployment production-certified.
+**This is a single-host deployment reference, not a proven multi-region
+SaaS release.** Optional PostgreSQL transactional job storage and private
+S3-compatible checksum-verified objects are implemented and require live
+integration qualification; browser identity sessions remain host-local SQLite,
+and the default Compose path uses a shared persistent work-data volume.
+Off-host replication, continuous backups and independent model quality are
+release gates before distributed production certification.
 
 The old `RIZZLER_ACCESS_KEY` remains **demo-only**. In production mode, it is
 ignored for authentication; Work tokens are also ignored and cannot bypass
@@ -79,8 +82,26 @@ signed owner sessions expire after one hour and limit active stored sessions.
 
 ## Persistence, backup and recovery
 
-The deployed `work_data` volume holds SQLite WAL jobs and identity sessions,
+With default settings, `work_data` holds SQLite WAL jobs and identity sessions,
 uploads and validated artifacts. The API and worker access the same volume.
+Set `RIZZLER_DATABASE_URL` to an authenticated PostgreSQL DSN for a real
+transactional job ledger; the optional `postgres` Compose profile runs an
+internal PostgreSQL service and requires `POSTGRES_PASSWORD` in the private
+environment file (start with `--profile postgres`). Prefer a managed,
+backed-up PostgreSQL service for an actual production rollout.
+
+Set `RIZZLER_S3_BUCKET` (and optional region/HTTPS endpoint) to publish
+uploads and completed artifacts to a private S3-compatible service. IAM/workload
+identity is preferred over static credentials. Server-side AES256 encryption,
+size/metadata validation and download SHA-256 checks are applied. When the
+verified local copy is missing, the server restores it from remote storage.
+Restrict bucket listing/read/write/delete to this deployment's object prefix.
+Remote objects are committed before job completion; unreferenced objects can
+remain after a failed DB transaction and require a bounded garbage collector.
+
+PostgreSQL and S3 do **not** automatically make this a multi-host deployment:
+the OIDC session database is still on the local persistent volume and service
+scaling requires separately tested session storage, workers and backup controls.
 Fencing prevents stale workers from committing; recovery can retry a model
 call, so Gemini billing is **not** exactly once. This topology supports **one
 logical host**. Do not scale the API/worker across separate hosts sharing
@@ -150,8 +171,8 @@ with invalid hashes.
       and p50/p95/p99 first-audible latency measured on target devices.
 - [ ] Representative load, security assessment, license review and operational
       on-call process completed before a public production claim.
-- [ ] For multi-host: replace SQLite+shared filesystem with PostgreSQL plus
-      durable object storage and independently test distributed fencing,
-      transaction boundaries, backup/restore and tenant isolation.
+- [ ] For multi-host: enable and qualify optional PostgreSQL + S3 adapters,
+      replace host-local identity sessions, independently test distributed
+      fencing, object garbage collection, backup/restore and tenant isolation.
 
 Do not treat green CI as evidence that unrun external acceptance gates passed.
