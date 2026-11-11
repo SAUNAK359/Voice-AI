@@ -19,23 +19,30 @@ from .work_skills import SKILLS, FORMATS, read_dataset, analyze, render_one
 async def compose_work(objective: str, data_summary: dict | None, *, max_chars=18000) -> str:
     """Dedicated model request, bounded and without access to filesystem/tools."""
     from .config import Settings
-    from .providers import GeminiLLM
     cfg=Settings.from_env()
     if not cfg.gemini_api_key:
         raise RuntimeError("Gemini work model is not configured")
-    llm=GeminiLLM(cfg)
-    prompt=("Produce a grounded, professional, self-contained report. Never invent "
-            "sources, dataset values, external research, dates or statistics. "
-            "State unsupported assertions as unknown. Use Markdown headings and "
-            "direct concise paragraphs; no tools or external actions are available.\n"
-            "User objective:\n"+objective[:8000]+"\n"
-            "Deterministic dataset statistics (if provided):\n"+
-            json.dumps(data_summary or {},ensure_ascii=False)[:9000])
-    pieces=[]
-    async for chunk in llm.stream(prompt,[]):
-        pieces.append(chunk)
-        if sum(map(len,pieces))>max_chars: raise ValueError("Model report exceeds bound")
-    return "".join(pieces)
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=cfg.gemini_api_key)
+    prompt = ("Produce a professional, clearly organized report using Markdown headings. "
+              "Never invent external sources, statistics, user data or tool results. "
+              "Express uncertainty and limitations. The following dataset metrics are "
+              "computed independently; quote only what they substantiate.\n\n"
+              "Objective:\n" + objective[:8000] + "\n\nDataset summary:\n" +
+              json.dumps(data_summary or {}, ensure_ascii=False)[:9000])
+    try:
+        async with asyncio.timeout(min(90, cfg.request_timeout)):
+            response=await client.aio.models.generate_content(
+                model=cfg.gemini_model, contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.25,
+                    max_output_tokens=3000))
+        result=getattr(response, "text", "") or ""
+        if not 15<=len(result.strip())<=max_chars:
+            raise ValueError("Model report missing or too long")
+        return result
+    finally:
+        await client.aio.aclose()
 
 
 async def grounded_research(objective: str) -> tuple[str,list[str]]:
