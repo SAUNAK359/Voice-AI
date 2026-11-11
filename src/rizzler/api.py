@@ -75,6 +75,13 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 }, 'inference_busy': sessions.inference.locked(),
                 'first_audio_claim': 'not_measured'}
 
+    @app.get('/api/provider/metrics')
+    def provider_metrics(request: Request):
+        auth(request)
+        stats = getattr(models.llm, 'telemetry', None)
+        return stats.summary() if stats is not None else {
+            'window_requests': 0, 'status': 'provider_telemetry_not_available'}
+
     @app.post('/api/auth')
     def authorize(request: Request):
         auth(request)
