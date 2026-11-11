@@ -74,7 +74,7 @@ function finish(){if(!s.recording)return;s.recording=false;
  s.chunks=[];s.chunkBytes=0;s.gate.reset();
  if(chunksLen<s.rate*.35*2){sendWs({type:'interrupt'});status('listening','Speech too short.');return}
  s.allowSeq=seq;s.done=false;s.ledger.begin(seq,now());status('thinking','Transcribing and generating…');
- if(!sendWs({type:'speech_end',generation:seq}))httpTurn(bytes,seq);
+ if(!sendWs({type:'speech_end',generation:seq})){httpTurn(bytes,seq);scheduleReconnect()}
 }
 function onSamples(samples){if(!s.session||s.muted)return;
  const raw=new Uint8Array(samples.buffer.slice(samples.byteOffset,samples.byteOffset+samples.byteLength));
