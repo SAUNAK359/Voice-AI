@@ -67,12 +67,11 @@ def test_same_session_cannot_take_over_connected_websocket(app):
             assert client.app.state.sessions.sessions["same"].websocket is not None
 
 
-@pytest.mark.asyncio
-async def test_qualification_accepts_actual_fake_audio():
+def test_qualification_accepts_actual_fake_audio():
     cfg = Settings(access_key=KEY)
     engine = VoiceEngine(cfg, ProviderSet(ASR(), LLM(), TTS()))
     audio = np.full(16000, 800, dtype="<i2").tobytes()
-    result = await exercise(engine, audio, 16000)
+    result = asyncio.run(exercise(engine, audio, 16000))
     assert result["outcome"] == "ok"
     assert result["audio_bytes"] > 0
     assert "transcript" not in result
