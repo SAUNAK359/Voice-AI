@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from .audio import pcm16_to_mono
 from .config import Settings
+from .provider_types import ASRProvider, LLMProvider, TTSProvider
 
 
 def phrases(text: str, flush: bool = False) -> tuple[list[str], str]:
@@ -26,9 +27,9 @@ def phrases(text: str, flush: bool = False) -> tuple[list[str], str]:
 
 @dataclass
 class ProviderSet:
-    asr: object
-    llm: object
-    tts: object
+    asr: ASRProvider
+    llm: LLMProvider
+    tts: TTSProvider
 
 
 class VoiceEngine:
