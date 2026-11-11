@@ -142,7 +142,13 @@ class GeminiLLM:
                                 b = getattr(metadata, 'candidates_token_count', None)
                                 if type(a) is int and a >= 0: usage[0] = a
                                 if type(b) is int and b >= 0: usage[1] = b
-                            value = getattr(chunk, 'text', None)
+                            candidates = getattr(chunk, 'candidates', None)
+                            if candidates:
+                                parts = getattr(getattr(candidates[0], 'content', None), 'parts', None) or []
+                                value = ''.join(getattr(part, 'text', '') or '' for part in parts
+                                                if not getattr(part, 'thought', False))
+                            else:
+                                value = getattr(chunk, 'text', None)
                             if isinstance(value, str) and value:
                                 visible = saw_text = True
                                 if first_ms is None:
