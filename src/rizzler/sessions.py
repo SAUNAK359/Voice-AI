@@ -11,6 +11,7 @@ class Session:
     history: list[dict] = field(default_factory=list)
     generation: int = 0
     task: asyncio.Task | None = None
+    websocket: object | None = None
 
     async def cancel(self):
         task = self.task
@@ -29,7 +30,6 @@ class Sessions:
         self.sessions: dict[str, Session] = {}
         self.capacity = capacity
         self.inference = asyncio.Lock()
-        self.active_websocket = None
 
     def get(self, client_id: str) -> Session:
         if client_id not in self.sessions:

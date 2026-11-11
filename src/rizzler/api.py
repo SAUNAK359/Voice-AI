@@ -160,10 +160,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         if parsed.scheme not in ('http', 'https') or parsed.netloc != expected:
             await ws.close(code=1008)
             return
-        if sessions.active_websocket is not None:
-            await ws.close(code=1013)
-            return
-        sessions.active_websocket = ws
+        # Allow independent authenticated browser connections. Actual model
+        # inference remains serialized by sessions.inference.
         session = None
         try:
             await ws.accept()
@@ -179,7 +177,13 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                     await ws.close(code=1008)
                     return
                 session = sessions.get(sid)
-            except (asyncio.TimeoutError, ValueError, TypeError, KeyError):
+                # One WebSocket per session: a second connection must not take
+                # over or cancel an existing client's live speech.
+                if session.websocket is not None:
+                    await ws.close(code=1013)
+                    return
+                session.websocket = ws
+            except (asyncio.TimeoutError, ValueError, TypeError, KeyError, RuntimeError):
                 await ws.close(code=1008)
                 return
             await ws.send_json({'type': 'ready', 'sample_rate': cfg.sample_rate})
@@ -255,10 +259,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         except WebSocketDisconnect:
             pass
         finally:
-            if session:
+            if session and session.websocket is ws:
                 await session.cancel()
-            if sessions.active_websocket is ws:
-                sessions.active_websocket = None
+                session.websocket = None
 
     return app
 
