@@ -174,11 +174,13 @@ class GeminiLLM:
                         if category == 'model_unavailable' and idx + 1 < len(models):
                             idx += 1
                             continue
+                        if category == 'transient' and idx + 1 < len(models) and attempt >= 2:
+                            # Retry primary once, then use the remaining attempt
+                            # budget on explicitly configured fallback.
+                            idx += 1
+                            continue
                         if category == 'transient' and attempt < self.settings.gemini_max_attempts:
                             await asyncio.sleep(min(1.5, 0.25 * 2**(attempt-1) + random.random()*0.05))
-                            continue
-                        if category == 'transient' and idx + 1 < len(models):
-                            idx += 1
                             continue
                         # 429 is shared account quota; model switching cannot reset it.
                         break
