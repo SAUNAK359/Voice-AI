@@ -3,9 +3,13 @@ from __future__ import annotations
 import concurrent.futures
 import os
 import time
-import pytest
+import importlib.util
+import unittest
 
-psycopg = pytest.importorskip("psycopg")
+if importlib.util.find_spec("pytest") is None or importlib.util.find_spec("psycopg") is None:
+    raise unittest.SkipTest("Requires PostgreSQL integration dependencies")
+import pytest
+import psycopg
 from rizzler.work_postgres import PostgresWorkStore
 from rizzler.work_store import Conflict, StaleLease
 from rizzler.artifacts import verify_artifact
