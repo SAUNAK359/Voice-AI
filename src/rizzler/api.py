@@ -5,6 +5,7 @@ import base64
 import json
 import secrets
 import struct
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from os import environ
@@ -19,6 +20,7 @@ from .sessions import Sessions
 from .voice import VoiceEngine, ProviderSet
 from .security import validate_session_id
 from .identity import Identity, OIDCSettings
+from .operations import Operations
 
 WEB = Path(__file__).with_name('web')
 
@@ -31,6 +33,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     cfg = settings or Settings.from_env()
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
     engine, sessions = VoiceEngine(cfg, models), Sessions()
+    operations = Operations()
+    ops_token = environ.get("RIZZLER_OPERATIONS_TOKEN", "")
+    if production and (len(ops_token) < 32 or ops_token == environ.get("RIZZLER_SESSION_SIGNING_KEY", "")):
+        raise ValueError("Production requires an independent operations secret")
     work_root = environ.get("RIZZLER_WORK_ROOT", "")
     work_signing_key = environ.get("RIZZLER_WORK_SIGNING_KEY", "")
     if bool(work_root) != bool(work_signing_key):
@@ -77,6 +83,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app = FastAPI(title='Rizzler Voice AI', version='1.0.0', lifespan=lifespan,
                   docs_url=None, redoc_url=None)
     app.state.settings, app.state.sessions = cfg, sessions
+    app.state.operations = operations
     app.state.work, app.state.identity = work, identity
     app.state.production = production
     if work:
@@ -89,7 +96,16 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     @app.middleware('http')
     async def protect_response(request: Request, call_next):
-        response = await call_next(request)
+        began = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            operations.record(request.method, "unhandled", 500,
+                              (time.perf_counter()-began)*1000)
+            raise
+        route = request.scope.get("route")
+        operations.record(request.method, getattr(route, "path", "unknown"),
+                          response.status_code, (time.perf_counter()-began)*1000)
         response.headers.update({
             'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
@@ -113,6 +129,14 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             except ValueError:
                 raise HTTPException(status_code=400, detail='Invalid session identifier')
         return None
+
+    @app.get('/internal/metrics')
+    def internal_metrics(request: Request):
+        presented = request.headers.get("authorization", "")
+        expected = "Bearer " + ops_token
+        if not ops_token or not secrets.compare_digest(presented, expected):
+            raise HTTPException(status_code=401, detail="Unauthorized") from None
+        return operations.snapshot()
 
     @app.get('/ready')
     def ready():

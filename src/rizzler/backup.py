@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import os
+import sqlite3
 import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -26,6 +27,13 @@ def backup(root: Path, destination: Path):
     root, destination = Path(root).resolve(), Path(destination).resolve()
     if not root.is_dir() or destination.is_relative_to(root):
         raise ValueError("Backup destination must be outside work root")
+    # This command requires the web API and worker to be stopped.
+    # Merge any leftover SQLite WAL pages into the main database first.
+    for db_name in ("jobs.sqlite3", "identity.sqlite3"):
+        db_file = root / db_name
+        if db_file.is_file():
+            with sqlite3.connect(db_file, timeout=15) as con:
+                con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     entries = []
     for item in PATHS:
         candidate = root / item
@@ -66,8 +74,8 @@ def backup(root: Path, destination: Path):
 
 def restore(source: Path, destination: Path):
     source, destination = Path(source), Path(destination).resolve()
-    if not source.is_file() or (destination.exists() and any(destination.iterdir())):
-        raise ValueError("Restore requires a valid archive and empty destination")
+    if not source.is_file() or destination.exists():
+        raise ValueError("Restore requires a valid archive and absent destination")
     with tarfile.open(source, "r:gz") as archive:
         members = archive.getmembers()
         if len(members) > MAX_FILES + 1 or any(not m.isfile() or m.issym() or m.islnk() for m in members):
@@ -95,12 +103,20 @@ def restore(source: Path, destination: Path):
             reader = archive.extractfile(member)
             if reader is None:
                 raise ValueError("Backup file missing")
-            raw = reader.read(MAX_BYTES + 1)
-            if len(raw) != entry["bytes"] or _sha(raw) != entry["sha256"]:
-                raise ValueError("Backup checksum mismatch")
             path = destination / name
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            path.write_bytes(raw)
+            digest = hashlib.sha256()
+            remaining = entry["bytes"]
+            with path.open("wb") as target:
+                while remaining:
+                    chunk = reader.read(min(1024*1024, remaining))
+                    if not chunk:
+                        raise ValueError("Backup truncated")
+                    target.write(chunk)
+                    digest.update(chunk)
+                    remaining -= len(chunk)
+            if digest.hexdigest() != entry["sha256"]:
+                raise ValueError("Backup checksum mismatch")
             path.chmod(0o600)
     return manifest
 

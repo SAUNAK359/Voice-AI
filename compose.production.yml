@@ -76,8 +76,7 @@ services:
 
 networks:
   public: {}
-  private:
-    internal: true
+  private: {}
 
 volumes:
   work_data: {}
