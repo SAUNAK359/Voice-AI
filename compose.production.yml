@@ -1,0 +1,88 @@
+# Single-host reference. Never publish API, worker, or ClamAV ports publicly.
+# Requires .env.production (not committed) and RIZZLER_DOMAIN in shell/.env.
+name: rizzler
+services:
+  gateway:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      RIZZLER_DOMAIN: ${RIZZLER_DOMAIN:?Set RIZZLER_DOMAIN to an HTTPS domain}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [public, private]
+    security_opt: ["no-new-privileges:true"]
+
+  api:
+    image: rizzler:phase5
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      RIZZLER_DEPLOYMENT_MODE: production
+      RIZZLER_WORK_ROOT: /var/lib/rizzler
+      RIZZLER_CLAMD_HOST: antivirus
+      FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - work_data:/var/lib/rizzler
+      - model_cache:/home/rizzler/.cache
+    tmpfs: ["/tmp:size=512m,mode=1777"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    networks: [private]
+    depends_on:
+      antivirus: {condition: service_started}
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/ready',timeout=4)"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 60s
+
+  worker:
+    image: rizzler:phase5
+    restart: unless-stopped
+    command: ["python", "-m", "rizzler.work_worker", "--root", "/var/lib/rizzler"]
+    env_file: .env.production
+    environment:
+      RIZZLER_DEPLOYMENT_MODE: production
+      RIZZLER_WORK_ROOT: /var/lib/rizzler
+    volumes:
+      - work_data:/var/lib/rizzler
+      - model_cache:/home/rizzler/.cache
+      - work_backups:/backups
+    tmpfs: ["/tmp:size=512m,mode=1777"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    networks: [private]
+    depends_on:
+      api: {condition: service_healthy}
+
+  antivirus:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    volumes:
+      - antivirus_defs:/var/lib/clamav
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  public: {}
+  private:
+    internal: true
+
+volumes:
+  work_data: {}
+  model_cache: {}
+  work_backups: {}
+  antivirus_defs: {}
+  caddy_data: {}
+  caddy_config: {}

@@ -1,0 +1,4 @@
+# OIDC verification and async outbound provider calls.
+# Pin and audit in deployment-specific lock files before release.
+PyJWT[crypto]>=2.10,<3
+httpx>=0.27,<1
