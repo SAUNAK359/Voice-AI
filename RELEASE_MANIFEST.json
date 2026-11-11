@@ -4,8 +4,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 390,
-      "sha256": "7a6780e9c80a7130918a88f29d17881ba49cabc17d25f597aff0b469967eb00e"
+      "bytes": 791,
+      "sha256": "d0279ca89f415a50ea0a490af7b60666576219901e34882dfd953240e97cb2bb"
     },
     {
       "path": ".github/dependabot.yml",
