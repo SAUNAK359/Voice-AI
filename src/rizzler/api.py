@@ -361,8 +361,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         try:
             rate = int(request.headers.get('x-sample-rate', '48000'))
         except ValueError:
-            raise HTTPException(status_code=400, detail='Invalid sample rate')
-        # Hard bound before reading body; an arbitrary body is never buffered past cap.
+            raise HTTPException(status_code=400, detail='Invalid sample rate') from None
         limit = min(5_000_000, rate * cfg.max_audio_seconds * 2) if 8000 <= rate <= 96000 else 0
         if not limit:
             raise HTTPException(status_code=400, detail='Invalid sample rate')
@@ -375,14 +374,23 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             if len(raw) > limit:
                 raise HTTPException(status_code=413, detail='Audio too large')
         session = sessions.get(sid)
+        # Register queued turns before awaiting the inference permit. This lets
+        # /api/interrupt cancel a queued HTTP turn, not only an executing turn.
+        # No await between duplicate detection and session registration.
+        if session.task is not None and not session.task.done():
+            raise HTTPException(status_code=429, detail='Voice turn already active')
+        task = asyncio.current_task()
+        session.task = task
         generation = session.generation + 1
         session.generation = generation
-        async with sessions.inference.permit(sid, timeout=2.5):
-            task = asyncio.current_task()
-            session.task = task
-            events, samples = [], bytearray()
-            try:
-                async for event in engine.events(bytes(raw), rate, list(session.history), owner=sid, sequence=generation, uploads=list(session.uploads), nonce=session.nonce):
+        try:
+            async with sessions.inference.permit(sid, timeout=2.5):
+                if generation != session.generation:
+                    raise HTTPException(status_code=409, detail='Turn superseded')
+                events, samples = [], bytearray()
+                async for event in engine.events(bytes(raw), rate, list(session.history),
+                                                owner=sid, sequence=generation,
+                                                uploads=list(session.uploads), nonce=session.nonce):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -402,9 +410,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 return JSONResponse({'transcript': transcript, 'answer': answer,
                     'metrics': metrics, 'sample_rate': cfg.sample_rate,
                     'audio_b64': base64.b64encode(samples).decode('ascii')})
-            finally:
-                if session.task is task:
-                    session.task = None
+        finally:
+            if session.task is task:
+                session.task = None
 
     @app.get('/api/voice/admission')
     def voice_admission(request: Request):
@@ -424,6 +432,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         # Allow independent authenticated browser connections. Actual model
         # inference remains serialized by sessions.inference.
         session = None
+        interim_task = None
         try:
             await ws.accept()
             try:
@@ -465,7 +474,6 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             pcm = bytearray()
             recording = False
             frames = None
-            interim_task = None
             last_interim_sample = 0
             enable_interim = (protocol == VERSION and
                 environ.get('RIZZLER_INTERIM_ASR','').lower() in ('1','true','yes'))
@@ -483,7 +491,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                             'generation':generation, 'text':text[:180],
                             'final':False})
                 except (Exception, asyncio.CancelledError):
-                    pass
+                    # Interim captions are best effort and must not affect final ASR.
+                    return
             async def stream_turn(recorded: bytes, seq: int):
                 try:
                     async with sessions.inference.permit(sid, timeout=2.5):
@@ -519,7 +528,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                             await ws.send_json({'type':'error', 'generation':seq,
                                 'message':'Voice response unavailable; please retry'})
                         except (RuntimeError, WebSocketDisconnect):
-                            pass
+                            return
                 finally:
                     if session.task is asyncio.current_task():
                         session.task = None
@@ -617,7 +626,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         except WebSocketDisconnect:
             pass
         finally:
-            if 'interim_task' in locals() and interim_task is not None:
+            if interim_task is not None:
                 interim_task.cancel()
             if session and session.websocket is ws:
                 await session.cancel()
