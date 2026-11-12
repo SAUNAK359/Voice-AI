@@ -1,6 +1,12 @@
 """V11 Phase 2 contract tests: fail-closed IR and cross-format parity."""
 from __future__ import annotations
 
+import importlib.util
+import unittest
+
+if importlib.util.find_spec("pytest") is None:
+    raise unittest.SkipTest("Phase 2 integration tests run with App CI extras")
+
 import pytest
 from rizzler.work_ir import compile_ir
 from rizzler.work_skills import sectioned, render_one
