@@ -17,7 +17,9 @@ SCHEMA_VERSION = 1
 RESEARCH_REQUEST = re.compile(
     r"\b(?:research|investigate|find sources|verify sources|source-based|"
     r"market trends|compare competitors|competitive landscape|current sources)\b", re.I)
-DATA_REQUEST = re.compile(r"\b(?:analys[ie]|statistics|data profile|dataset|spreadsheet|csv)\b", re.I)
+DATA_REQUEST = re.compile(r"\b(?:analy[sz]e|analysis|statistics|data profile|dataset|spreadsheet|csv)\b", re.I)
+RESEARCH_NEGATION = re.compile(r"\b(?:do not|don't|without|no|avoid)\s+(?:any\s+)?(?:web\s+)?research\b", re.I)
+DATA_NEGATION = re.compile(r"\b(?:do not|don't|without|avoid)\s+(?:any\s+)?(?:analy[sz]e|analysis)\b", re.I)
 
 
 def execution_graph(payload: dict) -> dict:
@@ -87,17 +89,21 @@ async def propose_scope(objective: str, formats: list[str], uploads: list[str],
     be included. Its suggestions cannot add unauthorized formats or IO.
     Exactly one correction is allowed for malformed or excessive JSON.
     """
-    explicit_research = bool(RESEARCH_REQUEST.search(objective))
-    explicit_data = bool(DATA_REQUEST.search(objective) and uploads)
+    explicit_research = bool(RESEARCH_REQUEST.search(objective)) and not RESEARCH_NEGATION.search(objective)
+    explicit_data = bool(DATA_REQUEST.search(objective) and uploads) and not DATA_NEGATION.search(objective)
     result = {"research": explicit_research, "analysis": explicit_data,
               "source": "deterministic", "planner_ms": 0}
     if not settings.gemini_api_key or not (len(formats) > 1 or explicit_research):
         return result
-    from google import genai
-    from google.genai import types
-    owns_client = client is None
-    if owns_client:
-        client = genai.Client(api_key=settings.gemini_api_key)
+    try:
+        from google import genai
+        from google.genai import types
+        owns_client = client is None
+        if owns_client:
+            client = genai.Client(api_key=settings.gemini_api_key)
+    except Exception:
+        result["source"] = "deterministic_fallback"
+        return result
     start = time.perf_counter()
     try:
         for attempt in range(2):
@@ -151,4 +157,7 @@ async def propose_scope(objective: str, formats: list[str], uploads: list[str],
         return result
     finally:
         if owns_client:
-            await client.aio.aclose()
+            try:
+                await client.aio.aclose()
+            except Exception:
+                pass
