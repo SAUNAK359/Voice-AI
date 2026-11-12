@@ -48,6 +48,11 @@ RIZZLER_MEMORY_ENABLED=0
 # RIZZLER_MEMORY_KEY=<independent secret >=32 characters>
 ```
 
+The demo access key does not prove unique identity. Encrypted memory in demo
+mode is therefore additionally blocked unless
+`RIZZLER_DEMO_MEMORY_SINGLE_USER=1` is explicitly set by the operator for
+a single-user, non-shared notebook. Do not enable it on a public shared demo.
+
 Production authentication still requires the established OIDC and CSRF
 controls. Do not turn on long-term memory for shared demo-key sessions:
 demo `x-session-id` values are not durable authenticated human identities.
