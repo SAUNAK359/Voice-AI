@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import secrets
+import sqlite3
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -361,7 +362,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             return {"enabled":False,"items":[]}
         try:
             return {"enabled":True,"items":memory.list(owner)}
-        except (ValueError, OSError, RuntimeError):
+        except (ValueError, OSError, RuntimeError, sqlite3.DatabaseError):
             raise HTTPException(status_code=503, detail="Private memory unavailable") from None
 
     @app.post('/api/voice/memories')
@@ -379,6 +380,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             result=memory.remember(owner,payload["text"])
         except (ValueError,TypeError,UnicodeError):
             raise HTTPException(status_code=400,detail="Invalid memory input") from None
+        except (OSError,RuntimeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=503,detail="Private memory unavailable") from None
         return result
 
     @app.delete('/api/voice/memories/{memory_id}')
@@ -390,13 +393,18 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             return {"deleted":memory.delete(owner,memory_id)}
         except ValueError:
             raise HTTPException(status_code=400,detail="Invalid memory identifier") from None
+        except (OSError,RuntimeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=503,detail="Private memory unavailable") from None
 
     @app.delete('/api/voice/memories')
     def clear_memories(request: Request):
         owner = auth(request, True)
         if memory is None:
             raise HTTPException(status_code=409,detail="Private memory disabled")
-        return {"deleted":memory.delete(owner)}
+        try:
+            return {"deleted":memory.delete(owner)}
+        except (OSError,RuntimeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=503,detail="Private memory unavailable") from None
 
     @app.post('/api/reset')
     async def reset(request: Request):
