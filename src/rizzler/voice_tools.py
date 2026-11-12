@@ -99,7 +99,7 @@ async def grounded_search(query: str, settings) -> dict:
 
 MEMORY_SAVE = re.compile(r"^\s*(?:please\s+)?remember\s+that\s+(.+?)\s*$", re.I | re.S)
 MEMORY_LIST = re.compile(r"^\s*(?:what\s+do\s+you\s+remember(?:\s+about\s+(.+))?|list\s+my\s+memories)\s*[?.!]*\s*$", re.I | re.S)
-MEMORY_CONFIRM = re.compile(r"^\\s*confirm\\s+delete\\s+all\\s+memories\\s*[.!]*\\s*$", re.I)
+MEMORY_CONFIRM = re.compile(r"^\s*confirm\s+delete\s+all\s+memories\s*[.!]*\s*$", re.I)
 MEMORY_CLEAR = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+all\s+my\s+memories\s*[.!]*\s*$", re.I)
 MEMORY_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+memory\s+([A-Za-z0-9_-]{12,32})\s*[.!]*\s*$", re.I)
 
