@@ -245,3 +245,12 @@ def test_research_noun_and_negated_search_never_trigger_unrequested_work():
         "Create a report from my notes but do not search the web.",
         ["pdf"],[],Settings(access_key=KEY)))
     assert not result["research"]
+
+
+def test_meta_questions_do_not_start_document_jobs():
+    for text in ("What is a report and how should I write one?",
+                 "How can I create a presentation?",
+                 "Why would someone generate a spreadsheet?"):
+        assert classify_tool(text,True) is None
+    assert classify_tool("Write a report on secure AI applications.",True)=="work_submit"
+    assert classify_tool("Can you write a Word document about AI? ",True)=="work_submit"
