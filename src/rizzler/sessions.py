@@ -72,6 +72,7 @@ class Session:
     history: list[dict] = field(default_factory=list)
     uploads: list[str] = field(default_factory=list)
     visuals: list[str] = field(default_factory=list)
+    visual_analysis: dict | None = None
     generation: int = 0
     task: asyncio.Task | None = None
     websocket: object | None = None
