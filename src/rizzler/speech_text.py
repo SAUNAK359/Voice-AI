@@ -19,7 +19,6 @@ def for_speech(text: str) -> str:
     text=re.sub(r"\b([A-Za-z])\s*\^\s*3\b",r"\1 cubed",text)
     text=text.replace("{"," ").replace("}"," ").replace("**","").replace("__","")
     text=re.sub(r"(?m)^\s*(?:#{1,6}\s*|[-*]\s+|\d+\.\s+|\|[- :|]+\|\s*$)"," ",text)
-    text=text.replace("|
-","; ").replace("|","; ").replace("`","").replace("$","")
+    text=text.replace("|", "; ").replace("`","").replace("$","")
     text=re.sub(r"\s+"," ",text).strip()
     return text[:1500]
