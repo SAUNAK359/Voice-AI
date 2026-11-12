@@ -266,11 +266,11 @@ def test_interrupt_queued_http_turn_before_it_can_execute_tools():
                 assert cancelled.status_code==200 and cancelled.json()["cancelled"] is True
                 try:
                     response=second.result(timeout=3)
+                except BaseException:
+                    # Cancelled ASGI requests may have no HTTP response.
+                    response=None
+                if response is not None:
                     assert response.status_code!=200
-                except (Exception,BaseException):
-                    # An interrupted ASGI request may abort its transport rather
-                    # than returning an HTTP response; either is acceptable.
-                    pass
                 assert not client.app.state.sessions.get("queued_owner").history
                 assert client.app.state.sessions.inference.queued==0
             finally:
