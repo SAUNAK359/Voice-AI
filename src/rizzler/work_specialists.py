@@ -37,7 +37,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     checkpoint = store.root / "checkpoints" / owner / jid
     checkpoint.mkdir(parents=True, exist_ok=True, mode=0o700)
     context = {"objective": payload["objective"], "sources": [], "text": None,
-               "summary": None, "receipts": {}, "uploaded": []}
+               "summary": None, "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
@@ -77,9 +77,20 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         elif spec.name == "quality":
             context["quality"] = result
         else:
+            inspections = result.get("inspections", {})
+            if not isinstance(inspections, dict):
+                raise ValueError("Malformed persisted artifact inspection receipts")
             for receipt in result_receipts(result):
                 if receipt.kind in context["receipts"]:
                     raise ValueError("Duplicate output kind across specialists")
+                inspected = inspections.get(receipt.kind)
+                if inspected is not None:
+                    if (not isinstance(inspected, dict) or
+                        inspected.get("sha256") != receipt.sha256 or
+                        not isinstance(inspected.get("quality"), dict) or
+                        inspected["quality"].get("passed") is not True):
+                        raise ValueError("Specialist QA does not match committed receipt")
+                    context["preflight"][receipt.kind] = inspected
                 context["receipts"][receipt.kind] = receipt
         return result
 
@@ -167,15 +178,25 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         missing = sorted(expected - receipts.keys())
         unexpected = sorted(receipts.keys() - expected)
         from .work_quality import inspect_artifact
+        from .work_visual import quality_mode
+        strict = quality_mode() == "strict"
         detailed_qa = {}
         bundle = {receipt.name: receipt for receipt in receipts.values() if receipt.kind != "zip"}
         for receipt in receipts.values():
             if not verify_checkpoint(checkpoint / receipt.name, receipt):
                 raise ValueError("Final quality gate failed artifact checksum")
-            detailed_qa[receipt.kind] = await asyncio.to_thread(
+            structural_qa = await asyncio.to_thread(
                 inspect_artifact, checkpoint / receipt.name, receipt.kind,
                 dataset_rows=context["summary"]["rows"] if context["summary"] else None,
-                bundle_receipts=bundle, artifact_ir=context["artifact_ir"])
+                bundle_receipts=bundle, artifact_ir=context["artifact_ir"],
+                dataset_summary=context["summary"])
+            preflight = context["preflight"].get(receipt.kind)
+            if receipt.kind in ("pptx", "docx", "pdf", "xlsx") and strict:
+                if not preflight or preflight["sha256"] != receipt.sha256:
+                    raise ValueError("Strict QA inspection checkpoint missing or mismatched")
+                detailed_qa[receipt.kind] = preflight["quality"]
+            else:
+                detailed_qa[receipt.kind] = structural_qa
             verified = verify_artifact(checkpoint / receipt.name, receipt.kind)
             if verified.sha256 != receipt.sha256 or not verified.verified:
                 raise ValueError("Final quality gate failed structural receipt")
@@ -190,6 +211,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
+                "artifact_qa_mode": quality_mode(),
                 "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
                 "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
@@ -197,6 +219,10 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         raise ValueError("Unknown specialist")
     requested = sorted(formats.intersection(spec.formats))
     receipts = []
+    inspections = {}
+    from .work_quality import inspect_artifact
+    from .work_visual import quality_mode
+    strict = quality_mode() == "strict"
     # One independent format-specific renderer, reusing the existing vetted
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
@@ -207,9 +233,27 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                                              store.upload(owner, payload["uploads"][0]))
         working = attempt / (kind + "." + kind)
         ir = context["artifact_ir"]
-        await asyncio.to_thread(render_one, kind, working, ir.title,
-                                ir.content, table, list(ir.sources))
+        dataset_rows = context["summary"]["rows"] if context["summary"] else None
+        # Exactly one deterministic regeneration on a recoverable output
+        # validation error; no additional model calls, user writes or tools.
+        repairs = 0
+        for attempt_no in range(2):
+            await asyncio.to_thread(render_one, kind, working, ir.title,
+                                    ir.content, table, list(ir.sources))
+            try:
+                report = await asyncio.to_thread(
+                    inspect_artifact, working, kind, dataset_rows=dataset_rows,
+                    artifact_ir=ir, dataset_summary=context["summary"],
+                    visual_required=strict)
+                break
+            except ValueError:
+                if attempt_no:
+                    raise
+                repairs += 1
+                working.unlink(missing_ok=True)
         receipt = verify_artifact(working, kind)
+        inspections[kind] = {"sha256":receipt.sha256,
+                              "quality":report, "repair_attempts":repairs}
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published specialist artifact failed checksum")
@@ -232,4 +276,4 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             raise ValueError("Published archive failed checksum")
         receipts.append(receipt)
     return {"receipts": [asdict(r) for r in receipts],
-            "agent": name, "requested": requested}
+            "inspections": inspections, "agent": name, "requested": requested}

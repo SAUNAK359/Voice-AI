@@ -25,7 +25,13 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=1
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=cfg.gemini_api_key)
-    prompt = ("Produce a professional, clearly organized report using Markdown headings. "
+    prompt = ("Write a decisive, readable, evidence-aware report for real business use. "
+              "Open with an executive summary, explain methods and limits, separate "
+              "observations from recommendations, and provide clear next actions. "
+              "Use concise headings and avoid filler, invented sources, fabricated "
+              "statistics, unsupported certainty and confidence claims. "
+              "For dataset metrics, preserve units and numeric precision. "
+              "Prefer short complete paragraphs suitable for editable slides and reports. "
               "Never invent external sources, statistics, user data or tool results. "
               "Express uncertainty and limitations. The following dataset metrics are "
               "computed independently; quote only what they substantiate.\n\n"

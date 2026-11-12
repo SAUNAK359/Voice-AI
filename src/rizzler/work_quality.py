@@ -19,7 +19,9 @@ import html as html_lib
 def inspect_artifact(path: Path, kind: str, *,
                      dataset_rows: int | None = None,
                      bundle_receipts: dict | None = None,
-                     artifact_ir: ArtifactIR | None = None) -> dict:
+                     artifact_ir: ArtifactIR | None = None,
+                     dataset_summary: dict | None = None,
+                     visual_required: bool = False) -> dict:
     receipt = verify_artifact(path, kind)
     checks = ["sha256_receipt_valid", "format_structure_valid"]
     details: dict = {}
@@ -69,6 +71,13 @@ def inspect_artifact(path: Path, kind: str, *,
             checks.append("required_worksheets_present")
         finally:
             wb.close()
+        from .work_formula import verify_workbook
+        details["formula_validation"] = verify_workbook(
+            path, dataset_summary=dataset_summary,
+            require_recalculation=visual_required and dataset_rows is not None)
+        checks.append("independently_evaluated_formula_contract")
+        if visual_required and dataset_rows is not None:
+            checks.append("spreadsheet_recalculated_by_independent_engine")
     elif kind == "csv":
         with path.open(encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.reader(stream))
@@ -131,14 +140,34 @@ def inspect_artifact(path: Path, kind: str, *,
             present = [p.text for p in doc.paragraphs]
             actual_sources = [p.text for p in doc.paragraphs if p.text in sources]
             valid = all(h in present for h in headings) and actual_sources == sources
+            valid = valid and all(
+                " ".join(body.split()) in " ".join(" ".join(present).split())
+                for _,body in artifact_ir.sections if body.strip())
         elif kind == "pptx":
             from pptx import Presentation
             deck = Presentation(path)
             slide_titles = [s.shapes.title.text for s in deck.slides if s.shapes.title]
             all_text = "\n".join(shape.text for slide in deck.slides
                                  for shape in slide.shapes if shape.has_text_frame)
+            notes = "\n".join(
+                s.notes_slide.notes_text_frame.text
+                for s in deck.slides if s.has_notes_slide
+            )
+            urls = [shape.click_action.hyperlink.address
+                    for slide in deck.slides for shape in slide.shapes
+                    if shape.has_text_frame and shape.click_action.hyperlink.address]
+            urls += [run.hyperlink.address
+                     for slide in deck.slides for shape in slide.shapes
+                     if shape.has_text_frame
+                     for paragraph in shape.text_frame.paragraphs
+                     for run in paragraph.runs if run.hyperlink.address]
             valid = all(h in slide_titles for h in headings) and all(
-                src in all_text for src in sources)
+                src in all_text or src in notes or src in urls for src in sources)
+            from .work_design import _split_prose
+            valid = valid and all(
+                part in " ".join(all_text.split())
+                for _,body in artifact_ir.sections for part in _split_prose(body)
+                if part.strip())
         elif kind == "xlsx":
             from openpyxl import load_workbook
             wb = load_workbook(path, read_only=True)
@@ -147,12 +176,17 @@ def inspect_artifact(path: Path, kind: str, *,
                            min_row=3, min_col=1, max_col=1, values_only=True)]
                 actual_sources = ([r[0] for r in wb["Sources"].iter_rows(values_only=True)]
                                   if "Sources" in wb else [])
-                valid = present == headings and actual_sources == sources
+                cells = list(wb["Summary"].iter_rows(min_row=3,min_col=2,max_col=2,values_only=True))
+                valid = (present == headings and actual_sources == sources
+                         and all((cell[0] == body or cell[0] == "'"+body)
+                                 for cell,(_,body) in zip(cells,artifact_ir.sections)))
             finally:
                 wb.close()
         elif kind == "json":
             data = json.loads(path.read_text(encoding="utf-8"))
             valid = ([s.get("heading") for s in data.get("sections",[])] == headings
+                     and [s.get("content") for s in data.get("sections",[])] ==
+                           [body for _,body in artifact_ir.sections]
                      and data.get("sources") == sources)
         else:
             rendered = path.read_text(encoding="utf-8")
@@ -165,6 +199,10 @@ def inspect_artifact(path: Path, kind: str, *,
             raise ValueError("Artifact IR sections or source provenance missing")
         details["ir_sha256"] = artifact_ir.sha256
         checks.append("artifact_ir_headings_and_sources_reconciled")
-    # PDF/SVG are checked by structural verifier; visual inspection is separate.
+    if kind in ("pdf","docx","pptx"):
+        from .work_visual import inspect_visual
+        details["visual_validation"] = inspect_visual(path,kind,required=visual_required)
+        if visual_required:
+            checks.append("every_rendered_page_has_visible_in_bounds_text")
     return {"kind":kind,"passed":True,"checks":checks,"metrics":details,
             "limitations":"No claim of independent factual or pixel-level visual perfection"}

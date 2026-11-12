@@ -151,99 +151,11 @@ def render_one(kind: str, output: Path, title: str, content: str,
             w=csv.writer(f)
             w.writerow([csv_escape(x) for x in table[0]])
             w.writerows([[csv_escape(x) for x in row] for row in table[1]])
-    elif kind=="docx":
-        from docx import Document
-        from docx.shared import Pt, Inches
-        d=Document(); d.add_heading(title,0)
-        for h,b in sections:
-            d.add_heading(h,level=1)
-            d.add_paragraph(b)
-        if source_urls:
-            d.add_heading("Sources",level=1)
-            for src in source_urls:d.add_paragraph(src)
-        d.styles["Normal"].font.size=Pt(10.5)
-        d.save(output)
-    elif kind=="pdf":
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-        from reportlab.lib import colors
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.lib.enums import TA_LEFT
-        from reportlab.lib.pagesizes import A4
-        style=getSampleStyleSheet()
-        story=[Paragraph(html.escape(title),style["Title"]),Spacer(1,15)]
-        for h,b in sections:
-            story += [Paragraph(html.escape(h),style["Heading2"])]
-            for paragraph in b.split("\n"):
-                if paragraph.strip():story += [Paragraph(html.escape(paragraph),style["BodyText"]),Spacer(1,6)]
-        if source_urls:
-            story.append(Paragraph("Sources",style["Heading2"]))
-            for url in source_urls:story.append(Paragraph(html.escape(url),style["BodyText"]))
-        SimpleDocTemplate(str(output),pagesize=A4,rightMargin=45,leftMargin=45,
-                          topMargin=50,bottomMargin=50).build(story)
-    elif kind=="pptx":
-        from pptx import Presentation
-        from pptx.util import Inches,Pt
-        from pptx.dml.color import RGBColor
-        p=Presentation();p.slide_width=Inches(13.333);p.slide_height=Inches(7.5)
-        cover=p.slides.add_slide(p.slide_layouts[0])
-        cover.shapes.title.text=title
-        cover.placeholders[1].text="Rizzler Work Agent • Verified report content"
-        def chunks(text, bound=500):
-            words=text.split()
-            if any(len(word)>bound for word in words):
-                raise ValueError("Unbreakable text exceeds slide text bounds")
-            output, current=[],[]
-            for word in words:
-                if len(" ".join(current+[word]))>bound:
-                    output.append(" ".join(current));current=[]
-                current.append(word)
-            if current or not output:output.append(" ".join(current))
-            return output
-        for h,b in sections:
-            for i,part in enumerate(chunks(b)):
-                slide=p.slides.add_slide(p.slide_layouts[1])
-                slide.shapes.title.text=h if i==0 else h+" (cont.)"
-                body=slide.placeholders[1]
-                body.text=part
-                for para in body.text_frame.paragraphs:para.font.size=Pt(18)
-        if source_urls:
-            for start in range(0,len(source_urls),4):
-                s=p.slides.add_slide(p.slide_layouts[1])
-                s.shapes.title.text="Sources" if start==0 else "Sources (cont.)"
-                s.placeholders[1].text="\n".join(source_urls[start:start+4])
-                for para in s.placeholders[1].text_frame.paragraphs:para.font.size=Pt(12)
-        if len(p.slides)>100:
-            raise ValueError("Presentation exceeds bounded slide count")
-        p.save(output)
-    elif kind=="xlsx":
-        from openpyxl import Workbook
-        from openpyxl.styles import Font,PatternFill,Alignment
-        from openpyxl.utils import get_column_letter
-        wb=Workbook();summary=wb.active;summary.title="Summary"
-        summary.append([title]);summary.append(["Section","Content"])
-        for h,b in sections:summary.append([h,b])
-        summary.column_dimensions["A"].width=28;summary.column_dimensions["B"].width=85
-        for cell in summary[2]:cell.font=Font(bold=True,color="FFFFFF");cell.fill=PatternFill("solid",fgColor="243B53")
-        for row in summary.iter_rows(min_row=3,min_col=2,max_col=2):
-            row[0].alignment=Alignment(wrap_text=True,vertical="top")
-        if table:
-            ws=wb.create_sheet("Data");ws.append(table[0])
-            for row in table[1]:ws.append([csv_escape(v) for v in row])
-            ws.freeze_panes="A2";ws.auto_filter.ref=ws.dimensions
-            for i,_ in enumerate(table[0],1):ws.column_dimensions[get_column_letter(i)].width=18
-            check=wb.create_sheet("Checks")
-            check.append(["Metric","Workbook formula (recalculate in Excel)","Independent expected"])
-            check.append(["Source rows",
-                          f"=ROWS(Data!A2:A{len(table[1])+1})" if table[1] else "=COUNTA(Data!A2:A2)",
-                          len(table[1])])
-            check.column_dimensions["A"].width=24
-            check.column_dimensions["B"].width=43
-            check.column_dimensions["C"].width=26
-            check.freeze_panes="A2"
-        if source_urls:
-            ws=wb.create_sheet("Sources")
-            for u in source_urls:ws.append([u])
-        wb.save(output)
+    elif kind in ("docx","pptx","xlsx","pdf"):
+        from .work_design import render_docx, render_pptx, render_xlsx, render_pdf
+        {"docx": render_docx, "pptx": render_pptx,
+         "xlsx": render_xlsx, "pdf": render_pdf}[kind](
+            output, title, sections, table, source_urls)
     elif kind in ("png","svg"):
         if not table: raise ValueError("Charts require real uploaded data")
         metrics=analyze(*table)["numeric"]
