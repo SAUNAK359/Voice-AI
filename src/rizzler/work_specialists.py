@@ -149,9 +149,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             await asyncio.to_thread(render_one, kind, working, payload["objective"][:120],
                                     context["text"] or "# Dataset analysis\nVerified dataset statistics",
                                     table, context["sources"])
-            verified = verify_artifact(working, kind)
+            verify_artifact(working, kind)
             working.replace(path)
-            receipts.append(verified)
+            receipts.append(verify_artifact(path, kind))
         finally:
             working.unlink(missing_ok=True)
     if "zip" in requested:
@@ -168,9 +168,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     {"schema_version": 1, "files": [
                         {"name": r.name, "sha256": r.sha256, "bytes": r.byte_size}
                         for r in contents]}, indent=2))
-            receipt = verify_artifact(partial, "zip")
+            verify_artifact(partial, "zip")
             partial.replace(path)
-            receipts.append(receipt)
+            receipts.append(verify_artifact(path, "zip"))
         finally:
             partial.unlink(missing_ok=True)
     return {"receipts": [asdict(r) for r in receipts],
