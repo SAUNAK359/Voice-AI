@@ -26,6 +26,16 @@ async function details(id){try{const [job,ev,art,agentData]=await Promise.all([
  }
  for(const e of ev.events)pane.append(el('p',new Date(e.at*1000).toLocaleString()+' · '+e.stage+' · '+e.message));
  if(job.status==='completed')pane.append(el('p',job.result.slice(0,1500)));
+ if(job.status==='completed'){
+  const quality=await call('/jobs/'+id+'/quality');
+  if(quality.quality?.passed){
+    const score=quality.quality.artifact_quality||{};
+    pane.append(el('h4','Verified artifact QA'));
+    for(const [format,report] of Object.entries(score)){
+      pane.append(el('p',format.toUpperCase()+' · '+report.checks.join(', ')));
+    }
+  }
+ }
  for(const a of art.artifacts){const btn=el('button','Download '+a.kind+' ('+a.size+' bytes)');
  btn.onclick=async()=>{try{const r=await call('/artifacts/'+a.id);const blob=await r.blob(),url=URL.createObjectURL(blob);
  const link=document.createElement('a');link.href=url;link.download=a.name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){err(e)}};
