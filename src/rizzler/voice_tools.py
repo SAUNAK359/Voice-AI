@@ -19,6 +19,10 @@ META_QUESTION = re.compile(r"^\s*(?:what|why|how|when|where|who)\b",re.I)
 RESEARCH_COMMAND = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+)?research\b",re.I)
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
 STATUS_INTENT = re.compile(r"\b(?:(?:status|progress)\b.{0,35}\b(?:my|job|task|report|work|presentation|analysis)\b|(?:my|the|this)\s+(?:job|task|report|work|presentation)\s+(?:status|progress)\b|how(?:'s| is)\s+(?:my|the)\s+(?:job|task|report|work)\b|is\s+(?:my|the)\s+(?:report|presentation|job|task)\s+(?:ready|done)\b)\b", re.I)
+VISUAL_INTENT = re.compile(
+    r"\b(?:this|these|that|attached|uploaded|screenshot|screen|image|photo|picture|"
+    r"diagram|chart|pdf|document|page|visible|look at|see here|analy[sz]e the image)\b",re.I)
+
 CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort)\s+(?:the\s+|my\s+|that\s+)?(?:current\s+|last\s+)?(?:work|job|task|report|analysis|presentation)\b", re.I)
 
 
@@ -105,8 +109,8 @@ MEMORY_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+memory\s+([A-
 
 
 class VoiceTools:
-    def __init__(self,store,settings,memory=None):
-        self.store,self.settings,self.memory=store,settings,memory
+    def __init__(self,store,settings,memory=None,visual=None):
+        self.store,self.settings,self.memory,self.visual=store,settings,memory,visual
         self._pending_memory_clear = {}
 
     def memory_intent(self, text: str) -> str | None:
@@ -165,7 +169,25 @@ class VoiceTools:
             line="I couldn't complete that memory request. No success is claimed."
             return {"tool":intent,"text":line,"spoken":line,"verified":False}
 
-    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '')->dict|None:
+    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None)->dict|None:
+        # Speech is finalized by ASR before this path is reached. Attached
+        # content cannot decide whether a privileged tool should run.
+        if self.visual is not None and visuals and VISUAL_INTENT.search(text):
+            require_tool("visual_analyze",explicit_private_write=False,
+                         allowed=frozenset(VOICE_TOOLS))
+            started=time.perf_counter()
+            try:
+                finding=await self.visual.ask(owner,text,visuals[-4:])
+                answer=finding["answer"]
+                return {"tool":"visual_analyze","text":answer,
+                        "spoken":re.sub(r"https?://\S+|\*","",answer)[:900],
+                        "verified":False,"evidence":finding["evidence"],
+                        "tool_elapsed_ms":round((time.perf_counter()-started)*1000,2)}
+            except Exception:
+                line="I couldn't analyze the shared image or document. No visual findings were verified."
+                return {"tool":"visual_analyze","text":line,"spoken":line,
+                        "verified":False,
+                        "tool_elapsed_ms":round((time.perf_counter()-started)*1000,2)}
         memory_intent=self.memory_intent(text)
         if memory_intent is not None:
             return self._memory_command(memory_intent,text,owner)
