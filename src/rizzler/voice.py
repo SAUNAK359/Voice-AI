@@ -100,6 +100,8 @@ class VoiceEngine:
                                 begun = True
                                 first_pcm_ms = (time.perf_counter() - start) * 1000
                                 await output.put({'type': 'audio_begin', 'sample_rate': self.settings.sample_rate})
+                            if audio_bytes + len(raw) > self.settings.sample_rate * 2 * 90:
+                                raise ValueError('TTS response exceeds 90-second output budget')
                             audio_bytes += len(raw)
                             block = 960 * 2  # 40 ms @ 24 kHz, PCM16 mono
                             for i in range(0, len(raw), block):
