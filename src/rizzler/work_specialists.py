@@ -84,30 +84,45 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
 
     planned = {spec.name: spec for spec in plan(payload)}
 
+    semaphore = asyncio.Semaphore(2)  # Protect speech responsiveness on CPU hosts.
+
     async def stage_group(names):
         selected = [planned[name] for name in names if name in planned]
         if not selected:
             return
-        # TaskGroup cancels and joins sibling tasks if any specialist fails.
-        # Each specialist commits independently under the same parent fence.
+        async def bounded(spec):
+            async with semaphore:
+                return await run_agent(spec)
+        # TaskGroup cancels and joins sibling tasks on failure. Native threads
+        # continue only inside their isolated, fenced attempt directory.
         async with asyncio.TaskGroup() as group:
             for spec in selected:
-                group.create_task(run_agent(spec), name="specialist-" + spec.name)
+                group.create_task(bounded(spec), name="specialist-" + spec.name)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
-    # Independent evidence acquisition can overlap. Content generation waits
-    # for evidence, documents share that evidence, ZIP waits for other files,
-    # and final QA runs only after every required artifact is available.
     await stage_group(("research", "sql_analytics"))
     await stage_group(("orchestrator",))
+    # Include computed evidence in every rendered report, not merely in the
+    # persisted parent job summary after documents have already been saved.
+    if context["summary"]:
+        summary = context["summary"]
+        numeric = list(summary.get("numeric", {}).items())
+        lines = [f"Rows: {summary['rows']}; duplicate rows: {summary['duplicates']}.",
+                 "Numerical field summaries (computed independently):"]
+        for name, stats in numeric[:10]:
+            lines.append(f"{name}: count {stats['count']}, mean {stats['mean']}, "
+                         f"min {stats['min']}, max {stats['max']}.")
+        if len(numeric) > 10:
+            lines.append(f"{len(numeric)-10} additional numeric fields omitted from this briefing.")
+        proof = " ".join(lines)
+        context["text"] = (context["text"] or "# Verified data analysis\n"
+                           "This report contains independently computed dataset statistics.") + (
+                           "\n\n## Verified dataset evidence\n" + proof)
     await stage_group(("powerpoint", "word", "excel"))
     await stage_group(("pdf_visual",))
     await stage_group(("quality",))
 
     text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
-    if context["summary"]:
-        text += "\n\n## Dataset quality (independently computed)\n" + json.dumps(
-            context["summary"], ensure_ascii=False, indent=2)
     receipts = list(context["receipts"].values())
     store.finish(jid, worker_id, fence, text, receipts, checkpoint)
 
