@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import runpy
 from pathlib import Path
+import importlib.util
+import unittest
+if importlib.util.find_spec("pytest") is None:
+    raise unittest.SkipTest("Phase 3 metrics tests require app/test extras")
 import pytest
 
 evaluate=runpy.run_path(str(Path(__file__).resolve().parents[1]/
