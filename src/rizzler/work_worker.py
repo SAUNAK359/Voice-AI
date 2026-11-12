@@ -52,6 +52,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
     if not cfg.gemini_api_key: raise RuntimeError("Gemini key is required for grounded research")
     from google import genai
     from google.genai import types
+    from .work_agents import read_skill
     client=genai.Client(api_key=cfg.gemini_api_key)
     try:
         async with asyncio.timeout(min(90,cfg.request_timeout)):
@@ -60,6 +61,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 contents=("Research the following objective. Provide dated, attributed "
                           "findings with sources and uncertainty. Never invent citations:\n"+objective[:8000]),
                 config=types.GenerateContentConfig(
+                    system_instruction=read_skill("research")[:6500],
                     tools=[types.Tool(google_search=types.GoogleSearch())],
                     temperature=0.2,max_output_tokens=1300))
         urls=[]
