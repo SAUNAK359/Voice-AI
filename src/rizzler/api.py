@@ -238,6 +238,56 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         return stats.summary() if stats is not None else {
             'window_requests': 0, 'status': 'provider_telemetry_not_available'}
 
+    if work:
+        @app.get('/api/voice/jobs')
+        def voice_jobs(request: Request):
+            sid=auth(request, True)
+            return {'jobs':work.list_jobs(sid)}
+
+        @app.get('/api/voice/jobs/{jid}')
+        def voice_job(request: Request,jid: str):
+            sid=auth(request, True)
+            from .work_store import Missing
+            try:
+                return {'job':work.get(sid,jid),
+                        'agents':work.agent_steps(sid,jid),
+                        'artifacts':work.artifacts(sid,jid)}
+            except Missing:
+                raise HTTPException(status_code=404,detail='Job not found') from None
+
+        @app.get('/api/voice/artifacts/{aid}')
+        def voice_artifact(request: Request,aid: str):
+            sid=auth(request, True)
+            from .work_store import Missing
+            try:
+                path,meta=work.artifact(sid,aid)
+            except Missing:
+                raise HTTPException(status_code=404,detail='Artifact unavailable') from None
+            return FileResponse(path,filename=meta['name'])
+
+        @app.post('/api/voice/uploads',status_code=201)
+        async def voice_upload(request: Request):
+            sid=auth(request, True)
+            from .work_store import Conflict
+            from .upload_scan import ScanUnavailable
+            name=request.headers.get('x-file-name','')
+            raw=bytearray()
+            async for chunk in request.stream():
+                raw.extend(chunk)
+                if len(raw)>8_000_000:
+                    raise HTTPException(status_code=413,detail='Upload too large')
+            try:
+                receipt=await asyncio.to_thread(work.register_upload,sid,name,bytes(raw))
+            except ScanUnavailable:
+                raise HTTPException(status_code=503,detail='Upload scanner unavailable') from None
+            except Conflict:
+                raise HTTPException(status_code=429,detail='Upload quota exceeded') from None
+            except (ValueError,UnicodeError):
+                raise HTTPException(status_code=400,detail='Invalid dataset') from None
+            session=sessions.get(sid)
+            session.uploads[:]=[receipt['id']]
+            return {'name':name,'size':receipt.get('size'),'ready':True}
+
     @app.post('/api/auth')
     def authorize(request: Request):
         auth(request)
@@ -291,7 +341,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             session.task = task
             events, samples = [], bytearray()
             try:
-                async for event in engine.events(bytes(raw), rate, list(session.history), owner=sid, sequence=generation):
+                async for event in engine.events(bytes(raw), rate, list(session.history), owner=sid, sequence=generation, uploads=list(session.uploads)):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -364,7 +414,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             async def stream_turn(recorded: bytes, seq: int):
                 async with sessions.inference:
                     try:
-                        async for event in engine.events(recorded, rate, list(session.history), owner=sid, sequence=seq):
+                        async for event in engine.events(recorded, rate, list(session.history), owner=sid, sequence=seq, uploads=list(session.uploads)):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
