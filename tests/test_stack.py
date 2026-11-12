@@ -5,6 +5,10 @@ import sqlite3
 import time
 from pathlib import Path
 
+import importlib.util
+import unittest
+if any(importlib.util.find_spec(x) is None for x in ("pytest","fastapi","httpx")):
+    raise unittest.SkipTest("Gateway tests run with Application CI extras")
 import pytest
 from fastapi.testclient import TestClient
 
