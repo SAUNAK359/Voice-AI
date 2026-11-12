@@ -98,7 +98,8 @@ class VisualService:
     async def ask(self, owner: str, question: str, attachment_ids: list[str]) -> dict:
         if (not isinstance(question,str) or not 1 <= len(question.strip()) <= VISUAL_QUESTION_LIMIT
                 or not isinstance(attachment_ids,list) or not 1 <= len(attachment_ids) <= 4
-                or len(set(attachment_ids)) != len(attachment_ids)):
+                or any(not isinstance(uid,str) for uid in attachment_ids) or
+                len(set(attachment_ids)) != len(attachment_ids)):
             raise ValueError("A bounded question and 1–4 distinct visual IDs are required")
         from .tool_registry import require_tool, VOICE_TOOLS
         require_tool("visual_analyze",explicit_private_write=False,
@@ -119,7 +120,8 @@ class VisualService:
         except asyncio.TimeoutError:
             raise RuntimeError("Visual analysis capacity busy") from None
         try:
-            answer = await self.provider.analyze(question,images,"\n".join(manifests)[:14000])
+            answer = await asyncio.wait_for(self.provider.analyze(
+                question,images,"\n".join(manifests)[:14000]),timeout=40)
         finally:
             self._capacity.release()
         if not isinstance(answer,str) or not 12<=len(answer.strip())<=8500:
