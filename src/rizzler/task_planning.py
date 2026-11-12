@@ -15,8 +15,9 @@ from .work_agents import plan as specialist_plan
 
 SCHEMA_VERSION = 1
 RESEARCH_REQUEST = re.compile(
-    r"\b(?:research|investigate|find sources|verify sources|source-based|"
-    r"market trends|compare competitors|competitive landscape|current sources)\b", re.I)
+    r"\b(?:research|investigate|search (?:the )?web|look up sources|"
+    r"find sources|verify sources|source-based|market trends|"
+    r"compare competitors|competitive landscape|current sources)\b", re.I)
 DATA_REQUEST = re.compile(r"\b(?:analy[sz]e|analysis|statistics|data profile|dataset|spreadsheet|csv)\b", re.I)
 RESEARCH_NEGATION = re.compile(r"\b(?:do not|don't|without|no|avoid)\s+(?:any\s+)?(?:web\s+)?research\b", re.I)
 DATA_NEGATION = re.compile(r"\b(?:do not|don't|without|avoid)\s+(?:any\s+)?(?:analy[sz]e|analysis)\b", re.I)
