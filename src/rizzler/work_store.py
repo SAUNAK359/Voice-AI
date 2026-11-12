@@ -116,6 +116,8 @@ class WorkStore:
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
+        from .work_agents import plan
+        planned = plan(payload)
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
         jid, t = secrets.token_hex(16), time.time()
@@ -139,6 +141,9 @@ class WorkStore:
             c.execute("""INSERT INTO jobs(id,owner,idem,fingerprint,payload,status,stage,created,updated)
                          VALUES(?,?,?,?,?,'queued','accepted',?,?)""",
                       (jid, owner, idem, fingerprint, canonical, t, t))
+            for spec in planned:
+                c.execute("""INSERT INTO agent_steps(job_id,agent,status,updated)
+                             VALUES(?,?,'queued',?)""", (jid,spec.name,t))
             self._event(c, jid, "queued", "Accepted and queued")
             return self._view(c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone())
 
@@ -535,6 +540,10 @@ class WorkStore:
                 c.execute("""INSERT INTO jobs(id,owner,idem,fingerprint,payload,status,stage,created,updated)
                              VALUES(?,?,?,?,?,'queued','accepted',?,?)""",
                           (jid,row["owner"],key,row["fingerprint"],row["payload"],now,now))
+                from .work_agents import plan
+                for spec in plan(json.loads(row["payload"])):
+                    c.execute("""INSERT INTO agent_steps(job_id,agent,status,updated)
+                                 VALUES(?,?,'queued',?)""", (jid,spec.name,now))
                 self._event(c,jid,"queued","Approved schedule enqueued task")
                 new_state="exhausted" if index>=row["max_runs"] else "active"
                 c.execute("""UPDATE proposals SET runs=?,next_run=?,status=? WHERE id=?""",
