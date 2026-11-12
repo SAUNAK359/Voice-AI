@@ -19,7 +19,7 @@ jobs:
       - name: Install lean app and test dependencies
         run: pip install -e '.[test,work]' -r requirements-identity.txt
       - name: Run app-only tests (no cloud credentials or GPU)
-        run: python -m pytest -q tests/test_app_phase0.py tests/test_v10_phase1.py tests/test_v10_phase2.py tests/test_v10_phase3.py tests/test_phase3_evaluation.py tests/test_v10_phase4.py tests/test_v10_phase5.py tests/test_specialists.py tests/test_stack.py tests/test_v10_unified.py tests/test_v11_phase1.py tests/test_v11_phase2.py tests/test_v11_phase2_hardening.py tests/test_v11_phase3.py tests/test_v11_phase3_metrics.py tests/test_v11_phase4.py tests/test_v11_phase4_native.py
+        run: python -m pytest -q tests/test_app_phase0.py tests/test_v10_phase1.py tests/test_v10_phase2.py tests/test_v10_phase3.py tests/test_phase3_evaluation.py tests/test_v10_phase4.py tests/test_v10_phase5.py tests/test_specialists.py tests/test_stack.py tests/test_v10_unified.py tests/test_v11_phase1.py tests/test_v11_phase2.py tests/test_v11_phase2_hardening.py tests/test_v11_phase3.py tests/test_v11_phase3_metrics.py tests/test_v11_phase4.py tests/test_v11_phase4_native.py tests/test_v11_phase4_integration.py
       - name: Validate the canonical native Kaggle notebook
         run: python scripts/validate_native_notebook.py
       - name: Verify wheel bundles all six specialist skill playbooks
