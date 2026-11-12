@@ -99,13 +99,18 @@ def sectioned(text: str) -> list[tuple[str,str]]:
         line=line.strip()
         if not line: continue
         if line.startswith(("# ","## ")):
-            result.append((line.lstrip("# ").strip()[:100],""))
+            heading=line.lstrip("# ").strip()
+            if not heading or len(heading)>100:
+                raise ValueError("Artifact heading missing or exceeds 100 characters")
+            result.append((heading,""))
         elif result:
             title,body=result[-1]
-            result[-1]=(title,(body+"\n"+line)[:8000])
+            result[-1]=(title,body+"\n"+line)
         else:
             result.append(("Overview",line))
-    return result[:24] or [("Overview",text[:8000])]
+    if len(result) > 24 or any(len(body) > 8000 for _, body in result):
+        raise ValueError("Artifact section exceeds bounded size or section count")
+    return result or [("Overview",text)]
 
 
 def csv_escape(value):
@@ -131,6 +136,9 @@ def render_one(kind: str, output: Path, title: str, content: str,
     elif kind=="html":
         body="".join(f"<section><h2>{html.escape(h)}</h2><p>{html.escape(b).replace(chr(10),'<span class=break></span>')}</p></section>"
                      for h,b in sections)
+        if source_urls:
+            body += "<section><h2>Sources</h2>" + "".join(
+                "<p>" + html.escape(src) + "</p>" for src in source_urls) + "</section>"
         output.write_text("<!doctype html><html lang='en'><head><meta charset='utf-8'>"+
             "<meta name='viewport' content='width=device-width, initial-scale=1'>"+
             "<title>"+html.escape(title)+"</title><style>body{font:17px/1.6 system-ui;"+
@@ -180,20 +188,32 @@ def render_one(kind: str, output: Path, title: str, content: str,
         cover=p.slides.add_slide(p.slide_layouts[0])
         cover.shapes.title.text=title
         cover.placeholders[1].text="Rizzler Work Agent • Verified report content"
-        if len(sections)>24:
-            raise ValueError("Too many presentation sections")
+        def chunks(text, bound=500):
+            words=text.split()
+            if any(len(word)>bound for word in words):
+                raise ValueError("Unbreakable text exceeds slide text bounds")
+            output, current=[],[]
+            for word in words:
+                if len(" ".join(current+[word]))>bound:
+                    output.append(" ".join(current));current=[]
+                current.append(word)
+            if current or not output:output.append(" ".join(current))
+            return output
         for h,b in sections:
-            slide=p.slides.add_slide(p.slide_layouts[1])
-            slide.shapes.title.text=h
-            body=slide.placeholders[1]
-            # A slide cannot silently discard source content.
-            if len(b)>850:
-                raise ValueError("Slide section exceeds 850 characters; revise source")
-            body.text=b
-            for para in body.text_frame.paragraphs:para.font.size=Pt(18)
+            for i,part in enumerate(chunks(b)):
+                slide=p.slides.add_slide(p.slide_layouts[1])
+                slide.shapes.title.text=h if i==0 else h+" (cont.)"
+                body=slide.placeholders[1]
+                body.text=part
+                for para in body.text_frame.paragraphs:para.font.size=Pt(18)
         if source_urls:
-            s=p.slides.add_slide(p.slide_layouts[1]);s.shapes.title.text="Sources"
-            s.placeholders[1].text="\n".join(source_urls[:12])
+            for start in range(0,len(source_urls),4):
+                s=p.slides.add_slide(p.slide_layouts[1])
+                s.shapes.title.text="Sources" if start==0 else "Sources (cont.)"
+                s.placeholders[1].text="\n".join(source_urls[start:start+4])
+                for para in s.placeholders[1].text_frame.paragraphs:para.font.size=Pt(12)
+        if len(p.slides)>100:
+            raise ValueError("Presentation exceeds bounded slide count")
         p.save(output)
     elif kind=="xlsx":
         from openpyxl import Workbook
@@ -211,6 +231,15 @@ def render_one(kind: str, output: Path, title: str, content: str,
             for row in table[1]:ws.append([csv_escape(v) for v in row])
             ws.freeze_panes="A2";ws.auto_filter.ref=ws.dimensions
             for i,_ in enumerate(table[0],1):ws.column_dimensions[get_column_letter(i)].width=18
+            check=wb.create_sheet("Checks")
+            check.append(["Metric","Workbook formula (recalculate in Excel)","Independent expected"])
+            check.append(["Source rows",
+                          f"=ROWS(Data!A2:A{len(table[1])+1})" if table[1] else "=COUNTA(Data!A2:A2)",
+                          len(table[1])])
+            check.column_dimensions["A"].width=24
+            check.column_dimensions["B"].width=43
+            check.column_dimensions["C"].width=26
+            check.freeze_panes="A2"
         if source_urls:
             ws=wb.create_sheet("Sources")
             for u in source_urls:ws.append([u])
