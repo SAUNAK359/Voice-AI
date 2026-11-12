@@ -3,9 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import io
-import os
 import sqlite3
-import tempfile
 import unittest
 
 if any(importlib.util.find_spec(x) is None for x in
@@ -137,11 +135,14 @@ def test_encrypted_owner_scoped_storage_and_integrity(tmp_path):
     metadata,payload=store.read(OWNER_A,item["id"])
     assert metadata["mime"]=="image/jpeg"
     assert payload[:2]==b"\xff\xd8"
-    assert store.save(OWNER_A,"test.jpg",jpeg())["id"]==item["id"]
+    duplicate = store.save(OWNER_A,"test.jpg",jpeg())
+    assert duplicate["id"]==item["id"]
     with pytest.raises(MediaMissing):
         store.read(OWNER_B,item["id"])
-    assert store.delete(OWNER_B,item["id"]) is False
-    assert store.read(OWNER_A,item["id"])[0]["id"]==item["id"]
+    denied=store.delete(OWNER_B,item["id"])
+    assert denied is False
+    found=store.read(OWNER_A,item["id"])
+    assert found[0]["id"]==item["id"]
     db=sqlite3.connect(store.path)
     ciphertext=db.execute("SELECT encrypted FROM visuals").fetchone()[0]
     assert ciphertext!=payload and payload not in ciphertext
@@ -149,7 +150,8 @@ def test_encrypted_owner_scoped_storage_and_integrity(tmp_path):
     db.commit();db.close()
     with pytest.raises(ValueError,match="integrity"):
         store.read(OWNER_A,item["id"])
-    assert store.delete(OWNER_A,item["id"])
+    deleted=store.delete(OWNER_A,item["id"])
+    assert deleted
 
 
 def test_scanner_unavailable_fails_closed(tmp_path):
@@ -217,10 +219,12 @@ def test_authenticated_upload_analysis_deletion_and_voice_handoff(tmp_path,monke
         assert speech.status_code==200,speech.text
         assert "screenshot contains a chart" in speech.json()["answer"]
         assert len(provider.calls)==2
-        assert client.delete("/api/visual/attachments/"+uid,
-                             headers=headers(OWNER_B)).json()["deleted"] is False
-        assert client.delete("/api/visual/attachments/"+uid,
-                             headers=headers(OWNER_A)).json()["deleted"] is True
+        denied=client.delete("/api/visual/attachments/"+uid,
+                             headers=headers(OWNER_B))
+        assert denied.json()["deleted"] is False
+        deleted=client.delete("/api/visual/attachments/"+uid,
+                             headers=headers(OWNER_A))
+        assert deleted.json()["deleted"] is True
         assert client.post("/api/visual/ask",headers=headers(OWNER_A),
             json={"question":"Describe","attachment_ids":[uid]}).status_code==404
 
@@ -302,8 +306,9 @@ def test_visual_report_requires_explicit_confirmation_and_durable_work(tmp_path,
         assert client.get("/api/voice/artifacts/"+artifact[0]["id"],
                           headers=headers(OWNER_A)).status_code==200
         # Explicit deletion invalidates new report creation; committed work stays.
-        assert client.delete("/api/visual/attachments/"+uid,
-                             headers=headers(OWNER_A)).status_code==200
+        deleted=client.delete("/api/visual/attachments/"+uid,
+                             headers=headers(OWNER_A))
+        assert deleted.status_code==200
         assert client.post("/api/visual/report",headers=headers(OWNER_A),
             json=good).status_code==409
         assert app.state.work.get(OWNER_A,jid)["status"]=="completed"
