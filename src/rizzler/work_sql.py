@@ -18,9 +18,10 @@ def analyze_sql(source):
         db.execute("CREATE TABLE dataset (row_number INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
         db.executemany("INSERT INTO dataset VALUES (?, ?)",
                        ((i, "\x1f".join(row)) for i, row in enumerate(rows, 1)))
-        db.set_authorizer(lambda action, *args: sqlite3.SQLITE_OK
-                          if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ,
-                                        sqlite3.SQLITE_FUNCTION) else sqlite3.SQLITE_DENY)
+        db.set_authorizer(lambda action, table, *args: sqlite3.SQLITE_OK
+                          if (action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION) or
+                              (action == sqlite3.SQLITE_READ and table == "dataset"))
+                          else sqlite3.SQLITE_DENY)
         db.set_progress_handler(lambda: 1, 10000)  # Bounded work, no arbitrary queries.
         sql_rows = db.execute("SELECT COUNT(*) FROM dataset").fetchone()[0]
     return {"summary": {**numeric, "sql_row_count": sql_rows},
@@ -40,9 +41,10 @@ def execute_readonly_sql(header: list[str], rows: list[list[str]], query: str,
         db.execute("CREATE TABLE dataset (row_number INTEGER PRIMARY KEY, payload TEXT NOT NULL)")
         db.executemany("INSERT INTO dataset VALUES (?, ?)",
                        ((i, "\x1f".join(row)) for i, row in enumerate(rows, 1)))
-        db.set_authorizer(lambda action, *args: sqlite3.SQLITE_OK
-                          if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ,
-                                        sqlite3.SQLITE_FUNCTION) else sqlite3.SQLITE_DENY)
+        db.set_authorizer(lambda action, table, *args: sqlite3.SQLITE_OK
+                          if (action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION) or
+                              (action == sqlite3.SQLITE_READ and table == "dataset"))
+                          else sqlite3.SQLITE_DENY)
         budget = [0]
         def progress():
             budget[0] += 1
