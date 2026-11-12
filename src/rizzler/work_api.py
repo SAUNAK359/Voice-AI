@@ -70,6 +70,15 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
         try:return store.get(owner(req),jid)
         except Missing:raise HTTPException(status_code=404,detail="Job not found")
 
+    @api.get("/jobs/{jid}/plan")
+    def job_plan(req: Request, jid: str):
+        try:
+            return store.job_plan(owner(req),jid)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+        except ValueError:
+            raise HTTPException(status_code=503,detail="Work plan integrity unavailable") from None
+
     @api.get("/jobs/{jid}/agents")
     def agent_statuses(req: Request, jid: str):
         who = owner(req)
