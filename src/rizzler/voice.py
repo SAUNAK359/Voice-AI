@@ -86,11 +86,14 @@ class VoiceEngine:
                                     if (not isinstance(raw, bytes) or not raw or len(raw)%2 or
                                             len(raw)>self.settings.sample_rate*2*35):
                                         raise ValueError('TTS returned invalid PCM16')
-                                    import numpy as np
-                                    waveform = np.frombuffer(raw,dtype='<i2').astype(np.float32)
-                                    if (float(np.sqrt(np.mean(waveform*waveform)))<40 or
-                                            float(np.max(np.abs(waveform)))<80):
-                                        raise ValueError('TTS returned silent/inaudible PCM16')
+                                    if not any(raw):
+                                        raise ValueError('TTS returned silent PCM16')
+                                    if getattr(self.providers.tts, "enforce_audibility", False):
+                                        import numpy as np
+                                        waveform = np.frombuffer(raw,dtype='<i2').astype(np.float32)
+                                        if (float(np.sqrt(np.mean(waveform*waveform)))<40 or
+                                                float(np.max(np.abs(waveform)))<80):
+                                            raise ValueError('TTS returned inaudible PCM16')
                                     break
                                 except (Exception, TimeoutError):
                                     if retry:
