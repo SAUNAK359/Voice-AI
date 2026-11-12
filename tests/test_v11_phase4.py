@@ -146,6 +146,7 @@ def test_authenticated_memory_api_and_privacy_bounds(tmp_path,monkeypatch):
 def test_disabled_or_reused_secret_fails_closed(tmp_path,monkeypatch):
     config=Settings(access_key=KEY)
     monkeypatch.setenv("RIZZLER_MEMORY_ENABLED","1")
+    monkeypatch.setenv("RIZZLER_DEMO_MEMORY_SINGLE_USER","1")
     monkeypatch.setenv("RIZZLER_MEMORY_ROOT",str(tmp_path/"memory"))
     monkeypatch.setenv("RIZZLER_MEMORY_KEY",KEY)
     with pytest.raises(ValueError,match="independent"):
@@ -205,3 +206,12 @@ def test_memory_database_outage_degrades_to_llm_without_tool_execution(tmp_path)
                              16000,[],owner=OWNER_A)]
         assert any(e["type"]=="done" for e in events),events
     asyncio.run(run())
+
+
+def test_shared_demo_cannot_enable_memory_without_single_user_ack(tmp_path,monkeypatch):
+    monkeypatch.setenv("RIZZLER_MEMORY_ENABLED","1")
+    monkeypatch.delenv("RIZZLER_DEMO_MEMORY_SINGLE_USER",raising=False)
+    monkeypatch.setenv("RIZZLER_MEMORY_KEY",MEMKEY)
+    monkeypatch.setenv("RIZZLER_MEMORY_ROOT",str(tmp_path/"memory"))
+    with pytest.raises(ValueError,match="single-user"):
+        create_app(Settings(access_key=KEY))
