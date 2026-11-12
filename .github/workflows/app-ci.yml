@@ -42,7 +42,7 @@ jobs:
         run: python -m compileall -q src/rizzler
       - name: Evaluate frozen voice tool routing (no side-effect false positives)
         run: python scripts/evaluate_tool_routing.py --output /tmp/rizzler_v11_routing.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Check browser JS syntax
