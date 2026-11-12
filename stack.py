@@ -241,6 +241,18 @@ class MockPod(RunPod):
         raise ValueError('Mock provider never serves the live AI application')
 
 
+async def expiring_chunks(chunks, deadline, clock=time.time):
+    """Stop an HTTP response stream when its already-accepted lease expires."""
+    try:
+        async with asyncio.timeout(max(0, deadline - clock())):
+            async for chunk in chunks:
+                if clock() >= deadline:
+                    break
+                yield chunk
+    except TimeoutError:
+        return
+
+
 class Gateway:
     def __init__(self, cfg: Config, provider=None, clock=time.time):
         self.cfg = cfg
@@ -657,7 +669,8 @@ def create_app(config: Config | None = None, provider=None, clock=time.time):
             html = html.replace('Enter <code>RIZZLER_ACCESS_KEY</code>. This key stays in your browser memory and is not stored.',
                                 'Your temporary portfolio demo access is configured. Press Connect to allow your microphone.')
             return HTMLResponse(html, status_code=remote.status_code)
-        return StreamingResponse(remote.aiter_raw(), status_code=remote.status_code,
+        return StreamingResponse(expiring_chunks(remote.aiter_raw(),
+                                 row['expires'], gateway.clock), status_code=remote.status_code,
                                  headers=allowed_responses,
                                  background=BackgroundTask(_close_remote, remote, client))
 
