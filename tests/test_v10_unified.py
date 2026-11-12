@@ -137,3 +137,90 @@ def test_search_fail_closed_without_key():
         assert out["tool"]=="web_search" and not out["verified"]
         assert "unavailable" in out["text"].lower()
     asyncio.run(run())
+
+
+def test_search_capability_question_does_not_waste_a_live_query():
+    cfg=Settings(access_key=KEY,gemini_api_key="fake-key-not-real")
+    async def run():
+        tool=VoiceTools(None,cfg)
+        reply=await tool.execute("Do you have web search tools?", "owner_1", 5)
+        assert reply is not None
+        assert reply["tool"]=="web_search"
+        assert "search" in reply["spoken"].lower()
+    asyncio.run(run())
+
+
+def test_search_requires_actual_grounding_metadata(monkeypatch):
+    from types import SimpleNamespace as NS
+    from google import genai
+    from rizzler.voice_tools import grounded_search
+    class FakeModels:
+        async def generate_content(self, **kwargs):
+            assert kwargs["config"].tools
+            if 'Missing' in kwargs["contents"]:
+                return NS(text="A tempting unsupported claim",
+                          candidates=[NS(grounding_metadata=None)])
+            return NS(text="The quoted value is available in dated sources.",
+                      candidates=[NS(grounding_metadata=NS(grounding_chunks=[
+                          NS(web=NS(uri="https://example.org/stocks")),
+                          NS(web=NS(uri="https://example.org/stocks"))
+                      ]))])
+    class FakeClient:
+        def __init__(self,**kwargs):
+            self.aio=NS(models=FakeModels(),aclose=self.aclose)
+        async def aclose(self):
+            return None
+    monkeypatch.setattr(genai,"Client",FakeClient)
+    cfg=Settings(access_key=KEY,gemini_api_key="fake-provider-key")
+    async def run():
+        grounded=await grounded_search("Current Tata Steel stock price",cfg)
+        assert grounded["verified"]
+        assert grounded["sources"]==["https://example.org/stocks"]
+        assert "[Source 1](https://example.org/stocks)" in grounded["text"]
+        refused=await grounded_search("Missing source evidence",cfg)
+        assert not refused["verified"]
+        assert refused["sources"]==[]
+        assert "couldn't verify" in refused["text"]
+    asyncio.run(run())
+
+
+def test_search_spoken_ack_precedes_slow_provider_result():
+    class ASR:
+        def transcribe(self,wave):return "What is the current stock price of Tata Steel?"
+    class LLM:
+        async def stream(self,*args):
+            raise AssertionError("The normal Gemini chat path must not be used for search")
+            yield ""
+    class TTS:
+        def synthesize(self,text):
+            return np.ones(2400,dtype="<i2").tobytes()
+    class Tool:
+        store=None
+        async def execute(self,*a,**kw):
+            await asyncio.sleep(0.25)
+            return {"tool":"web_search","verified":False,
+                    "text":"Current price unavailable without verified quote metadata.",
+                    "spoken":"I couldn't verify a current exchange quote.",
+                    "tool_elapsed_ms":250}
+    async def run():
+        engine=VoiceEngine(settings(),ProviderSet(ASR(),LLM(),TTS()),Tool())
+        result=[e async for e in engine.events(np.ones(16000,dtype="<i2").tobytes(),16000,[],owner="owner_1")]
+        names=[e["type"] for e in result]
+        assert "tool_result" in names and "done" in names
+        assert names.index("audio") < names.index("tool_result"),names
+        metrics=next(e["data"] for e in result if e["type"]=="metrics")
+        assert metrics["tool"]=="web_search"
+        assert metrics["llm_first_text_ms"] is None
+    asyncio.run(run())
+
+
+def test_voice_capabilities_are_owner_authenticated(tmp_path,monkeypatch):
+    monkeypatch.delenv("RIZZLER_WORK_ROOT",raising=False)
+    monkeypatch.delenv("RIZZLER_WORK_SIGNING_KEY",raising=False)
+    with TestClient(create_app(settings())) as client:
+        assert client.get("/api/voice/tools").status_code==401
+        auth={"x-rizzler-key":KEY,"x-session-id":"owner_1234"}
+        response=client.get("/api/voice/tools",headers=auth)
+        assert response.status_code==200
+        assert response.json()["tools"]["work_agent"]=="disabled"
+        assert response.json()["tools"]["symbolic_math"]=="available"
