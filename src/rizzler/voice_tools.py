@@ -9,11 +9,12 @@ import time
 from .math_engine import solve_equations
 from .research_evidence import source_records, evidence_summary
 from .task_planning import propose_scope
+from .tool_registry import require_tool, VOICE_TOOLS
 
 SEARCH_INTENT = re.compile(r"\b(?:search(?: the)? web|web search|look (?:up|online)|browse|research online|current (?:stock price|share price|news|exchange rate)|latest (?:news|price|updates)|(?:stock|share) price (?:of|for)|today['’]?s? (?:news|price|weather))\b", re.I)
 WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|research|analy[sz]e)\b", re.I)
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
-STATUS_INTENT = re.compile(r"\b(?:status|progress|how(?:'s| is) (?:the|my) (?:job|task|report)|is (?:the|my) (?:report|presentation|job|task) (?:ready|done)|what(?:'s| is) (?:happening|running))\b", re.I)
+STATUS_INTENT = re.compile(r"\b(?:(?:status|progress)\b.{0,35}\b(?:my|job|task|report|work|presentation|analysis)\b|(?:my|the|this)\s+(?:job|task|report|work|presentation)\s+(?:status|progress)\b|how(?:'s| is)\s+(?:my|the)\s+(?:job|task|report|work)\b|is\s+(?:my|the)\s+(?:report|presentation|job|task)\s+(?:ready|done)\b)\b", re.I)
 CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort) (?:the |my |that |current |last )?(?:work|job|task|report|analysis|presentation)\b", re.I)
 
 
@@ -97,6 +98,8 @@ class VoiceTools:
     async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '')->dict|None:
         intent=classify_tool(text,self.store is not None)
         if not intent:return None
+        require_tool(intent, explicit_private_write=intent in ("work_submit","work_cancel"),
+                     allowed=frozenset(VOICE_TOOLS))
         started=time.perf_counter()
         if intent=="web_search" and re.search(r"\b(?:can you|do you|have you|are you able|access to|search tools|web search tools)\\b",text,re.I) and not re.search(r"\b(?:current|latest|today|look up|search for|stock price|share price)\\b",text,re.I):
             ready=bool(self.settings.gemini_api_key)
