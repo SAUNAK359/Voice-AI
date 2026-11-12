@@ -93,7 +93,8 @@ class VoiceEngine:
                         if intent == 'math':
                             await output.put({'type':'status','label':'Verifying the equations'})
                         if intent == 'work_submit':
-                            await output.put({'type':'status','label':'Delegating to Work Agent'})
+                            await output.put({'type':'status','label':'Planning requested work'})
+                            await speech_queue.put('I will organize the work into verified steps.')
                         tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads, nonce=nonce)
                         if tool_result is not None:
                             await output.put({'type':'tool_result',
