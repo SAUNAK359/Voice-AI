@@ -265,3 +265,50 @@ def test_cancelled_before_execution_settles_agent_steps(tmp_path):
     statuses = store.agent_steps("owner_1", job["id"])
     assert statuses and all(x["status"] == "cancelled" for x in statuses)
     assert all(x["finished"] > 0 for x in statuses)
+
+
+def test_independent_document_agents_overlap_and_use_verified_sql_data(tmp_path, monkeypatch):
+    """Two independent specialist renderers run concurrently with shared evidence."""
+    import threading
+    from docx import Document
+    from pptx import Presentation
+    import rizzler.work_specialists as specialists
+    actual = specialists.render_one
+    rendezvous = threading.Barrier(2, timeout=8)
+    concurrent = []
+
+    def tracked(kind, path, title, text, table, sources):
+        if kind in ("docx", "pptx"):
+            concurrent.append(kind)
+            rendezvous.wait()
+        return actual(kind, path, title, text, table, sources)
+
+    monkeypatch.setattr(specialists, "render_one", tracked)
+    store = WorkStore(tmp_path / "work")
+    upload = store.register_upload("owner_1", "sales.csv",
+                b"region,revenue\\nNorth,10\\nSouth,30\\n")
+    job = store.submit("owner_1", "Prepare a complete report on the sales data.",
+                       ["data_analysis", "docx", "pptx"], "parallel_evidence_001",
+                       [upload["id"]])
+    assert asyncio.run(WorkWorker(store, composer=composer).once())
+    assert store.get("owner_1", job["id"])["status"] == "completed"
+    assert set(concurrent) == {"docx", "pptx"}
+    artifacts = store.artifacts("owner_1", job["id"])
+    document = next(x for x in artifacts if x["kind"] == "docx")
+    slides = next(x for x in artifacts if x["kind"] == "pptx")
+    doc = Document(store.artifact("owner_1", document["id"])[0])
+    paragraphs = "\\n".join(p.text for p in doc.paragraphs)
+    assert "Verified dataset evidence" in paragraphs and "mean 20" in paragraphs
+    deck = Presentation(store.artifact("owner_1", slides["id"])[0])
+    slide_text = "\\n".join(shape.text for slide in deck.slides
+                              for shape in slide.shapes if shape.has_text_frame)
+    assert "Verified dataset evidence" in slide_text
+    assert "mean 20" in slide_text
+
+
+def test_energy_and_empathy_prosody_remain_bounded():
+    assert expressive_speech_speed("Excellent! Your report is verified.") > expressive_speech_speed(
+        "I'm sorry, the report failed validation.")
+    assert expressive_speech_speed("Did you want me to continue?") < expressive_speech_speed(
+        "Great news! Your presentation is completed.")
+    assert 1 <= expressive_speech_speed("Warning, something failed!") <= 1.24
