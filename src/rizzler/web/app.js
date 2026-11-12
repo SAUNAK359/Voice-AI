@@ -6,13 +6,13 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  chunks:[],chunkBytes:0,playing:new Set(),nextAudio:0,
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
- sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ workEnabled:false,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
   {'x-rizzler-key':s.key,'x-session-id':s.sessionId};
 function status(p,d=''){document.body.className=p;$('phase').textContent=p[0].toUpperCase()+p.slice(1);$('detail').textContent=d}
-function message(role,text,seq){const id=role+seq;let el=s.history.get(id);if(!el){document.querySelector('.empty')?.remove();el=document.createElement('article');el.className='bubble '+role;const label=document.createElement('small');label.textContent=role==='user'?'You':'Rizzler';const body=document.createElement('div');el.append(label,body);$('messages').append(el);s.history.set(id,el)}el.lastChild.textContent=text;$('messages').scrollTop=$('messages').scrollHeight}
+function message(role,text,seq,final=false){const id=role+seq;let el=s.history.get(id);if(!el){document.querySelector('.empty')?.remove();el=document.createElement('article');el.className='bubble '+role;const label=document.createElement('small');label.textContent=role==='user'?'You':'Rizzler';const body=document.createElement('div');el.append(label,body);$('messages').append(el);s.history.set(id,el)}if(role==='assistant'&&window.RizzlerRich&&final){window.RizzlerRich.render(el.lastChild,text)}else if(role==='assistant'){el.lastChild.textContent=window.RizzlerRich?window.RizzlerRich.latex(text.replace(/\\\(|\\\)|\$/g,'')):text}else el.lastChild.textContent=text;$('messages').scrollTop=$('messages').scrollHeight}
 function noteLatency(){const q=s.ledger.summary();const extra=q.n?` · Output-start proxy p50 ${q.p50} / p95 ${q.p95} / p99 ${q.p99} ms (n=${q.n})`:'';$('clientmetrics').textContent='Browser pause-to-scheduled-playback (not physically measured speaker audio)'+extra}
 function stopAudio(){s.epoch++;s.fence.cancel();for(const a of s.playing){try{a.onended=null;a.stop()}catch(_){ }try{a.disconnect()}catch(_){}}s.playing.clear();s.nextAudio=0;s.allowSeq=0}
 function interrupt(){const active=s.playing.size||s.request||['thinking','speaking'].includes(document.body.className);
@@ -27,10 +27,11 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'ready':$('connection').textContent='WebSocket live';break;
  case'status':if(!s.recording)status((msg.label||'thinking').toLowerCase());break;
  case'transcript':message('user',msg.text,seq);break;
- case'assistant_text':message('assistant',msg.text,seq);break;
+ case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
+ case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();break;
  case'audio_begin':s.allowSeq=seq;s.done=false;break;
  case'metrics':{const m=msg.data||{};
- $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · Gemini first text ${m.llm_first_text_ms??'—'} ms · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
+ $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · ${m.tool?('Tool '+m.tool+' '+(m.tool_ms??'—')+' ms'):('Gemini first text '+(m.llm_first_text_ms??'—')+' ms')} · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
  s.ledger.server(seq,m.post_pause_first_audio_ms);break}
  case'done':s.done=true;if(s.ledger.complete(seq)!==null)noteLatency();if(!s.playing.size&&!s.recording)status('listening','Ask a follow-up.');break;
  case'error':s.ledger.cancel(seq);stopAudio();status('error',msg.message||'Voice turn failed');break;
@@ -54,7 +55,7 @@ async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortContr
  try{const res=await fetch('/api/turn',{method:'POST',headers:{...headers(),'x-sample-rate':String(s.rate),'content-type':'application/octet-stream'},body:bytes,signal:ctrl.signal});
  if(!res.ok)throw Error('HTTP '+res.status);const m=await res.json();if(!s.fence.accepts(seq))return;
  server({type:'transcript',text:m.transcript,generation:seq});
- server({type:'assistant_text',text:m.answer,generation:seq});
+ server({type:'assistant_text',text:m.answer,final:true,generation:seq});
  server({type:'metrics',data:m.metrics,generation:seq});
  s.allowSeq=seq;s.done=true;
  const pcm=Uint8Array.from(atob(m.audio_b64),c=>c.charCodeAt(0));
@@ -151,6 +152,7 @@ async function connectSession(){
    s.session=true;$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
    for(const id of ['mute','send','reset'])$(id).disabled=false;
    status('listening','Ready. Speak naturally.');noteLatency();
+   refreshToolCatalog();if(s.workEnabled)refreshWork();
    if(s.mode==='http')scheduleReconnect();
  }catch(err){$('error').textContent=err.message;status('error',err.message);
    s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
@@ -167,7 +169,7 @@ $('logout').addEventListener('click',async()=>{
  try{
   const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
   const d=await r.json();s.production=d.mode==='production';
-  $('work-link').hidden=!d.work_enabled;
+  s.workEnabled=!!d.work_enabled;$('work-panel').hidden=!s.workEnabled;
   $('logout').hidden=!s.production;
   if(s.production){
     const who=await fetch('/auth/session');
@@ -177,6 +179,71 @@ $('logout').addEventListener('click',async()=>{
   }
  }catch(e){status('error','Cannot verify runtime access')}
 })();
+
+async function refreshToolCatalog(){
+ try{
+  const r=await fetch('/api/voice/tools',{headers:headers()});
+  if(!r.ok)return;
+  const d=await r.json(),t=d.tools||{};
+  $('tool-status').textContent='Tools · Web search: '+(t.web_search||'unknown')+
+    ' · Verified math: '+(t.symbolic_math||'unknown')+
+    ' · Work: '+(t.work_agent||'unknown');
+ }catch(_){$('tool-status').textContent='Tools · Verification unavailable'}
+}
+function toolNotice(msg){
+ const panel=$('upload-feedback');if(!panel)return;
+ const name={web_search:'Live web search',symbolic_math:'Verified mathematics',
+  work_submit:'Work delegation',work_status:'Work status',work_cancel:'Work cancellation'}[msg.tool]||msg.tool;
+ panel.textContent=name+(msg.verified?' · verified':' · unavailable or unverified')+
+   (Number.isFinite(msg.elapsed_ms)?' · '+Math.round(msg.elapsed_ms)+' ms':'');
+}
+async function refreshWork(){
+ if(!s.workEnabled||(!s.key&&!s.production))return;
+ try{
+ const response=await fetch('/api/voice/jobs',{headers:headers()});
+ if(!response.ok)return;
+ const {jobs}=await response.json(),target=$('work-jobs');target.replaceChildren();
+ for(const job of jobs.slice(0,6)){
+  const card=document.createElement('article');card.className='job-card';
+  const heading=document.createElement('strong');heading.textContent='Job '+job.id.slice(0,8)+' · '+job.status;
+  const subtitle=document.createElement('p');subtitle.textContent='Stage: '+job.stage+' · '+job.attempts+' worker attempts';
+  card.append(heading,subtitle);
+  if(job.status==='completed'||job.status==='running'||job.status==='failed'){
+    const res=await fetch('/api/voice/jobs/'+encodeURIComponent(job.id),{headers:headers()});
+    if(res.ok){
+     const detail=await res.json();
+     const agents=document.createElement('p');agents.className='job-agents';
+     agents.textContent=detail.agents.map(a=>a.agent.replaceAll('_',' ')+': '+a.status).join(' · ');
+     card.append(agents);
+     for(const file of detail.artifacts){
+      const btn=document.createElement('button');btn.textContent='Download '+file.kind.toUpperCase();
+      btn.addEventListener('click',async()=>{
+       try{const result=await fetch('/api/voice/artifacts/'+encodeURIComponent(file.id),{headers:headers()});
+        if(!result.ok)throw Error('Download unavailable');
+        const blob=await result.blob(),url=URL.createObjectURL(blob);
+        const a=document.createElement('a');a.href=url;a.download=file.name;a.click();
+        setTimeout(()=>URL.revokeObjectURL(url),30000);
+       }catch(e){$('upload-feedback').textContent=e.message;}
+      });card.append(btn);
+     }
+    }
+  }
+  target.append(card);
+ }
+ }catch(_){/* An offline dashboard must not interrupt the microphone. */}
+}
+const uploadField=$('data-upload');
+uploadField?.addEventListener('change',async()=>{
+ const file=uploadField.files?.[0];if(!file)return;
+ if(!s.workEnabled||(!s.key&&!s.production)){ $('upload-feedback').textContent='Connect Rizzler before attaching a file.';return;}
+ if(!/\.(csv|xlsx)$/i.test(file.name)||file.size>8000000){$('upload-feedback').textContent='Choose a CSV or XLSX under 8 MB.';return;}
+ try{const res=await fetch('/api/voice/uploads',{method:'POST',headers:{...headers(),'x-file-name':file.name,'content-type':'application/octet-stream'},body:file});
+ if(!res.ok)throw Error('Upload failed ('+res.status+')');
+ $('upload-feedback').textContent='Attached '+file.name+'. Now ask Rizzler to analyze it.';
+ }catch(e){$('upload-feedback').textContent=e.message;}
+});
+setInterval(()=>{if(!document.hidden&&s.session&&s.workEnabled)refreshWork()},8000);
+
 $('mute').addEventListener('click',()=>{s.muted=!s.muted;$('mute').textContent=s.muted?'Unmute':'Mute';
  if(s.muted){interrupt();s.recording=false;s.gate.reset();status('muted','Microphone muted')}else status('listening','Speak naturally')});
 $('send').addEventListener('click',()=>{if(s.recording){finish();return}if(s.recentBytes<s.rate*2*.35)return;

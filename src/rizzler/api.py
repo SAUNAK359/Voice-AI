@@ -32,7 +32,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     production = mode == "production"
     cfg = settings or Settings.from_env()
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
-    engine, sessions = VoiceEngine(cfg, models), Sessions()
+    sessions = Sessions()
     operations = Operations()
     ops_token = environ.get("RIZZLER_OPERATIONS_TOKEN", "")
     if production and (len(ops_token) < 32 or ops_token == environ.get("RIZZLER_SESSION_SIGNING_KEY", "")):
@@ -82,9 +82,32 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     else:
         work = None
 
+    from .voice_tools import VoiceTools
+    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg))
     @asynccontextmanager
     async def lifespan(app):
+        # Optional one-time provider prewarm, performed after API starts
+        # listening. No Gemini request, secret logging or recurring polling.
+        # Colab can enable this while the visitor opens the HTTPS link.
+        prewarm_task = None
+        if environ.get('RIZZLER_PREWARM','').lower() in ('1','true','yes'):
+            async def prewarm():
+                import numpy as np
+                try:
+                    await asyncio.gather(
+                        asyncio.to_thread(models.asr.transcribe,
+                                          np.zeros(16000,dtype=np.float32)),
+                        asyncio.to_thread(models.tts.synthesize,'Ready to help.'))
+                    app.state.voice_prewarm = 'ready'
+                except Exception:
+                    app.state.voice_prewarm = 'failed'
+            app.state.voice_prewarm = 'running'
+            prewarm_task = asyncio.create_task(prewarm(),name='voice-model-prewarm')
         yield
+        if prewarm_task and not prewarm_task.done():
+            prewarm_task.cancel()
+        if prewarm_task:
+            await asyncio.gather(prewarm_task,return_exceptions=True)
         close = getattr(models.llm, 'close', None)
         if close:
             await close()
@@ -98,9 +121,11 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         from .work_api import router
         app.include_router(router(work, work_signing_key, identity=identity))
 
+        # Keep backward-compatible private Work API; the primary application
+        # now shows Work job cards inside the voice conversation.
         @app.get('/work')
         def work_dashboard():
-            return FileResponse(WEB / 'work.html')
+            return RedirectResponse('/', status_code=302)
 
     @app.middleware('http')
     async def protect_response(request: Request, call_next):
@@ -165,6 +190,19 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     def runtime():
         return {"mode": mode, "work_enabled": work is not None}
 
+    @app.get('/api/voice/tools')
+    def voice_tool_catalog(request: Request):
+        # Capabilities are server-observed configuration, not model promises.
+        auth(request, True)
+        from importlib.util import find_spec
+        return {"tools": {
+            "web_search": "configured" if cfg.gemini_api_key else "unavailable",
+            "symbolic_math": "available" if find_spec("sympy") is not None else "unavailable",
+            "work_agent": "available" if work is not None else "disabled",
+            "file_uploads": "available" if work is not None else "disabled",
+            "job_tracking": "available" if work is not None else "disabled"},
+            "note": "Configured does not prove live Google Search availability or current source freshness"}
+
     if identity is not None:
         @app.get('/auth/login')
         def login():
@@ -225,7 +263,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                     'gemini_client': getattr(models.llm, '_client', None) is not None,
                     'tts': getattr(models.tts, '_model', None) is not None,
                 }, 'inference_busy': sessions.inference.locked(),
-                'first_audio_claim': 'not_measured'}
+                'first_audio_claim': 'not_measured',
+                'voice_prewarm':getattr(app.state,'voice_prewarm','not_requested')}
 
     @app.get('/api/provider/metrics')
     def provider_metrics(request: Request):
@@ -233,6 +272,56 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         stats = getattr(models.llm, 'telemetry', None)
         return stats.summary() if stats is not None else {
             'window_requests': 0, 'status': 'provider_telemetry_not_available'}
+
+    if work:
+        @app.get('/api/voice/jobs')
+        def voice_jobs(request: Request):
+            sid=auth(request, True)
+            return {'jobs':work.list_jobs(sid)}
+
+        @app.get('/api/voice/jobs/{jid}')
+        def voice_job(request: Request,jid: str):
+            sid=auth(request, True)
+            from .work_store import Missing
+            try:
+                return {'job':work.get(sid,jid),
+                        'agents':work.agent_steps(sid,jid),
+                        'artifacts':work.artifacts(sid,jid)}
+            except Missing:
+                raise HTTPException(status_code=404,detail='Job not found') from None
+
+        @app.get('/api/voice/artifacts/{aid}')
+        def voice_artifact(request: Request,aid: str):
+            sid=auth(request, True)
+            from .work_store import Missing
+            try:
+                path,meta=work.artifact(sid,aid)
+            except Missing:
+                raise HTTPException(status_code=404,detail='Artifact unavailable') from None
+            return FileResponse(path,filename=meta['name'])
+
+        @app.post('/api/voice/uploads',status_code=201)
+        async def voice_upload(request: Request):
+            sid=auth(request, True)
+            from .work_store import Conflict
+            from .upload_scan import ScanUnavailable
+            name=request.headers.get('x-file-name','')
+            raw=bytearray()
+            async for chunk in request.stream():
+                raw.extend(chunk)
+                if len(raw)>8_000_000:
+                    raise HTTPException(status_code=413,detail='Upload too large')
+            try:
+                receipt=await asyncio.to_thread(work.register_upload,sid,name,bytes(raw))
+            except ScanUnavailable:
+                raise HTTPException(status_code=503,detail='Upload scanner unavailable') from None
+            except Conflict:
+                raise HTTPException(status_code=429,detail='Upload quota exceeded') from None
+            except (ValueError,UnicodeError):
+                raise HTTPException(status_code=400,detail='Invalid dataset') from None
+            session=sessions.get(sid)
+            session.uploads[:]=[receipt['id']]
+            return {'name':name,'size':receipt.get('size'),'ready':True}
 
     @app.post('/api/auth')
     def authorize(request: Request):
@@ -287,7 +376,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             session.task = task
             events, samples = [], bytearray()
             try:
-                async for event in engine.events(bytes(raw), rate, list(session.history)):
+                async for event in engine.events(bytes(raw), rate, list(session.history), owner=sid, sequence=generation, uploads=list(session.uploads), nonce=session.nonce):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -360,7 +449,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             async def stream_turn(recorded: bytes, seq: int):
                 async with sessions.inference:
                     try:
-                        async for event in engine.events(recorded, rate, list(session.history)):
+                        async for event in engine.events(recorded, rate, list(session.history), owner=sid, sequence=seq, uploads=list(session.uploads), nonce=session.nonce):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
