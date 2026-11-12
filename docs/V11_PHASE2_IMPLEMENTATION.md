@@ -1,34 +1,61 @@
-# Rizzler V11 Phase 2 — Artifact consistency and deterministic quality (increment 1)
+# Rizzler V11 — Phase 2: Artifact design, verification and recovery
 
-## Implemented
+## Execution
 
-- Immutable, versioned Artifact IR compiled once per parent job from the
-  previously committed content, source URLs and independently computed SQL
-  statistics. SHA-256 depends on all these inputs and is recorded in final QA.
-- Bounded parsing fails instead of silently dropping sections over 8,000
-  characters or omitting sections past the 24-section cap.
-- Existing six specialists and six-argument renderer signature stay intact.
-  This preserves retry/cancellation behavior and test harness compatibility.
-- Word, PowerPoint, Excel, JSON, Markdown, plain text and HTML are now checked
-  against the exact same IR headings and source URL set at the final quality
-  gate. Missing links, changed headings and mismatched workbook row counts
-  block verified completion.
-- Long PowerPoint prose is split into continuations rather than discarded.
-  Source references are paginated. Spreadsheet source-row formulas are written
-  alongside independently computed expected counts, with explicit warnings
-  that formulas have not been recalculated.
-- Offline regression fixtures cover tampered documents, oversized sections,
-  malicious URLs, repeatable hashes and multi-format parity.
+Use existing six specialists and WorkStore only. Provider-grounded research and
+independently reconciled SQL data feed the content orchestrator or verified
+research narrative. Immutable versioned Artifact IR binds title, headings,
+complete prose, source URLs, dataset summary SHA-256 and row count. Format
+specialists generate real outputs in private, worker-fenced staging.
 
-## Not yet delivered / release gates
+Before promotion: inspect file integrity, format structure, section/body/source
+coverage and native workbook calculations. In strict mode, LibreOffice converts
+Word/PowerPoint to PDF, PyMuPDF rasterizes every page and checks bounds, nonempty
+text and page counts; Calc recomputes workbook formulas. If deterministic
+validation fails, exactly one re-render with the original trusted input is
+allowed. Persistent failure blocks completion. No extra model call or external
+action is made during repair.
 
-This increment is NOT full Phase 2 completion. It does not implement native
-PowerPoint/Word/PDF page rendering, image-level optical inspection, revision
-loops, Excel recalculation, accessibility audits, independent research factual
-verification, or AI-driven professional layout/design scoring. SQL summary
-hashing is evidence integrity, not verification of model-generated claims.
+Checks are bound to the generated artifact SHA-256 and persisted with each
+specialist result. The master quality gate rechecks bytes and output coverage
+before WorkStore can mark the job verified; ZIP bundles include a SHA-256
+manifest and are independently checked for member integrity. Existing lease
+fences prevent stale workers from overwriting the active checkpoint.
 
-Before declaring Phase 2 qualified: render sample decks and docs in a
-reproducible environment; inspect every exported page for clipping and
-readability; independently recalculate workbook formulas; perform sampled
-source audits; inject corrupt inputs/failures; rerun CI and live work jobs.
+## Delivered formats and checks
+
+| Format | Editable/print output | Quality gates |
+| --- | --- | --- |
+| DOCX | Semantic heading hierarchy, readable typography, header/footer, compact source-data tables and URLs | Structural integrity, section/body/source parity, rendered pages in strict mode |
+| PPTX | Editable elements, continuation slides, source-derived native chart, source hyperlinks and notes | No empty or off-canvas shapes, section/body/source parity, exact rendered-slide count in strict mode |
+| XLSX | Formatted Summary/Data/Checks/Dashboard/Sources, charts and native formulas | Source and SQL reconciliation, independent arithmetic; additional Calc recalculation in strict mode |
+| PDF | Paginated report, citations and source-derived summary tables | PDF structure and strict text/raster page inspection |
+| Other | Existing CSV, JSON, HTML, TXT, MD, PNG, SVG, ZIP outputs | Structure, provenance, hashes, and numeric checks as applicable |
+
+## Production configuration and failure contract
+
+Set RIZZLER_ARTIFACT_QA=strict in production. The Dockerfile installs Writer,
+Impress, Calc and fonts; PyMuPDF is an explicit work dependency. Conversion is
+bounded with isolated LibreOffice profiles and timeouts. If a required binary
+or renderer is unavailable, strict QA fails closed.
+
+Default structural mode does not claim native visual inspection. Both modes
+report the selected QA mode and granular results. Malformed input, unsupported
+URLs, lost source sections, tampered formulas, changed files, blank/clipped
+rendered pages and unreconciled workbook totals block verified completion.
+Native renderers may be retried once on deterministic validation errors only;
+external provider side effects are never blindly replayed.
+
+## CI and qualification
+
+The App CI matrix covers Python 3.11-3.13, stage/recovery regressions, source
+and formula tampering, bounded repair, and cross-format checks. A dedicated
+artifact-render-qa job runs actual LibreOffice and PyMuPDF against example
+DOCX/PPTX/PDF/XLSX outputs. Release manifest and CodeQL gates remain required.
+
+Remaining release validation is *not* implied by passing CI: blind aesthetic
+review, tagged-PDF accessibility, complete contrast checks, evidence-level
+fact auditing against independently fetched sources, live cloud-model
+benchmarks, cross-device review, and full production restart/restore drills
+require separate reproducible evidence. Rasterized pages and text bounds are
+useful mechanical tests, not proof of beautiful design or factual correctness.
