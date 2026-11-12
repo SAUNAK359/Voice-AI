@@ -49,8 +49,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 read_skill(spec.name) if spec.name in (
                     "research", "sql_analytics", "powerpoint", "word",
                     "excel", "pdf_visual") else None
+                attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
+                attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
                 result = await asyncio.wait_for(invoke(spec, checkpoint, context, formats,
-                         payload, store, owner, composer, researcher),
+                         payload, store, owner, composer, researcher,
+                         jid, worker_id, fence, attempt),
                          timeout=spec.sla_seconds * 2)
                 qa = gate_agent(spec.name, result, formats)
                 for receipt in result_receipts(result):
@@ -94,7 +97,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
 
 
 async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
-                 payload: dict, store, owner, composer, researcher):
+                 payload: dict, store, owner, composer, researcher,
+                 jid: str, worker_id: str, fence: int, attempt: Path):
     name = spec.name
     if name == "research":
         text, sources = await researcher(payload["objective"])
@@ -150,35 +154,31 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             from .work_skills import read_dataset
             table = await asyncio.to_thread(read_dataset,
                                              store.upload(owner, payload["uploads"][0]))
-        path = checkpoint / (kind + "." + kind)
-        working = checkpoint / (kind + "." + kind + ".partial")
-        try:
-            await asyncio.to_thread(render_one, kind, working, payload["objective"][:120],
-                                    context["text"] or "# Dataset analysis\nVerified dataset statistics",
-                                    table, context["sources"])
-            verify_artifact(working, kind)
-            working.replace(path)
-            receipts.append(verify_artifact(path, kind))
-        finally:
-            working.unlink(missing_ok=True)
+        working = attempt / (kind + "." + kind)
+        await asyncio.to_thread(render_one, kind, working, payload["objective"][:120],
+                                context["text"] or "# Dataset analysis\nVerified dataset statistics",
+                                table, context["sources"])
+        receipt = verify_artifact(working, kind)
+        promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
+        if not verify_checkpoint(promoted, receipt):
+            raise ValueError("Published specialist artifact failed checksum")
+        receipts.append(receipt)
     if "zip" in requested:
         contents = list(context["receipts"].values()) + receipts
         if not contents:
             raise ValueError("ZIP requires a source output")
-        path = checkpoint / "zip.zip"
-        partial = checkpoint / "zip.zip.partial"
-        try:
-            with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                for item in contents:
-                    archive.write(checkpoint / item.name, arcname=item.name)
-                archive.writestr("MANIFEST.json", json.dumps(
-                    {"schema_version": 1, "files": [
-                        {"name": r.name, "sha256": r.sha256, "bytes": r.byte_size}
-                        for r in contents]}, indent=2))
-            verify_artifact(partial, "zip")
-            partial.replace(path)
-            receipts.append(verify_artifact(path, "zip"))
-        finally:
-            partial.unlink(missing_ok=True)
+        working = attempt / "zip.zip"
+        with zipfile.ZipFile(working, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for item in contents:
+                archive.write(checkpoint / item.name, arcname=item.name)
+            archive.writestr("MANIFEST.json", json.dumps(
+                {"schema_version": 1, "files": [
+                    {"name": r.name, "sha256": r.sha256, "bytes": r.byte_size}
+                    for r in contents]}, indent=2))
+        receipt = verify_artifact(working, "zip")
+        promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
+        if not verify_checkpoint(promoted, receipt):
+            raise ValueError("Published archive failed checksum")
+        receipts.append(receipt)
     return {"receipts": [asdict(r) for r in receipts],
             "agent": name, "requested": requested}
