@@ -254,3 +254,15 @@ def test_meta_questions_do_not_start_document_jobs():
         assert classify_tool(text,True) is None
     assert classify_tool("Write a report on secure AI applications.",True)=="work_submit"
     assert classify_tool("Can you write a Word document about AI? ",True)=="work_submit"
+
+
+def test_web_capability_question_is_not_a_billable_search(monkeypatch):
+    import rizzler.voice_tools as module
+    async def forbidden(*args):
+        raise AssertionError("Capability question must not start provider search")
+    monkeypatch.setattr(module,"grounded_search",forbidden)
+    result=asyncio.run(VoiceTools(None,get_cfg()).execute(
+        "Do you have web search tools?", "owner_1"))
+    assert result["tool"]=="web_search" and result["verified"]
+    assert "what" in result["spoken"].lower()
+    assert classify_tool("Can you search the web for Tata Steel prices?",False)=="web_search"
