@@ -208,10 +208,15 @@ async function refreshWork(){
   const heading=document.createElement('strong');heading.textContent='Job '+job.id.slice(0,8)+' · '+job.status;
   const subtitle=document.createElement('p');subtitle.textContent='Stage: '+job.stage+' · '+job.attempts+' worker attempts';
   card.append(heading,subtitle);
-  if(job.status==='completed'||job.status==='running'||job.status==='failed'){
+  if(['queued','running','completed','failed','cancelled'].includes(job.status)){
     const res=await fetch('/api/voice/jobs/'+encodeURIComponent(job.id),{headers:headers()});
     if(res.ok){
      const detail=await res.json();
+     if(detail.plan?.steps?.length){
+       const flow=document.createElement('p');flow.className='job-workflow';
+       flow.textContent='Plan: '+detail.plan.steps.map(n=>n.tool.replaceAll('_',' ')).join(' · ');
+       card.append(flow);
+     }
      const agents=document.createElement('p');agents.className='job-agents';
      agents.textContent=detail.agents.map(a=>a.agent.replaceAll('_',' ')+': '+a.status).join(' · ');
      card.append(agents);
