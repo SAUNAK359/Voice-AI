@@ -4,7 +4,6 @@ import asyncio
 import base64
 import json
 import secrets
-import struct
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
