@@ -81,6 +81,9 @@ class WorkStore:
               PRIMARY KEY(job_id,agent),
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS agent_steps_status ON agent_steps(status,updated);
+            CREATE TABLE IF NOT EXISTS job_plans(
+              job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
+              created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
             """)
 
     @contextmanager
@@ -118,6 +121,9 @@ class WorkStore:
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
         from .work_agents import plan
         planned = plan(payload)
+        from .task_planning import execution_graph
+        graph = execution_graph(payload)
+        plan_json = json.dumps(graph, sort_keys=True, separators=(",", ":"))
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
         jid, t = secrets.token_hex(16), time.time()
@@ -144,6 +150,9 @@ class WorkStore:
             for spec in planned:
                 c.execute("""INSERT INTO agent_steps(job_id,agent,status,updated)
                              VALUES(?,?,'queued',?)""", (jid,spec.name,t))
+            c.execute("""INSERT INTO job_plans(job_id,plan_json,sha256,created)
+                         VALUES(?,?,?,?)""",
+                      (jid,plan_json,hashlib.sha256(plan_json.encode()).hexdigest(),t))
             self._event(c, jid, "queued", "Accepted and queued")
             return self._view(c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone())
 
@@ -164,6 +173,30 @@ class WorkStore:
         with self._tx() as c:
             return [self._view(row) for row in c.execute(
                 "SELECT * FROM jobs WHERE owner=? ORDER BY created DESC LIMIT 50", (owner,))]
+
+    def job_plan(self, owner: str, jid: str) -> dict:
+        """Owner-scoped, checksum-protected immutable execution plan."""
+        from .task_planning import execution_graph, validate_graph
+        with self._tx() as c:
+            row = c.execute("SELECT payload FROM jobs WHERE id=? AND owner=?",
+                            (jid, owner)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            payload = json.loads(row["payload"])
+            expected = execution_graph(payload)
+            saved = c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
+                              (jid,)).fetchone()
+            if saved is None:
+                # Backward-compatible read of pre-migration jobs only.
+                return expected
+            raw = saved["plan_json"]
+            if hashlib.sha256(raw.encode()).hexdigest() != saved["sha256"]:
+                raise ValueError("Job execution plan failed integrity verification")
+            result = json.loads(raw)
+            validate_graph(result, frozenset(x["id"] for x in expected["steps"]))
+            if result != expected:
+                raise ValueError("Job execution plan differs from approved workflow")
+            return result
 
     def events(self, owner: str, jid: str, after: int = 0):
         self.get(owner, jid)
