@@ -77,6 +77,7 @@ function concat(parts){const size=parts.reduce((n,x)=>n+x.length,0),out=new Uint
 async function scheduleHttpAudio(pcm,seq,rate,signal){
  if(rate!==24000||pcm.byteLength%2)throw Error('Unexpected HTTP voice sample format');
  const samples=new Int16Array(pcm.buffer,pcm.byteOffset,pcm.byteLength/2);
+ const playbackDeadline=Date.now()+120000;
  // A full HTTP response can exceed the *queued* playback budget. Stream it
  // into short scheduled PCM segments with a bounded maximum lead.
  for(let offset=0;offset<samples.length;offset+=960){
@@ -84,6 +85,7 @@ async function scheduleHttpAudio(pcm,seq,rate,signal){
   while(s.ctx?.state==='running'&&!s.budget.accepts(s.ctx.currentTime,s.nextAudio,part.length/rate)){
    await new Promise(resolve=>setTimeout(resolve,100));
    if(signal.aborted||!s.fence.accepts(seq))return false;
+   if(Date.now()>playbackDeadline)throw Error('Audio playback stalled; answer remains in chat.');
   }
   if(signal.aborted||!s.fence.accepts(seq))return false;
   if(!s.ctx||s.ctx.state!=='running')throw Error('Audio suspended; tap the page to resume.');
