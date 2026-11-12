@@ -372,9 +372,11 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         owner = auth(request, True)
         if memory is None:
             raise HTTPException(status_code=409,detail="Private memory disabled")
-        data = await request.body()
-        if len(data)>2048:
-            raise HTTPException(status_code=413,detail="Memory text too large")
+        data=bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data)>2048:
+                raise HTTPException(status_code=413,detail="Memory text too large")
         try:
             payload=json.loads(data)
             if not isinstance(payload,dict) or set(payload)!={"text"}:
