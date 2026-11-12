@@ -81,7 +81,9 @@ async def grounded_search(query: str, settings) -> dict:
             return {"text":"I couldn't verify that information from grounded live sources. I won't guess.",
                     "spoken":"I couldn't verify that from live sources, so I won't guess.",
                     "sources":[],"verified":False}
-        return {"text":answer+"\n\n**Sources:**\n" +"\n".join("- "+url for url in urls),
+        return {"text":answer+"\n\n**Sources:**\n" +"\n".join(
+                    f"- [Source {i}]( {url} )".replace("( ","(").replace(" )",")")
+                    for i,url in enumerate(urls,1)),
                 "spoken":re.sub(r"\[[^]]+\]\([^)]*\)|https?://\S+|\*","",answer)[:850],
                 "sources":urls,"verified":True}
     except (TimeoutError,Exception):
@@ -129,7 +131,10 @@ class VoiceTools:
             formats=requested_formats(text)
             if not formats:
                 return None
-            data_needed=bool(re.search(r"\b(?:my |attached |uploaded |this )?(?:spreadsheet|csv|dataset|excel file)\b",text,re.I))
+            data_needed=bool(re.search(
+                r"\b(?:my|attached|uploaded|this)\s+(?:spreadsheet|csv|dataset|excel file)\b"
+                r"|\b(?:analy[sz]e|analysis)\b.{0,60}\b(?:spreadsheet|csv|dataset|sales data)\b",
+                text,re.I))
             if data_needed and not uploads:
                 return {"tool":"work_submit","text":"Attach the CSV or XLSX dataset in this conversation first. I won't invent input data.",
                         "spoken":"Please attach the dataset in this conversation before I analyze it.",
