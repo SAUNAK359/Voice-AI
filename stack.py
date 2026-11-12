@@ -241,6 +241,18 @@ class MockPod(RunPod):
         raise ValueError('Mock provider never serves the live AI application')
 
 
+async def expiring_chunks(chunks, deadline, clock=time.time):
+    """Stop an HTTP response stream when its already-accepted lease expires."""
+    try:
+        async with asyncio.timeout(max(0, deadline - clock())):
+            async for chunk in chunks:
+                if clock() >= deadline:
+                    break
+                yield chunk
+    except TimeoutError:
+        return
+
+
 class Gateway:
     def __init__(self, cfg: Config, provider=None, clock=time.time):
         self.cfg = cfg
@@ -455,13 +467,18 @@ class Gateway:
                 continue
             if not pod:
                 continue
-            if row['status'] == 'starting':
+            if row['status'] in ('starting', 'running'):
                 try:
                     state = await self.provider.state(pod)
                     if state.get('status') in ('ERROR', 'TERMINATED', 'EXITED'):
-                        self._set(ident, status='stopping', expires=now)
-                    elif state.get('status') == 'RUNNING' and await self.provider.ready(pod):
+                        self._set(ident, status='stopping', expires=now,
+                                  last_error='upstream_exited')
+                    elif row['status'] == 'starting' and state.get('status') == 'RUNNING' and await self.provider.ready(pod):
                         self._set(ident, status='running')
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == 404:
+                        self._set(ident, status='stopping', expires=now,
+                                  last_error='upstream_missing')
                 except Exception:
                     continue
 
@@ -657,7 +674,8 @@ def create_app(config: Config | None = None, provider=None, clock=time.time):
             html = html.replace('Enter <code>RIZZLER_ACCESS_KEY</code>. This key stays in your browser memory and is not stored.',
                                 'Your temporary portfolio demo access is configured. Press Connect to allow your microphone.')
             return HTMLResponse(html, status_code=remote.status_code)
-        return StreamingResponse(remote.aiter_raw(), status_code=remote.status_code,
+        return StreamingResponse(expiring_chunks(remote.aiter_raw(),
+                                 row['expires'], gateway.clock), status_code=remote.status_code,
                                  headers=allowed_responses,
                                  background=BackgroundTask(_close_remote, remote, client))
 
