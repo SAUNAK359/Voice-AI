@@ -95,7 +95,13 @@ def test_explicit_memory_commands_and_disabled_safeguard(tmp_path):
             await tools.execute("what do you remember about diagrams?",OWNER_A))["text"]
         assert "no matching" in (
             await tools.execute("what do you remember about diagrams?",OWNER_B))["text"].lower()
-        assert (await tools.execute("forget all my memories",OWNER_A))["verified"]
+        proposed=await tools.execute("forget all my memories",OWNER_A)
+        assert proposed["verified"] is False
+        assert len(mem.list(OWNER_A))==1
+        no_other=await tools.execute("confirm delete all memories",OWNER_B)
+        assert no_other["verified"] is False
+        confirmed=await tools.execute("confirm delete all memories",OWNER_A)
+        assert confirmed["verified"] is True
         assert mem.list(OWNER_A)==[]
         assert not (await VoiceTools(None,config).execute(
             "remember that I prefer concise responses",OWNER_A))["verified"]
