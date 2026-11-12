@@ -98,7 +98,7 @@ class VoiceTools:
     def __init__(self,store,settings):
         self.store,self.settings=store,settings
 
-    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None)->dict|None:
+    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '')->dict|None:
         intent=classify_tool(text,self.store is not None)
         if not intent:return None
         started=time.perf_counter()
@@ -139,7 +139,7 @@ class VoiceTools:
                 return {"tool":"work_submit","text":"Attach the CSV or XLSX dataset in this conversation first. I won't invent input data.",
                         "spoken":"Please attach the dataset in this conversation before I analyze it.",
                         "verified":False}
-            idem=hashlib.sha256((owner+"|"+str(sequence)+"|"+text).encode()).hexdigest()[:48]
+            idem=hashlib.sha256((owner+"|"+nonce+"|"+str(sequence)+"|"+text).encode()).hexdigest()[:48]
             try:
                 job=await asyncio.to_thread(self.store.submit,owner,text,formats,idem,(uploads or [])[:1] if data_needed else [])
                 result={"tool":"work_submit","text":("**Work queued** · "+job["id"]+"\n\nRequested: "+", ".join(formats)+
