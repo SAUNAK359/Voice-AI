@@ -341,7 +341,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             session.task = task
             events, samples = [], bytearray()
             try:
-                async for event in engine.events(bytes(raw), rate, list(session.history), owner=sid, sequence=generation, uploads=list(session.uploads)):
+                async for event in engine.events(bytes(raw), rate, list(session.history), owner=sid, sequence=generation, uploads=list(session.uploads), nonce=session.nonce):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -414,7 +414,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             async def stream_turn(recorded: bytes, seq: int):
                 async with sessions.inference:
                     try:
-                        async for event in engine.events(recorded, rate, list(session.history), owner=sid, sequence=seq, uploads=list(session.uploads)):
+                        async for event in engine.events(recorded, rate, list(session.history), owner=sid, sequence=seq, uploads=list(session.uploads), nonce=session.nonce):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
