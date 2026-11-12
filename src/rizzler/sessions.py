@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 class Session:
     client_id: str
     history: list[dict] = field(default_factory=list)
+    uploads: list[str] = field(default_factory=list)
     generation: int = 0
     task: asyncio.Task | None = None
     websocket: object | None = None
