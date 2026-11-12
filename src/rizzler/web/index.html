@@ -9,6 +9,7 @@
 <h1 id="phase">Voice assistant</h1><p id="detail">Enter the private access key to begin.</p>
 <div class="buttons"><button id="connect">Connect microphone</button><button id="mute" disabled>Mute</button><button id="send" disabled>Send now</button><button id="reset" disabled>New conversation</button></div>
 <div class="small">Low-latency WebSocket with HTTP fallback · Browser requires HTTPS or localhost</div>
+<div id="tool-status" class="small" aria-live="polite">Tools are checked when you connect.</div>
 </section><section class="chat" aria-label="Transcript and replies"><h2>Conversation</h2><div id="messages" aria-live="polite" aria-relevant="additions text"><p class="empty">Your conversation will appear here.</p></div><div class="metrics" id="metrics">Latency metrics appear after a completed turn. Server-side timing does not measure speaker output.</div><div class="metrics" id="clientmetrics">Browser output-start latency not yet measured.</div><section id="work-panel" class="work-panel" hidden aria-label="Background work"><div class="work-heading"><h2>Agent activity</h2><label class="upload-label">Attach CSV/XLSX <input id="data-upload" type="file" accept=".csv,.xlsx" aria-label="Upload analysis dataset"></label></div><div id="upload-feedback" role="status"></div><div id="work-jobs" aria-live="polite"></div></section></section></main>
 <footer><span>Rizzler V10 · One assistant · Verified work</span><span>Production sign-in uses an external identity provider</span></footer>
 </div>
