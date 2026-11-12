@@ -92,7 +92,7 @@ class VoiceTools:
     def __init__(self,store,settings):
         self.store,self.settings=store,settings
 
-    async def execute(self,text:str,owner:str,sequence:int=0)->dict|None:
+    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None)->dict|None:
         intent=classify_tool(text,self.store is not None)
         if not intent:return None
         started=time.perf_counter()
@@ -112,13 +112,14 @@ class VoiceTools:
             formats=requested_formats(text)
             if not formats:
                 return None
-            if re.search(r"\b(?:my |attached |uploaded |this )?(?:spreadsheet|csv|dataset|excel file)\b",text,re.I):
-                return {"tool":"work_submit","text":"Please upload the dataset in the Work panel first. I won't invent input data.",
-                        "spoken":"Please upload the dataset first, so I can analyze the actual figures.",
+            data_needed=bool(re.search(r"\b(?:my |attached |uploaded |this )?(?:spreadsheet|csv|dataset|excel file)\b",text,re.I))
+            if data_needed and not uploads:
+                return {"tool":"work_submit","text":"Attach the CSV or XLSX dataset in this conversation first. I won't invent input data.",
+                        "spoken":"Please attach the dataset in this conversation before I analyze it.",
                         "verified":False}
             idem=hashlib.sha256((owner+"|"+str(sequence)+"|"+text).encode()).hexdigest()[:48]
             try:
-                job=await asyncio.to_thread(self.store.submit,owner,text,formats,idem,[])
+                job=await asyncio.to_thread(self.store.submit,owner,text,formats,idem,(uploads or [])[:1] if data_needed else [])
                 result={"tool":"work_submit","text":("**Work queued** · "+job["id"]+"\n\nRequested: "+", ".join(formats)+
                                   ". I'll keep this job running independently of the conversation."),
                         "spoken":"Your work is queued. You can keep talking while I work on it.",
