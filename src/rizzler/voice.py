@@ -103,6 +103,7 @@ class VoiceEngine:
                                 'job':tool_result.get('job')})
                     answer = ''
                     pending = ''
+                    last_ui_ms, last_ui_len = 0.0, 0
                     first_text_ms = None
                     llm_started = time.perf_counter()
                     async def responses():
@@ -140,7 +141,12 @@ class VoiceEngine:
                         answer += delta
                         if len(answer) > 12000:
                             raise ValueError('Model output exceeded maximum response length')
-                        await output.put({'type': 'assistant_text', 'text': answer, 'final': False})
+                        t = time.perf_counter()
+                        # Avoid resending and rerendering the entire cumulative
+                        # transcript for each individual streaming token.
+                        if t-last_ui_ms >= 0.12 or len(answer)-last_ui_len >= 120:
+                            await output.put({'type': 'assistant_text', 'text': answer, 'final': False})
+                            last_ui_ms, last_ui_len = t, len(answer)
                         if tool_result is None:
                             speakable, pending = phrases(pending + delta)
                             for phrase in speakable:
@@ -163,7 +169,7 @@ class VoiceEngine:
                     await output.put({'type': 'assistant_text', 'text': answer, 'final': True})
                     await output.put({'type': 'metrics', 'data': {
                         'asr_ms': round(asr_ms, 2),
-                        'llm_first_text_ms': round(first_text_ms, 2) if first_text_ms is not None else None,
+                        'llm_first_text_ms': round(first_text_ms, 2) if first_text_ms is not None and tool_result is None else None,
                         'tts_total_ms': round(tts_ms, 2),
                         'post_pause_first_audio_ms': round(first_pcm_ms, 2) if first_pcm_ms is not None else None,
                         'total_server_ms': round((time.perf_counter() - start) * 1000, 2),
