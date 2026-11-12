@@ -19,7 +19,8 @@ def analyze_sql(source):
         db.executemany("INSERT INTO dataset VALUES (?, ?)",
                        ((i, "\x1f".join(row)) for i, row in enumerate(rows, 1)))
         db.set_authorizer(lambda action, table, *args: sqlite3.SQLITE_OK
-                          if (action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION) or
+                          if (action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION,
+                                          sqlite3.SQLITE_TRANSACTION) or
                               (action == sqlite3.SQLITE_READ and table == "dataset"))
                           else sqlite3.SQLITE_DENY)
         db.set_progress_handler(lambda: 1, 10000)  # Bounded work, no arbitrary queries.
@@ -42,7 +43,8 @@ def execute_readonly_sql(header: list[str], rows: list[list[str]], query: str,
         db.executemany("INSERT INTO dataset VALUES (?, ?)",
                        ((i, "\x1f".join(row)) for i, row in enumerate(rows, 1)))
         db.set_authorizer(lambda action, table, *args: sqlite3.SQLITE_OK
-                          if (action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION) or
+                          if (action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_FUNCTION,
+                                          sqlite3.SQLITE_TRANSACTION) or
                               (action == sqlite3.SQLITE_READ and table == "dataset"))
                           else sqlite3.SQLITE_DENY)
         budget = [0]
