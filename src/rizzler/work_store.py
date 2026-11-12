@@ -71,6 +71,16 @@ class WorkStore:
               at REAL NOT NULL, next_run REAL NOT NULL DEFAULT 0,
               runs INTEGER NOT NULL DEFAULT 0, max_runs INTEGER NOT NULL DEFAULT 10,
               FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS agent_steps(
+              job_id TEXT NOT NULL, agent TEXT NOT NULL,
+              status TEXT NOT NULL, attempt INTEGER NOT NULL DEFAULT 0,
+              started REAL NOT NULL DEFAULT 0, finished REAL NOT NULL DEFAULT 0,
+              deadline REAL NOT NULL DEFAULT 0, updated REAL NOT NULL DEFAULT 0,
+              result_json TEXT NOT NULL DEFAULT '', result_sha256 TEXT NOT NULL DEFAULT '',
+              error_code TEXT NOT NULL DEFAULT '', qa_json TEXT NOT NULL DEFAULT '',
+              PRIMARY KEY(job_id,agent),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS agent_steps_status ON agent_steps(status,updated);
             """)
 
     @contextmanager
@@ -268,6 +278,86 @@ class WorkStore:
                     (secrets.token_hex(16),row["owner"],jid,time.time()))
                 self._event(c,jid,"automation_plan","Draft schedule pending owner approval")
             self._event(c,jid,"completed","All required outputs verified")
+
+    def agent_steps(self, owner: str, jid: str) -> list[dict]:
+        """Owner-scoped durable per-agent statuses and SLA evidence."""
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE id=? AND owner=?", (jid, owner)).fetchone() is None:
+                raise Missing("Job not found")
+            return [dict(row) for row in c.execute(
+                """SELECT agent,status,attempt,started,finished,deadline,updated,
+                          error_code,result_sha256,qa_json FROM agent_steps
+                   WHERE job_id=? ORDER BY started,agent""", (jid,))]
+
+    def agent_checkpoint(self, jid: str, worker: str, fence: int, agent: str):
+        """A committed step is reusable only while the caller owns the parent lease."""
+        from .work_agents import SPECS
+        if agent not in SPECS:
+            raise ValueError("Unknown specialist")
+        with self._tx() as c:
+            self._active(c, jid, worker, fence)
+            record = c.execute("SELECT * FROM agent_steps WHERE job_id=? AND agent=?",
+                               (jid, agent)).fetchone()
+            if record and record["status"] == "completed":
+                raw = record["result_json"]
+                if hashlib.sha256(raw.encode()).hexdigest() != record["result_sha256"]:
+                    raise ValueError("Persistent agent checkpoint corrupted")
+                return json.loads(raw)
+            return None
+
+    def agent_begin(self, jid: str, worker: str, fence: int, agent: str, target_seconds: int):
+        """Agent transitions share the job's fenced transactional ownership."""
+        from .work_agents import SPECS
+        if agent not in SPECS or not 5 <= target_seconds <= 3600:
+            raise ValueError("Invalid agent or SLA budget")
+        now = time.time()
+        with self._tx() as c:
+            self._active(c, jid, worker, fence)
+            existing = c.execute("SELECT status FROM agent_steps WHERE job_id=? AND agent=?",
+                                 (jid, agent)).fetchone()
+            if existing and existing["status"] == "completed":
+                raise ValueError("Committed agent step cannot be restarted")
+            c.execute("""INSERT INTO agent_steps(job_id,agent,status,attempt,started,
+                       deadline,updated) VALUES(?,?,'running',1,?,?,?)
+                       ON CONFLICT(job_id,agent) DO UPDATE SET
+                       status='running',attempt=agent_steps.attempt+1,
+                       started=excluded.started,deadline=excluded.deadline,
+                       updated=excluded.updated,error_code='',qa_json='',
+                       result_json='',result_sha256='',finished=0""",
+                      (jid,agent,now,now+target_seconds,now))
+            self._event(c,jid,"agent_started",agent+" specialist started")
+
+    def agent_complete(self, jid: str, worker: str, fence: int,
+                       agent: str, result: dict, quality: dict):
+        """Store QA verdict + outcome atomically with the agent's completion event."""
+        if not isinstance(result, dict) or not isinstance(quality, dict) or quality.get("passed") is not True:
+            raise ValueError("Agent result did not pass quality gate")
+        raw = json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        qa = json.dumps(quality, sort_keys=True, separators=(",", ":"))
+        if len(raw.encode()) > 150_000 or len(qa) > 5000:
+            raise ValueError("Agent checkpoint exceeds bounded persistence")
+        now = time.time()
+        with self._tx() as c:
+            self._active(c, jid, worker, fence)
+            row = c.execute("SELECT status,started FROM agent_steps WHERE job_id=? AND agent=?",
+                            (jid,agent)).fetchone()
+            if not row or row["status"] != "running":
+                raise StaleLease("Agent transition has no running record")
+            c.execute("""UPDATE agent_steps SET status='completed',updated=?,finished=?,
+                         result_json=?,result_sha256=?,qa_json=? WHERE job_id=? AND agent=?""",
+                      (now,now,raw,hashlib.sha256(raw.encode()).hexdigest(),qa,jid,agent))
+            self._event(c,jid,"agent_completed",agent+" specialist completed")
+
+    def agent_error(self, jid: str, worker: str, fence: int, agent: str,
+                    code: str = "agent_execution_failed"):
+        if not isinstance(code, str) or len(code) > 80:
+            raise ValueError("Invalid agent failure category")
+        with self._tx() as c:
+            self._active(c,jid,worker,fence)
+            c.execute("""UPDATE agent_steps SET status='failed',updated=?,error_code=?
+                         WHERE job_id=? AND agent=? AND status='running'""",
+                      (time.time(),code,jid,agent))
+            self._event(c,jid,"agent_failed",agent+" specialist failed")
 
     def fail(self,jid,worker,fence,error_code="execution_error"):
         with self._tx() as c:
