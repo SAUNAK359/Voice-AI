@@ -82,7 +82,16 @@ def gate_agent(name: str, result: dict, required: set[str]) -> dict:
             isinstance(u, str) and u.startswith("https://") and len(u) <= 2048 for u in urls
         ) or not isinstance(text, str) or len(text.strip()) < 40:
             raise ValueError("Research lacks verified grounding metadata and substantive findings")
-        checks = ["nonempty_grounded_https_sources", "substantive_findings"]
+        evidence=result.get("evidence")
+        if evidence is not None:
+            if not isinstance(evidence,list) or len(evidence)>24 or any(
+                not isinstance(item,dict) or item.get("url") not in urls
+                or item.get("content_verified") is not False
+                or item.get("attribution") != "provider_grounding"
+                for item in evidence):
+                raise ValueError("Research provenance does not match provider evidence")
+        checks = ["nonempty_grounded_https_sources", "substantive_findings",
+                  "provider_provenance_declared"]
     elif name == "sql_analytics":
         summary = result.get("summary")
         if not isinstance(summary, dict) or not isinstance(summary.get("rows"), int):
