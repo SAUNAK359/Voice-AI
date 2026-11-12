@@ -286,7 +286,7 @@ def test_independent_document_agents_overlap_and_use_verified_sql_data(tmp_path,
     monkeypatch.setattr(specialists, "render_one", tracked)
     store = WorkStore(tmp_path / "work")
     upload = store.register_upload("owner_1", "sales.csv",
-                b"region,revenue\\nNorth,10\\nSouth,30\\n")
+                b"region,revenue\nNorth,10\nSouth,30\n")
     job = store.submit("owner_1", "Prepare a complete report on the sales data.",
                        ["data_analysis", "docx", "pptx"], "parallel_evidence_001",
                        [upload["id"]])
@@ -297,10 +297,10 @@ def test_independent_document_agents_overlap_and_use_verified_sql_data(tmp_path,
     document = next(x for x in artifacts if x["kind"] == "docx")
     slides = next(x for x in artifacts if x["kind"] == "pptx")
     doc = Document(store.artifact("owner_1", document["id"])[0])
-    paragraphs = "\\n".join(p.text for p in doc.paragraphs)
+    paragraphs = "\n".join(p.text for p in doc.paragraphs)
     assert "Verified dataset evidence" in paragraphs and "mean 20" in paragraphs
     deck = Presentation(store.artifact("owner_1", slides["id"])[0])
-    slide_text = "\\n".join(shape.text for slide in deck.slides
+    slide_text = "\n".join(shape.text for slide in deck.slides
                               for shape in slide.shapes if shape.has_text_frame)
     assert "Verified dataset evidence" in slide_text
     assert "mean 20" in slide_text
