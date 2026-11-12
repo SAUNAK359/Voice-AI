@@ -25,7 +25,7 @@ def classify_tool(text: str, have_work: bool) -> str | None:
     if CANCEL_INTENT.search(lower) and have_work:return "work_cancel"
     if WORK_INTENT.search(lower) and OUTPUT_INTENT.search(lower) and have_work:return "work_submit"
     if SEARCH_INTENT.search(lower):return "web_search"
-    if re.search(r"\b(?:equations?|solve(?: this|the)? (?:system|problem|equations?)|value of a and b)\b",lower) and ("=" in lower or "equal" in lower):
+    if re.search(r"\b(?:equations?|solve(?: (?:this|the))? (?:system|problem|equations?)|value of a and b)\b",lower) and ("=" in lower or "equal" in lower):
         return "math"
     return None
 
