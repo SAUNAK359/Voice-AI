@@ -3,6 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import shutil
+import importlib.util
+import unittest
+
+if importlib.util.find_spec("pytest") is None:
+    raise unittest.SkipTest("Strict artifact tests require App/Production CI dependencies")
+
 import pytest
 
 from rizzler.work_skills import render_one
