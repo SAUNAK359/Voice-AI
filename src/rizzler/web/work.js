@@ -1,5 +1,5 @@
 (()=>{'use strict';const $=id=>document.getElementById(id);
-let token='',production=false;
+let token='',production=false,selectedJob=null,pollBusy=false;
 const csrf=()=>decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'');
 function el(tag,text){const x=document.createElement(tag);if(text!==undefined)x.textContent=text;return x}
 function auth(){
@@ -14,13 +14,15 @@ function err(x){$('work-error').textContent=x?.message||String(x)}
 async function refresh(){try{const data=await call('/jobs');const pane=$('jobs');pane.replaceChildren();
  for(const item of data.jobs){const row=el('p'),btn=el('button',item.status+' · '+item.id.slice(0,8)+' · '+item.stage);
  btn.onclick=()=>details(item.id);row.append(btn);pane.append(row)}}catch(e){err(e)}}
-async function details(id){try{const [job,ev,art,agentData]=await Promise.all([
+async function details(id){selectedJob=id;try{const [job,ev,art,agentData]=await Promise.all([
  call('/jobs/'+id),call('/jobs/'+id+'/events'),call('/jobs/'+id+'/artifacts'),call('/jobs/'+id+'/agents')]);
+ if(selectedJob!==id)return;
  const pane=$('job-detail');pane.replaceChildren(el('h3',job.status+' · '+job.stage));
  const heading=el('h4','Specialist agents · persisted status and targets');pane.append(heading);
  for(const a of agentData.agents){
-   const elapsed=a.finished>0?Math.round(a.finished-a.started)+'s':'active';
-   const row=el('p',a.agent+' · '+a.status+' · attempt '+a.attempt+' · '+elapsed+' · target '+a.sla);
+   const elapsed=a.elapsed_seconds===null?'not started':Math.round(a.elapsed_seconds)+'s';
+   const row=el('p',a.agent+' · '+a.status+' · attempt '+a.attempt+
+     ' · elapsed '+elapsed+' / target '+a.target_seconds+'s · SLA '+a.sla);
    if(a.quality?.passed)row.append(el('span',' · QA passed ('+(a.quality.checks||[]).join(', ')+')'));
    pane.append(row);
  }
@@ -66,7 +68,13 @@ async function schedules(){try{
    row.append(b)}
   p.append(row)
  }}catch(e){err(e)}}
-$('reload-work').onclick=()=>{refresh();schedules()};
+$('reload-work').onclick=()=>{refresh();schedules();if(selectedJob)details(selectedJob)};
+setInterval(async()=>{
+ if(document.hidden||pollBusy)return;
+ pollBusy=true;
+ try{await refresh();if(selectedJob)await details(selectedJob)}
+ finally{pollBusy=false}
+},8000);
 (async()=>{
  try{
   const res=await fetch('/api/runtime'),data=await res.json();
