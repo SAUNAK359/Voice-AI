@@ -87,6 +87,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     from .voice_tools import VoiceTools
     memory = None
     if environ.get("RIZZLER_MEMORY_ENABLED","").strip().lower() in ("1","true","yes"):
+        if not production and environ.get("RIZZLER_DEMO_MEMORY_SINGLE_USER","") != "1":
+            raise ValueError("Demo memory requires explicit single-user trust acknowledgement")
         from .memory import MemoryStore
         memory_key = environ.get("RIZZLER_MEMORY_KEY","")
         if not memory_key or memory_key in (cfg.access_key, work_signing_key,
