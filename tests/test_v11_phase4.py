@@ -141,6 +141,9 @@ def test_authenticated_memory_api_and_privacy_bounds(tmp_path,monkeypatch):
         own_delete=client.delete("/api/voice/memories/"+uid,headers=ha).json()
         assert own_delete["deleted"]==1
         assert client.get("/api/voice/memories",headers=ha).json()["items"]==[]
+        oversized=client.post("/api/voice/memories",headers=ha,
+                              content=b"x"*4096)
+        assert oversized.status_code==413
 
 
 def test_disabled_or_reused_secret_fails_closed(tmp_path,monkeypatch):
