@@ -113,9 +113,16 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         expected = formats.intersection(FILE_FORMATS)
         missing = sorted(expected - receipts.keys())
         unexpected = sorted(receipts.keys() - expected)
+        from .work_quality import inspect_artifact
+        detailed_qa = {}
+        bundle = {receipt.name: receipt for receipt in receipts.values() if receipt.kind != "zip"}
         for receipt in receipts.values():
             if not verify_checkpoint(checkpoint / receipt.name, receipt):
                 raise ValueError("Final quality gate failed artifact checksum")
+            detailed_qa[receipt.kind] = await asyncio.to_thread(
+                inspect_artifact, checkpoint / receipt.name, receipt.kind,
+                dataset_rows=context["summary"]["rows"] if context["summary"] else None,
+                bundle_receipts=bundle)
             verified = verify_artifact(checkpoint / receipt.name, receipt.kind)
             if verified.sha256 != receipt.sha256 or not verified.verified:
                 raise ValueError("Final quality gate failed structural receipt")
@@ -128,7 +135,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         if not context["text"] and not context["summary"]:
             raise ValueError("No substantive evidence to publish")
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
-                "evidence": {"grounded_urls": len(context["sources"]),
+                "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
                 "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
     if name not in ("powerpoint", "word", "excel", "pdf_visual"):
