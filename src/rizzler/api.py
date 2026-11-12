@@ -441,6 +441,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         owner = auth(request, True)
         if visual is None:
             raise HTTPException(status_code=409,detail="Visual attachments disabled")
+        session = sessions.get(owner)
+        if session.task is not None and not session.task.done():
+            raise HTTPException(status_code=429,detail="Finish the active turn before uploading")
         name = request.headers.get("x-file-name","")
         content = bytearray()
         async for part in request.stream():
@@ -471,13 +474,16 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 "attachments":visual.store.list(owner) if visual else []}
 
     @app.delete('/api/visual/attachments/{uid}')
-    def visual_delete(request: Request, uid: str):
+    async def visual_delete(request: Request, uid: str):
         owner = auth(request, True)
         if visual is None:
             raise HTTPException(status_code=409,detail="Visual attachments disabled")
         try:
-            deleted = visual.store.delete(owner,uid)
             session = sessions.sessions.get(owner)
+            if session is not None and session.task is not None and not session.task.done():
+                await session.cancel()
+                session.generation += 1
+            deleted = await asyncio.to_thread(visual.store.delete,owner,uid)
             if session is not None:
                 session.visuals[:] = [v for v in session.visuals if v != uid]
                 session.visual_analysis = None
@@ -874,6 +880,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                     elif kind == 'new_conversation':
                         await session.cancel()
                         session.history.clear()
+                        session.visuals.clear()
+                        session.visual_analysis = None
                         pcm.clear()
                         frames = None
                         recording = False
