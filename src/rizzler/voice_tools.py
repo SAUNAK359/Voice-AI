@@ -39,6 +39,10 @@ def requested_formats(text: str) -> list[str]:
     for kind,pattern in mapping:
         if re.search(pattern,t):formats.append(kind)
     if not formats and re.search(r"\b(?:report|research|analysis)\b",t):formats=["pdf"]
+    if (re.search(r"\b(?:analy[sz]e|analysis)\b",t) and
+            re.search(r"\b(?:dataset|spreadsheet|csv|excel)\b",t)):
+        if "data_analysis" not in formats:formats.insert(0,"data_analysis")
+        if not any(x in formats for x in ("pdf","md","docx","pptx")):formats.append("md")
     return formats
 
 
@@ -96,7 +100,7 @@ class VoiceTools:
         intent=classify_tool(text,self.store is not None)
         if not intent:return None
         started=time.perf_counter()
-        if intent=="web_search" and re.search(r"\\b(?:can you|do you|have you|are you able|access to|search tools|web search tools)\\b",text,re.I) and not re.search(r"\\b(?:current|latest|today|look up|search for|stock price|share price)\\b",text,re.I):
+        if intent=="web_search" and re.search(r"\b(?:can you|do you|have you|are you able|access to|search tools|web search tools)\\b",text,re.I) and not re.search(r"\b(?:current|latest|today|look up|search for|stock price|share price)\\b",text,re.I):
             ready=bool(self.settings.gemini_api_key)
             return {"tool":"web_search",
                     "text":("I can search live sources when the Gemini grounding service is available. Ask me what to look up." if ready
