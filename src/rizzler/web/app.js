@@ -151,7 +151,8 @@ async function connectSession(){
    await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
    s.session=true;$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
    for(const id of ['mute','send','reset'])$(id).disabled=false;
-   status('listening','Ready. Speak naturally.');noteLatency();if(s.workEnabled)refreshWork();
+   status('listening','Ready. Speak naturally.');noteLatency();
+   refreshToolCatalog();if(s.workEnabled)refreshWork();
    if(s.mode==='http')scheduleReconnect();
  }catch(err){$('error').textContent=err.message;status('error',err.message);
    s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
@@ -179,6 +180,16 @@ $('logout').addEventListener('click',async()=>{
  }catch(e){status('error','Cannot verify runtime access')}
 })();
 
+async function refreshToolCatalog(){
+ try{
+  const r=await fetch('/api/voice/tools',{headers:headers()});
+  if(!r.ok)return;
+  const d=await r.json(),t=d.tools||{};
+  $('tool-status').textContent='Tools · Web search: '+(t.web_search||'unknown')+
+    ' · Verified math: '+(t.symbolic_math||'unknown')+
+    ' · Work: '+(t.work_agent||'unknown');
+ }catch(_){$('tool-status').textContent='Tools · Verification unavailable'}
+}
 function toolNotice(msg){
  const panel=$('upload-feedback');if(!panel)return;
  const name={web_search:'Live web search',symbolic_math:'Verified mathematics',
