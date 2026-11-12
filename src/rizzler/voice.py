@@ -37,7 +37,7 @@ class VoiceEngine:
     def __init__(self, settings: Settings, providers: ProviderSet, tools=None):
         self.settings, self.providers, self.tools = settings, providers, tools
 
-    async def events(self, pcm: bytes, rate: int, history: list[dict], owner: str | None = None, sequence: int = 0) -> AsyncIterator[dict]:
+    async def events(self, pcm: bytes, rate: int, history: list[dict], owner: str | None = None, sequence: int = 0, uploads: list[str] | None = None) -> AsyncIterator[dict]:
         """Stream status, transcript, text, PCM16 and final metrics.
 
         A single producer and speech worker share bounded queues. On disconnect,
@@ -60,7 +60,7 @@ class VoiceEngine:
                     await output.put({'type': 'status', 'label': 'Generating response'})
                     tool_result = None
                     if self.tools is not None and owner is not None:
-                        tool_result = await self.tools.execute(transcript, owner, sequence)
+                        tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads)
                         if tool_result is not None:
                             await output.put({'type':'tool_result',
                                 'tool':tool_result['tool'],
