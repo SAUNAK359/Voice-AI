@@ -183,11 +183,14 @@ class VoiceEngine:
                         cleaned = for_speech(phrase)
                         if cleaned:
                             await speech_queue.put(cleaned)
+                    # Display text is independently usable even when speech
+                    # synthesis later fails. Never mark the *audio* turn done
+                    # until actual non-silent PCM has been produced.
+                    await output.put({'type': 'assistant_text', 'text': answer, 'final': True})
                     await speech_queue.put(None)
                     await worker
                     if not audio_bytes:
                         raise ValueError('No TTS audio was produced')
-                    await output.put({'type': 'assistant_text', 'text': answer, 'final': True})
                     await output.put({'type': 'metrics', 'data': {
                         'asr_ms': round(asr_ms, 2),
                         'llm_first_text_ms': round(first_text_ms, 2) if first_text_ms is not None and tool_result is None else None,
