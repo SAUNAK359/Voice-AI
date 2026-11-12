@@ -25,7 +25,7 @@ VISUAL_INTENT = re.compile(
     r"\b(?:look at|can you see|what do you see|what is this|what's this|"
     r"explain this|read this|describe this|identify this|in this)\b",re.I)
 
-CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort)\s+(?:the\s+|my\s+|that\s+)?(?:current\s+|last\s+)?(?:work|job|task|report|analysis|presentation)\b", re.I)
+CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort)\s+(?:the\s+|my\s+|that\s+|this\s+)?(?:current\s+|last\s+)?(?:work|job|task|report|analysis|presentation)\b", re.I)
 
 
 def classify_tool(text: str, have_work: bool) -> str | None:
