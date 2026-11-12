@@ -1,6 +1,5 @@
 """Native runtime contract and deterministic conversation context governor."""
 from __future__ import annotations
-import importlib.util
 import json
 from pathlib import Path
 import unittest
