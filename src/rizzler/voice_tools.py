@@ -12,7 +12,9 @@ from .task_planning import propose_scope
 from .tool_registry import require_tool, VOICE_TOOLS
 
 SEARCH_INTENT = re.compile(r"\b(?:search(?: the)? web|web search|look (?:up|online)|browse|research online|current (?:stock price|share price|news|exchange rate)|latest (?:news|price|updates)|(?:stock|share) price (?:of|for)|today['’]?s? (?:news|price|weather))\b", re.I)
-WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|write|analy[sz]e)\b", re.I)
+WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|analy[sz]e)\b", re.I)
+WRITE_COMMAND = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+)?write\b",re.I)
+META_QUESTION = re.compile(r"^\s*(?:what|why|how|when|where|who)\b",re.I)
 RESEARCH_COMMAND = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+)?research\b",re.I)
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
 STATUS_INTENT = re.compile(r"\b(?:(?:status|progress)\b.{0,35}\b(?:my|job|task|report|work|presentation|analysis)\b|(?:my|the|this)\s+(?:job|task|report|work|presentation)\s+(?:status|progress)\b|how(?:'s| is)\s+(?:my|the)\s+(?:job|task|report|work)\b|is\s+(?:my|the)\s+(?:report|presentation|job|task)\s+(?:ready|done)\b)\b", re.I)
@@ -24,8 +26,9 @@ def classify_tool(text: str, have_work: bool) -> str | None:
     lower=text.casefold().strip()
     if STATUS_INTENT.search(lower) and have_work:return "work_status"
     if CANCEL_INTENT.search(lower) and have_work:return "work_cancel"
-    if (WORK_INTENT.search(lower) or RESEARCH_COMMAND.search(lower)) and OUTPUT_INTENT.search(lower) and have_work:
-        return "work_submit"
+    if (WORK_INTENT.search(lower) or RESEARCH_COMMAND.search(lower) or WRITE_COMMAND.search(lower)) and OUTPUT_INTENT.search(lower) and have_work:
+        if not META_QUESTION.match(lower):
+            return "work_submit"
     if SEARCH_INTENT.search(lower):return "web_search"
     if re.search(r"\b(?:equations?|solve(?: (?:this|the))? (?:system|problem|equations?)|value of a and b)\b",lower) and ("=" in lower or "equal" in lower):
         return "math"
