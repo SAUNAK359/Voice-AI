@@ -22,7 +22,7 @@ Phase 2 artifact QA, Phase 3 versioned voice protocol and durable Work Agent.
   are required to write/delete. **No automatic extraction** from conversation.
 - **Memory behavior:** explicit `remember that ...`, `what do you remember
   about ...`, `list my memories`, `forget memory <id>`, and
-  `forget all my memories`. Recalled statements are untrusted context for
+  `forget all my memories` (followed by `confirm delete all memories` within 30 seconds). Recalled statements are untrusted context for
   Gemini, not instructions or tool authorization; LLM-only context retrieval
   is bounded and cannot execute Work Agent actions.
 - **Frontend:** one optional Saved memory control to inspect, save and delete
