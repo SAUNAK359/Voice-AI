@@ -72,7 +72,10 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
     @api.get("/jobs/{jid}/agents")
     def agent_statuses(req: Request, jid: str):
         who = owner(req)
-        steps = store.agent_steps(who, jid)
+        try:
+            steps = store.agent_steps(who, jid)
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
         now = __import__("time").time()
         for step in steps:
             deadline = step.pop("deadline")
@@ -88,6 +91,7 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
                 step["quality"] = json.loads(step.pop("qa_json")) if step.get("qa_json") else None
             except ValueError:
                 step["quality"] = None
+            step.pop("qa_json", None)
         return {"job_id": jid, "agents": steps,
                 "sla_definition": "Best-effort stage target, not a contractual guarantee"}
 
