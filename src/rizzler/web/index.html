@@ -9,8 +9,17 @@
 <h1 id="phase">Voice assistant</h1><p id="detail">Enter the private access key to begin.</p>
 <div class="buttons"><button id="connect">Connect microphone</button><button id="mute" disabled>Mute</button><button id="send" disabled>Send now</button><button id="reset" disabled>New conversation</button></div>
 <div class="small">Low-latency WebSocket with HTTP fallback · Browser requires HTTPS or localhost</div>
+<div><button id="memory-open" type="button" hidden>Saved memory</button></div>
 <div id="tool-status" class="small" aria-live="polite">Tools are checked when you connect.</div>
-</section><section class="chat" aria-label="Transcript and replies"><h2>Conversation</h2><div id="messages" aria-live="polite" aria-relevant="additions text"><p class="empty">Your conversation will appear here.</p></div><div class="metrics" id="metrics">Latency metrics appear after a completed turn. Server-side timing does not measure speaker output.</div><div class="metrics" id="clientmetrics">Browser output-start latency not yet measured.</div><section id="work-panel" class="work-panel" hidden aria-label="Background work"><div class="work-heading"><h2>Agent activity</h2><label class="upload-label">Attach CSV/XLSX <input id="data-upload" type="file" accept=".csv,.xlsx" aria-label="Upload analysis dataset"></label></div><div id="upload-feedback" role="status"></div><div id="work-jobs" aria-live="polite"></div></section></section></main>
+</section><section class="chat" aria-label="Transcript and replies"><h2>Conversation</h2><div id="messages" aria-live="polite" aria-relevant="additions text"><p class="empty">Your conversation will appear here.</p></div><div class="metrics" id="metrics">Latency metrics appear after a completed turn. Server-side timing does not measure speaker output.</div><div class="metrics" id="clientmetrics">Browser output-start latency not yet measured.</div>
+<section id="memory-panel" hidden aria-label="Private saved memory">
+<h2>Private memories</h2><p class="small">Opt-in encrypted notes; never automatically saved from conversations.</p>
+<form id="memory-form"><label for="memory-fact">Remember this statement</label>
+<input id="memory-fact" maxlength="500" required autocomplete="off" placeholder="A preference I explicitly want saved">
+<button type="submit">Save memory</button></form>
+<div id="memory-feedback" role="status"></div><div id="memory-items"></div>
+<button type="button" id="memory-clear">Delete all saved memories</button>
+</section><section id="work-panel" class="work-panel" hidden aria-label="Background work"><div class="work-heading"><h2>Agent activity</h2><label class="upload-label">Attach CSV/XLSX <input id="data-upload" type="file" accept=".csv,.xlsx" aria-label="Upload analysis dataset"></label></div><div id="upload-feedback" role="status"></div><div id="work-jobs" aria-live="polite"></div></section></section></main>
 <footer><span>Rizzler V10 · One assistant · Verified work</span><span>Production sign-in uses an external identity provider</span></footer>
 </div>
 <div id="modal" class="overlay"><form id="unlock" class="dialog"><h2>Start private Rizzler session</h2><p>Enter <code>RIZZLER_ACCESS_KEY</code>. This key stays in your browser memory and is not stored.</p><label for="key">Access key</label><input id="key" type="password" autocomplete="off" required minlength="16" placeholder="Private server key"><button type="submit">Connect</button><div id="error" role="alert"></div></form></div>

@@ -1,35 +1,27 @@
-# Kaggle NVIDIA GPU quickstart
+# Kaggle NVIDIA GPU — V11 native launch
 
-## Prerequisites
+The canonical V11 integration is [Rizzler_V11_Unified_Native_Kaggle.ipynb](../notebooks/Rizzler_V11_Unified_Native_Kaggle.ipynb). Use the native package source and launch `python -m rizzler` plus the separate `rizzler.work_worker` process; **do not use the historical V9 notebook** to validate V11 voice or memory behavior.
 
-- Kaggle notebook with **Internet enabled** and NVIDIA accelerator selected.
-- Attached Kaggle Secrets: `GEMINI_API_KEY`, `RIZZLER_ACCESS_KEY` (16+ random characters).
-- A Gemini API key authorized for the specific configured model IDs. Model availability and service quotas change independently of notebook version.
+## Required setup
 
-## Runbook
+1. Kaggle notebook: enable Internet and an NVIDIA GPU accelerator.
+2. Kaggle Secrets: `GEMINI_API_KEY` (configured/current provider) and `RIZZLER_ACCESS_KEY` (minimum 16 random characters).
+3. Run the V11 notebook cells in order. It checks package import, GPU, private Work root, runtime startup and `/ready`; inspect the exact Git SHA it prints.
+4. Optional encrypted memory: set `RIZZLER_MEMORY_ENABLED=1` and a separate `RIZZLER_MEMORY_KEY` (at least 32 bytes). Memory is disabled otherwise and all Kaggle data is ephemeral.
+5. For phone microphones, expose the running app using a **trusted HTTPS/WSS reverse proxy or tunnel** and private authentication. The notebook does not automatically open a public tunnel.
+6. Run real authenticated voice, Work Agent, search and restart tests; record redacted GPU/model versions, outcomes, first audible p95 and failed turns. A ready server is not an acoustic benchmark.
 
-1. Import the standalone V9 notebook from `notebooks/` and use **Run All** in exact cell order.
-2. The first cell verifies `torch.cuda.is_available()`, `torch.version.hip is None`, and `nvidia-smi` before installing anything.
-3. The dependency cell preserves Kaggle's CUDA-compatible PyTorch and attempts to locate cuBLAS/cuDNN for CTranslate2.
-4. Secrets are read through `UserSecretsClient`; no key should be printed or present in code cells.
-5. Whisper and KittenTTS must synthesize/transcribe actual warmup samples; the Gemini smoke test must return visible text.
-6. The **complete** FastAPI server cell must run before `9A` Work Agent route registration. A preflight cell checks `/`, `/health`, `/ws`, `/api/auth`, `/api/turn`, `/api/interrupt`, `/api/reset`.
-7. Launch the server; check `/health` and authenticate using the *UI access key*, not the Gemini API key.
-8. Start a session and try a 3-second question. If WebSocket fails, run the optional Gradio HTTPS fallback cell and test record → stop → transcript → spoken answer.
+## Known limitations
+
+Kaggle notebook storage and compute can stop or disappear; scheduled Work cannot continue while the kernel is suspended. Its private Work directory is not off-host durable storage. Do not claim permanent backups, multi-tenant identity, physically measured latency, live Gemini search success, or long-term memory durability from offline CI.
+
+For an actual persistent host, follow [V10 production deployment](PHASE_5.md) and the [V11 Phase 4 qualification contract](V11_PHASE4_IMPLEMENTATION.md). The previous V9 notebook remains in `notebooks/` for independent historical reproduction only.
 
 ## Troubleshooting
 
-| Symptom | First action |
-| --- | --- |
-| `ModuleNotFoundError: fastrtc` | Use this notebook version; it has no FastRTC requirement. |
-| `NameError: RIZZLER_V5_APP` | Re-run the **complete** voice-server cell, not merely its imports; then run verification cell before 9A. |
-| `401 Unauthorized` | Supply `RIZZLER_ACCESS_KEY` in the UI; don't confuse it with `GEMINI_API_KEY`. |
-| Gemini `404 model not found` | Choose an actual Gemini model visible to your API project; do not blindly downgrade/rename models. |
-| Gemini `429` / `503` | Inspect quota and server conditions; bounded retries and explicit fallback should not hide repeated failure. |
-| Microphone records but no transcript | Try HTTPS fallback; verify that audio uploads and ASR callbacks are invoked. |
-| WebSocket cannot connect | Check tunnel/proxy WebSocket support; use HTTPS fallback rather than claiming live interruption works. |
-| KittenTTS silent / robotic | Run sample synthesis, check playback, sample rate and output buffering; rate adjustment alone cannot ensure expressiveness. |
-
-## Reproducibility
-
-Save a redacted hardware/versions report (Python, torch, CUDA, CTranslate2, model IDs) before running benchmarks. Never publish keys, private transcripts or raw work datasets. Clear notebook outputs before pushing source.
+- NVIDIA missing: enable a compatible accelerator before running.
+- Gemini 404 or quota error: confirm the exact configured model and API project; do not invent a fallback.
+- TTS/Whisper import error: check the Python, CUDA, CTranslate2 and package versions in the active Kaggle image.
+- Microphone unavailable on phone: ensure trusted HTTPS, browser permission and WebSocket forwarding.
+- Missing memory key: memory is opt-in; disable it or supply an independent encryption secret.
+- Work persistence: configure real persistent Postgres/S3 and independent backup/restore outside Kaggle for production.
