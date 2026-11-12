@@ -233,3 +233,15 @@ def test_voice_api_exposes_plan_to_owner_only(tmp_path,monkeypatch):
         catalog=client.get("/api/voice/tools",headers=headers).json()
         assert len(catalog["registry"])>=10
         assert catalog["tools"]["web_search"]=="unavailable"
+
+
+def test_research_noun_and_negated_search_never_trigger_unrequested_work():
+    for text in ("What do you think about the research report?",
+                 "I read a fascinating research report yesterday.",
+                 "Please explain the phrase research report."):
+        assert classify_tool(text,True) is None
+    assert classify_tool("Research the EV market and write an executive report.",True)=="work_submit"
+    result=asyncio.run(propose_scope(
+        "Create a report from my notes but do not search the web.",
+        ["pdf"],[],Settings(access_key=KEY)))
+    assert not result["research"]
