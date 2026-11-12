@@ -1,0 +1,50 @@
+{"text":"Can you hear me clearly?","expected":"direct"}
+{"text":"Hello Rizzler.","expected":"direct"}
+{"text":"Explain the difference between NEFT and RTGS transactions.","expected":"direct"}
+{"text":"Tell me about the history of Python.","expected":"direct"}
+{"text":"I want to ask a follow up question.","expected":"direct"}
+{"text":"What are the advantages of using a queue?","expected":"direct"}
+{"text":"How do transformers work?","expected":"direct"}
+{"text":"Thank you for helping.","expected":"direct"}
+{"text":"What's the status of India's steel industry?","expected":"direct"}
+{"text":"Describe how a stock exchange functions.","expected":"direct"}
+{"text":"What is a report and how should I write one?","expected":"direct"}
+{"text":"Explain cancellation semantics in Python.","expected":"direct"}
+{"text":"Search the web for a current Tata Steel share price.","expected":"web_search"}
+{"text":"What is the current stock price of Tata Steel?","expected":"web_search"}
+{"text":"Look up electric vehicle policy news.","expected":"web_search"}
+{"text":"Browse for recent AI safety papers.","expected":"web_search"}
+{"text":"What is the latest news about NVIDIA?","expected":"web_search"}
+{"text":"Research online robotics deployments.","expected":"web_search"}
+{"text":"Find today's weather news.","expected":"web_search"}
+{"text":"What is today's news about space missions?","expected":"web_search"}
+{"text":"Solve these equations: a+b=sqrt(7) and b^2=3/a.","expected":"math"}
+{"text":"Solve the system where x+y=5 and x^2=4.","expected":"math"}
+{"text":"What is the value of a and b if a+b=10 and b^2=3/a?","expected":"math"}
+{"text":"Solve this problem: a+b=7, a-b=1.","expected":"math"}
+{"text":"Find the value of a and b: a+b=12 and a*b=20.","expected":"math"}
+{"text":"Solve the equations x+y=8 and x-y=2.","expected":"math"}
+{"text":"Solve the system of equations a+b=4 and a^2=9.","expected":"math"}
+{"text":"Solve the equations: x+y=2 and x*y=5.","expected":"math"}
+{"text":"Create a PDF report about battery recycling.","expected":"work_submit"}
+{"text":"Generate a PowerPoint presentation about robotics.","expected":"work_submit"}
+{"text":"Prepare an Excel workbook of budget assumptions.","expected":"work_submit"}
+{"text":"Create a Word document for a project overview.","expected":"work_submit"}
+{"text":"Research industrial robotics and create a PDF report.","expected":"work_submit"}
+{"text":"Analyze my CSV dataset and create a Word report.","expected":"work_submit"}
+{"text":"Prepare a PowerPoint and an executive PDF report.","expected":"work_submit"}
+{"text":"Draft a report explaining cloud orchestration.","expected":"work_submit"}
+{"text":"Build a spreadsheet for financial assumptions.","expected":"work_submit"}
+{"text":"Research the market and produce an investor presentation.","expected":"work_submit"}
+{"text":"What's the progress of my task?","expected":"work_status"}
+{"text":"Status of my job, please.","expected":"work_status"}
+{"text":"How is my report coming along?","expected":"work_status"}
+{"text":"Is my presentation ready?","expected":"work_status"}
+{"text":"What's the status of my Work Agent task?","expected":"work_status"}
+{"text":"Show progress of the current job.","expected":"work_status"}
+{"text":"Cancel the job.","expected":"work_cancel"}
+{"text":"Stop my report.","expected":"work_cancel"}
+{"text":"Abort current task.","expected":"work_cancel"}
+{"text":"Cancel the presentation.","expected":"work_cancel"}
+{"text":"Stop the current analysis.","expected":"work_cancel"}
+{"text":"Cancel my work.","expected":"work_cancel"}
