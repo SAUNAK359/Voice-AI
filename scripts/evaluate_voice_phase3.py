@@ -15,7 +15,6 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from statistics import median
 
 
 FIELDS=("first_audio_ms","asr_ms","tts_first_pcm_ms","interrupt_cutoff_ms")
