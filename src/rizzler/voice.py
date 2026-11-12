@@ -83,10 +83,14 @@ class VoiceEngine:
                                     raw = await asyncio.wait_for(
                                         asyncio.to_thread(self.providers.tts.synthesize,phrase),
                                         timeout=min(16.0,self.settings.request_timeout/2))
-                                    if (not isinstance(raw, bytes) or not raw or
-                                            len(raw)%2 or len(raw)>self.settings.sample_rate*2*35
-                                            or not any(raw)):
-                                        raise ValueError('TTS returned silent/invalid PCM16')
+                                    if (not isinstance(raw, bytes) or not raw or len(raw)%2 or
+                                            len(raw)>self.settings.sample_rate*2*35):
+                                        raise ValueError('TTS returned invalid PCM16')
+                                    import numpy as np
+                                    waveform = np.frombuffer(raw,dtype='<i2').astype(np.float32)
+                                    if (float(np.sqrt(np.mean(waveform*waveform)))<40 or
+                                            float(np.max(np.abs(waveform)))<80):
+                                        raise ValueError('TTS returned silent/inaudible PCM16')
                                     break
                                 except (Exception, TimeoutError):
                                     if retry:
@@ -135,10 +139,8 @@ class VoiceEngine:
                                 try:
                                     first_text = await asyncio.wait_for(asyncio.shield(first), timeout=1.2)
                                 except asyncio.TimeoutError:
-                                    # This is not a tool-success claim; it only acknowledges a
-                                    # complex question during remote model latency.
-                                    if len(transcript) >= 85:
-                                        await speech_queue.put('Let me work that through.')
+                                    # Wait for actual answer content rather than repeatedly
+                                    # speaking generic filler under cloud model latency.
                                     first_text = await first
                                 yield first_text
                                 async for item in source:
