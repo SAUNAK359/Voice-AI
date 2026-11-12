@@ -47,9 +47,10 @@ SPECIALIST_TOOLS = {
 REGISTRY = {**VOICE_TOOLS, **SPECIALIST_TOOLS}
 
 
-def capabilities(settings, have_work: bool, memory_enabled: bool = False) -> list[dict]:
+def capabilities(settings, have_work: bool, memory_enabled: bool = False, visual_enabled: bool = False) -> list[dict]:
     return [
         spec.public(
+            (visual_enabled and bool(settings.gemini_api_key)) if name == "visual_analyze" else
             bool(settings.gemini_api_key) if name in ("web_search", "research") else
             find_spec("sympy") is not None if name == "symbolic_math" else
             have_work if name in ("work_submit", "work_status", "work_cancel", *SPECIALIST_TOOLS) else
