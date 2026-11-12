@@ -248,3 +248,74 @@ def test_media_is_disabled_by_default(monkeypatch):
         assert not client.get("/api/runtime").json()["multimodal_enabled"]
         assert client.post("/api/visual/ask",headers=headers(OWNER_A),
             json={"question":"Hello","attachment_ids":["bogus"]}).status_code==409
+
+
+
+def test_visual_report_requires_explicit_confirmation_and_durable_work(tmp_path,monkeypatch):
+    monkeypatch.setenv("RIZZLER_WORK_ROOT",str(tmp_path/"jobs"))
+    monkeypatch.setenv("RIZZLER_WORK_SIGNING_KEY",
+                       "independent-test-work-signing-secret-1234567890")
+    monkeypatch.setenv("RIZZLER_DEPLOYMENT_MODE","demo")
+    monkeypatch.setenv("RIZZLER_VISUAL_ENABLED","1")
+    monkeypatch.setenv("RIZZLER_VISUAL_KEY",MEDIA_KEY)
+    monkeypatch.setenv("RIZZLER_VISUAL_ROOT",str(tmp_path/"visual"))
+    asr=ASR()
+    app=create_app(Settings(access_key=KEY),
+                   ProviderSet(asr,NeverLLM(),TTS()))
+    app.state.visual.provider=Vision()
+    from rizzler.work_worker import WorkWorker
+    async def report_writer(objective,summary):
+        assert "user-supplied visual analysis" in objective
+        assert "NOT independently fact-checked" in objective
+        return ("# Overview\nThis is a user-provided image description only.\n"
+                "## Evidence limits\nNo external citation or visual verification was performed.")
+    with TestClient(app) as client:
+        uid=client.post("/api/visual/attachments",headers={
+            **headers(OWNER_A),"x-file-name":"diagram.png"},content=png()).json()["id"]
+        analyzed=client.post("/api/visual/ask",headers=headers(OWNER_A),
+            json={"question":"Describe the diagram","attachment_ids":[uid]})
+        assert analyzed.status_code==200
+        token=analyzed.json()["analysis_id"]
+        assert client.get("/api/voice/jobs",headers=headers(OWNER_A)).json()["jobs"]==[]
+        for body in (
+                {"analysis_id":"wrong","format":"md"},
+                {"analysis_id":token,"format":"exe"}):
+            assert client.post("/api/visual/report",headers=headers(OWNER_A),
+                 json=body).status_code in (400,409)
+        assert client.post("/api/visual/report",headers=headers(OWNER_B),
+            json={"analysis_id":token,"format":"md"}).status_code==409
+        good={"analysis_id":token,"format":"md"}
+        first=client.post("/api/visual/report",headers=headers(OWNER_A),json=good)
+        assert first.status_code==200,first.text
+        repeated=client.post("/api/visual/report",headers=headers(OWNER_A),json=good)
+        assert repeated.status_code==200
+        jid=first.json()["job"]["id"]
+        assert repeated.json()["job"]["id"]==jid
+        assert len(app.state.work.list_jobs(OWNER_A))==1
+        assert asyncio.run(WorkWorker(app.state.work,composer=report_writer).once())
+        assert app.state.work.get(OWNER_A,jid)["status"]=="completed"
+        assert app.state.work.quality_report(OWNER_A,jid)["quality"]["passed"]
+        artifact=app.state.work.artifacts(OWNER_A,jid)
+        assert len(artifact)==1 and artifact[0]["kind"]=="md"
+        assert client.get("/api/voice/artifacts/"+artifact[0]["id"],
+                          headers=headers(OWNER_B)).status_code==404
+        assert client.get("/api/voice/artifacts/"+artifact[0]["id"],
+                          headers=headers(OWNER_A)).status_code==200
+        # Explicit deletion invalidates new report creation; committed work stays.
+        assert client.delete("/api/visual/attachments/"+uid,
+                             headers=headers(OWNER_A)).status_code==200
+        assert client.post("/api/visual/report",headers=headers(OWNER_A),
+            json=good).status_code==409
+        assert app.state.work.get(OWNER_A,jid)["status"]=="completed"
+
+
+def test_provider_timeout_releases_visual_admission(tmp_path):
+    store=MediaStore(tmp_path/"visual",MEDIA_KEY)
+    uid=store.save(OWNER_A,"image.jpg",jpeg())["id"]
+    class Blocking:
+        async def analyze(self,question,parts,context):
+            raise asyncio.TimeoutError
+    visual=VisualService(store,Blocking(),max_active=1)
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(visual.ask(OWNER_A,"Explain image",[uid]))
+    assert visual._capacity._value==1
