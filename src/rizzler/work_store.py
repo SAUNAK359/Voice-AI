@@ -180,6 +180,7 @@ class WorkStore:
             if row["status"] == "queued":
                 c.execute("UPDATE jobs SET status='cancelled',stage='cancelled',updated=? WHERE id=?",
                           (time.time(), jid))
+                self._settle_agents(c, jid, "cancelled")
                 self._event(c, jid, "cancelled", "Cancelled before execution")
             elif row["status"] == "running":
                 c.execute("UPDATE jobs SET cancel_requested=1,updated=? WHERE id=?",
@@ -203,12 +204,14 @@ class WorkStore:
                 if row["cancel_requested"]:
                     c.execute("""UPDATE jobs SET status='cancelled',stage='cancelled',
                                  lease_owner=NULL,lease_until=0,updated=? WHERE id=?""", (now, jid))
+                    self._settle_agents(c, jid, "cancelled")
                     self._event(c, jid, "cancelled", "Cancelled during recovery")
                     continue
                 if row["attempts"] >= 3:
                     c.execute("""UPDATE jobs SET status='failed',stage='failed',
                         error_code='max_attempts',lease_owner=NULL,lease_until=0,updated=? WHERE id=?""",
                               (now, jid))
+                    self._settle_agents(c, jid, "failed")
                     self._event(c, jid, "failed", "Execution retries exhausted")
                     continue
                 fence = row["fence"] + 1
@@ -295,11 +298,14 @@ class WorkStore:
                    WHERE job_id=? ORDER BY started,agent""", (jid,))]
 
     def quality_report(self, owner: str, jid: str) -> dict:
-        """Authenticated quality evidence from an integrity-checked durable checkpoint."""
+        """Only announce final quality after the parent job commits successfully."""
         with self._tx() as c:
-            if c.execute("SELECT id FROM jobs WHERE id=? AND owner=?",
-                         (jid,owner)).fetchone() is None:
+            parent = c.execute("SELECT status FROM jobs WHERE id=? AND owner=?",
+                               (jid,owner)).fetchone()
+            if parent is None:
                 raise Missing("Job not found")
+            if parent["status"] != "completed":
+                return {"job_id": jid, "status": parent["status"], "quality": None}
             row = c.execute("""SELECT status,result_json,result_sha256 FROM agent_steps
                                WHERE job_id=? AND agent='quality'""", (jid,)).fetchone()
             if not row or row["status"] != "completed":
@@ -311,6 +317,36 @@ class WorkStore:
             if data.get("passed") is not True:
                 raise ValueError("Invalid persisted quality result")
             return {"job_id": jid, "status": "completed", "quality": data}
+
+    def agent_publish(self, jid: str, worker: str, fence: int, owner: str,
+                      source: Path, receipt: ArtifactReceipt) -> Path:
+        """Fence the final promotion of a staged file into the shared checkpoint.
+
+        Rendering happens in a per-fence attempt directory; timed-out native
+        threads can never write into a newer worker's committed artifact.
+        """
+        receipt.validate()
+        if receipt.name != receipt.kind + "." + receipt.kind:
+            raise ValueError("Unexpected specialist artifact name")
+        source = Path(source)
+        root = self.root / "attempts" / owner / jid / str(fence)
+        root = root.resolve()
+        candidate = source.resolve()
+        if root not in candidate.parents or source.is_symlink() or not source.is_file():
+            raise ValueError("Invalid isolated artifact staging path")
+        if (source.stat().st_size != receipt.byte_size or
+                hashlib.sha256(source.read_bytes()).hexdigest() != receipt.sha256):
+            raise ValueError("Specialist staging checksum mismatch")
+        with self._tx() as c:
+            row = self._active(c, jid, worker, fence)
+            if row["owner"] != owner:
+                raise Missing("Wrong artifact owner")
+            destination = self.root / "checkpoints" / owner / jid / receipt.name
+            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if destination.is_symlink():
+                raise ValueError("Unsafe checkpoint link")
+            source.replace(destination)
+            return destination
 
     def agent_checkpoint(self, jid: str, worker: str, fence: int, agent: str):
         """A committed step is reusable only while the caller owns the parent lease."""
@@ -377,10 +413,23 @@ class WorkStore:
             raise ValueError("Invalid agent failure category")
         with self._tx() as c:
             self._active(c,jid,worker,fence)
-            c.execute("""UPDATE agent_steps SET status='failed',updated=?,error_code=?
+            now = time.time()
+            c.execute("""UPDATE agent_steps SET status='failed',updated=?,finished=?,error_code=?
                          WHERE job_id=? AND agent=? AND status='running'""",
-                      (time.time(),code,jid,agent))
+                      (now,now,code,jid,agent))
             self._event(c,jid,"agent_failed",agent+" specialist failed")
+
+    @staticmethod
+    def _settle_agents(c, jid, terminal):
+        """No specialist can remain misleadingly queued/running in a terminal job."""
+        now = time.time()
+        status = "cancelled" if terminal == "cancelled" else "skipped"
+        c.execute("""UPDATE agent_steps SET status=?,updated=?,finished=?,
+                     error_code=? WHERE job_id=? AND status='queued'""",
+                  (status,now,now,"parent_"+terminal,jid))
+        c.execute("""UPDATE agent_steps SET status=?,updated=?,finished=?,
+                     error_code=? WHERE job_id=? AND status='running'""",
+                  (terminal,now,now,"parent_"+terminal,jid))
 
     def fail(self,jid,worker,fence,error_code="execution_error"):
         with self._tx() as c:
@@ -394,6 +443,7 @@ class WorkStore:
             c.execute("""UPDATE jobs SET status=?,stage=?,error_code=?,
                 lease_owner=NULL,lease_until=0,updated=? WHERE id=? AND fence=?""",
                 (state,state,error_code if state=="failed" else "",time.time(),jid,fence))
+            self._settle_agents(c, jid, state)
             self._event(c,jid,state,"Execution "+state)
 
     def artifacts(self,owner,jid):
