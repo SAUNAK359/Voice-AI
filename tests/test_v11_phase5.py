@@ -324,3 +324,63 @@ def test_provider_timeout_releases_visual_admission(tmp_path):
     with pytest.raises(asyncio.TimeoutError):
         asyncio.run(visual.ask(OWNER_A,"Explain image",[uid]))
     assert visual._capacity._value==1
+
+
+
+def test_large_pdf_page_rejected_before_raster_allocation(monkeypatch):
+    doc=fitz.open()
+    doc.new_page(width=18000,height=18000)
+    raw=doc.tobytes()
+    doc.close()
+    mime,payload,metadata=normalize("large.pdf",raw)
+    def fail_if_rasterized(*args,**kw):
+        raise AssertionError("Should never allocate enormous pixmap")
+    monkeypatch.setattr(fitz.Page,"get_pixmap",fail_if_rasterized)
+    with pytest.raises(ValueError,match="pixel budget"):
+        evidence({"mime":mime,"info":metadata},payload)
+
+
+def test_visual_questions_do_not_advance_websocket_voice_generation(tmp_path,monkeypatch):
+    app,asr,provider=setup(monkeypatch,tmp_path)
+    with TestClient(app) as client:
+        uid=client.post("/api/visual/attachments",headers={
+            **headers(OWNER_A),"x-file-name":"image.jpg"},content=jpeg()).json()["id"]
+        for _ in range(3):
+            answer=client.post("/api/visual/ask",headers=headers(OWNER_A),
+                json={"question":"Explain the attached image","attachment_ids":[uid]})
+            assert answer.status_code==200,answer.text
+        assert app.state.sessions.get(OWNER_A).generation == 0
+        with client.websocket_connect("/ws",headers={"origin":"http://testserver"}) as ws:
+            ws.send_json({"type":"auth","token":KEY,"client_id":OWNER_A,
+                          "sample_rate":16000,"protocol":2})
+            assert ws.receive_json()["type"]=="ready"
+            ws.send_json({"type":"speech_start","generation":1})
+            assert ws.receive_json()["type"]=="status"
+            ws.send_json({"type":"interrupt"})
+            assert ws.receive_json()["type"]=="interrupted"
+
+
+def test_explicit_memory_and_cancel_commands_precede_visual_fallback(tmp_path):
+    from rizzler.voice_tools import VoiceTools
+    from rizzler.memory import MemoryStore
+    from rizzler.work_store import WorkStore
+    memory=MemoryStore(tmp_path/"memory","independent-test-memory-key-123456789012345")
+    work=WorkStore(tmp_path/"work")
+    media=MediaStore(tmp_path/"visual",MEDIA_KEY)
+    uid=media.save(OWNER_A,"image.jpg",jpeg())["id"]
+    vision=Vision()
+    tool=VoiceTools(work,Settings(access_key=KEY),memory,
+                    VisualService(media,vision))
+    async def exercise():
+        remember=await tool.execute("Remember that I prefer short instructions",
+                                    OWNER_A,visuals=[uid])
+        assert remember["tool"]=="memory_save" and remember["verified"]
+        created=work.submit(OWNER_A,"Create a Markdown report about retries",
+                            ["md"],"explicit_v5_job",[])
+        cancel=await tool.execute("Cancel this report",OWNER_A,visuals=[uid])
+        assert cancel["tool"]=="work_cancel"
+        assert work.get(OWNER_A,created["id"])["status"]=="cancelled"
+        return await tool.execute("Explain the image",OWNER_A,visuals=[uid])
+    examined=asyncio.run(exercise())
+    assert examined["tool"]=="visual_analyze"
+    assert len(vision.calls)==1
