@@ -59,3 +59,20 @@ jobs:
         run: pip install -e '.[test,work]' -r requirements-identity.txt
       - name: Exercise PostgreSQL concurrency and fenced jobs
         run: python -m pytest -q tests/test_phase5_postgres.py
+
+  artifact-render-qa:
+    runs-on: ubuntu-latest
+    env:
+      RIZZLER_ARTIFACT_QA: strict
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real Office/PDF rendering and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer libreoffice-impress libreoffice-calc fonts-dejavu-core fonts-liberation
+          pip install -e '.[test,work]'
+      - name: Verify page-by-page rendering and independent formula recalculation
+        run: python -m pytest -q tests/test_v11_phase2_strict.py

@@ -2,7 +2,7 @@
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 MPLCONFIGDIR=/tmp/matplotlib
 WORKDIR /srv/rizzler
-RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 fonts-dejavu-core \
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 fonts-dejavu-core fonts-liberation libreoffice-writer libreoffice-impress libreoffice-calc \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 rizzler && useradd --uid 10001 --gid 10001 -m rizzler
 COPY pyproject.toml README.md requirements-identity.txt ./
