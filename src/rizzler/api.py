@@ -86,7 +86,28 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     engine = VoiceEngine(cfg, models, VoiceTools(work, cfg))
     @asynccontextmanager
     async def lifespan(app):
+        # Optional one-time provider prewarm, performed after API starts
+        # listening. No Gemini request, secret logging or recurring polling.
+        # Colab can enable this while the visitor opens the HTTPS link.
+        prewarm_task = None
+        if environ.get('RIZZLER_PREWARM','').lower() in ('1','true','yes'):
+            async def prewarm():
+                import numpy as np
+                try:
+                    await asyncio.gather(
+                        asyncio.to_thread(models.asr.transcribe,
+                                          np.zeros(16000,dtype=np.float32)),
+                        asyncio.to_thread(models.tts.synthesize,'Ready to help.'))
+                    app.state.voice_prewarm = 'ready'
+                except Exception:
+                    app.state.voice_prewarm = 'failed'
+            app.state.voice_prewarm = 'running'
+            prewarm_task = asyncio.create_task(prewarm(),name='voice-model-prewarm')
         yield
+        if prewarm_task and not prewarm_task.done():
+            prewarm_task.cancel()
+        if prewarm_task:
+            await asyncio.gather(prewarm_task,return_exceptions=True)
         close = getattr(models.llm, 'close', None)
         if close:
             await close()
@@ -229,7 +250,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                     'gemini_client': getattr(models.llm, '_client', None) is not None,
                     'tts': getattr(models.tts, '_model', None) is not None,
                 }, 'inference_busy': sessions.inference.locked(),
-                'first_audio_claim': 'not_measured'}
+                'first_audio_claim': 'not_measured',
+                'voice_prewarm':getattr(app.state,'voice_prewarm','not_requested')}
 
     @app.get('/api/provider/metrics')
     def provider_metrics(request: Request):
