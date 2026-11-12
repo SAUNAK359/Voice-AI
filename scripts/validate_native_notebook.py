@@ -32,7 +32,7 @@ def validate(path: Path = NOTEBOOK) -> dict:
     needed=("UserSecretsClient","GEMINI_API_KEY","RIZZLER_ACCESS_KEY",
             "RIZZLER_WORK_SIGNING_KEY","RIZZLER_MEMORY_ENABLED",
             "RIZZLER_MEMORY_KEY","Settings.from_env","rizzler.api",
-            "rizzler.work_worker","--root","/ready","git","clone","python")
+            "rizzler.work_worker","--root","/ready","git","clone","sys.executable")
     if any(term not in combined for term in needed):
         raise ValueError("Native launcher missing required single-runtime component")
     forbidden=("RIZZLER_V5_APP = FastAPI(", "from fastrtc import", "import fastrtc",
