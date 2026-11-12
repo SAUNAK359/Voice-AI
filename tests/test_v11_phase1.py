@@ -13,7 +13,13 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-if any(importlib.util.find_spec(pkg) is None for pkg in ("pytest","httpx","sympy","google.genai")):
+def _installed(module):
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ModuleNotFoundError, ValueError):
+        return False
+
+if not all(_installed(pkg) for pkg in ("pytest","httpx","sympy","google","google.genai")):
     raise unittest.SkipTest("Phase 1 acceptance runs with app/work extras")
 
 import pytest
@@ -181,8 +187,9 @@ def test_voice_admits_grounded_research_and_multiple_artifacts(tmp_path):
     async def run():
         accepted=await voice.execute(phrase,"owner_a",sequence=1,nonce="sess01")
         assert accepted["verified"] and accepted["tool"]=="work_submit"
-        assert {"research","pptx","pdf"}==set(accepted["plan"] and
-               ["research","pptx","pdf"])  # User formats remain explicit.
+        with store._tx() as db:
+            raw=db.execute("SELECT payload FROM jobs WHERE id=?",(accepted["job"]["id"],)).fetchone()
+        assert set(json.loads(raw["payload"])["deliverables"])=={"research","pptx","pdf"}
         assert [n["id"] for n in accepted["plan"]["steps"]]==[
             "research","powerpoint","pdf_visual","quality"]
         second=await voice.execute(phrase,"owner_a",sequence=1,nonce="sess01")
