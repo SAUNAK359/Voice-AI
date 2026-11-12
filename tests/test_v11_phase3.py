@@ -204,3 +204,75 @@ def test_provisional_transcript_is_never_a_tool_write(monkeypatch):
         assert any(e["type"]=="done" for e in result)
         assert tools.calls==["Hello"]
     asyncio.run(run())
+
+
+def test_duplicate_http_turn_does_not_cancel_the_accepted_turn():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    entered, release = Event(), Event()
+
+    class SlowASR:
+        def transcribe(self, waveform):
+            entered.set()
+            if not release.wait(5):
+                raise RuntimeError("Test ASR release deadline")
+            return "Please explain the result"
+
+    cfg=Settings(access_key=KEY)
+    with TestClient(create_app(cfg,ProviderSet(SlowASR(),LLM(),TTS()))) as client:
+        headers={"x-rizzler-key":KEY,"x-session-id":"same_owner_http",
+                 "x-sample-rate":"16000"}
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first=pool.submit(client.post,"/api/turn",headers=headers,content=PCM)
+            try:
+                assert entered.wait(4)
+                duplicate=client.post("/api/turn",headers=headers,content=PCM)
+                assert duplicate.status_code==429
+                assert client.app.state.sessions.get("same_owner_http").generation==1
+            finally:
+                release.set()
+            initial=first.result(timeout=8)
+            assert initial.status_code==200,initial.text
+            assert len(client.app.state.sessions.get("same_owner_http").history)==2
+
+
+def test_interrupt_queued_http_turn_before_it_can_execute_tools():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    entered, release = Event(), Event()
+    class SlowASR:
+        def transcribe(self, waveform):
+            entered.set()
+            if not release.wait(6):
+                raise RuntimeError("Test ASR release deadline")
+            return "Please explain the result"
+    cfg=Settings(access_key=KEY)
+    with TestClient(create_app(cfg,ProviderSet(SlowASR(),LLM(),TTS()))) as client:
+        headers=lambda owner:{"x-rizzler-key":KEY,"x-session-id":owner,
+                              "x-sample-rate":"16000"}
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            first=pool.submit(client.post,"/api/turn",
+                              headers=headers("holding_owner"),content=PCM)
+            try:
+                assert entered.wait(4)
+                second=pool.submit(client.post,"/api/turn",
+                                   headers=headers("queued_owner"),content=PCM)
+                import time
+                for _ in range(200):
+                    if client.app.state.sessions.inference.queued==1:break
+                    time.sleep(.01)
+                assert client.app.state.sessions.inference.queued==1
+                cancelled=client.post("/api/interrupt",headers=headers("queued_owner"))
+                assert cancelled.status_code==200 and cancelled.json()["cancelled"] is True
+                try:
+                    response=second.result(timeout=3)
+                    assert response.status_code!=200
+                except (Exception,BaseException):
+                    # An interrupted ASGI request may abort its transport rather
+                    # than returning an HTTP response; either is acceptable.
+                    pass
+                assert not client.app.state.sessions.get("queued_owner").history
+                assert client.app.state.sessions.inference.queued==0
+            finally:
+                release.set()
+            assert first.result(timeout=8).status_code==200
