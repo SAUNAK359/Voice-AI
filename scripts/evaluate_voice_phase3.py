@@ -66,22 +66,29 @@ def evaluate(records):
                          "failures":len(rows)-len(successful),"metrics":fields}
     # The physical output SLO cannot be inferred from a server or browser
     # scheduled playback proxy, even if that proxy appears extremely fast.
-    acoustic=[row for row in records if row["measurement"]=="acoustic_loopback"]
-    physical_ok=[row["first_audio_ms"] for row in acoustic
-                 if row["outcome"]=="ok" and row["warm"]]
-    qualified=bool(len(acoustic)>=1000 and
-                   all(r["warm"] for r in acoustic) and
-                   len(physical_ok)/len(acoustic)>=.99)
-    # We intentionally require an independently labelled, full routine dataset
-    # and no unaccounted devices; qualified here means sufficient sample
-    # coverage, not a guarantee of physical SLO pass.
+    acoustic=[r for r in records if r["measurement"]=="acoustic_loopback" and r["warm"]]
+    by_device={}
+    for row in acoustic:
+        by_device.setdefault(row["device"],[]).append(row)
+    physical={}
+    for device,group in sorted(by_device.items()):
+        successful=[r["first_audio_ms"] for r in group if r["outcome"]=="ok"]
+        qualified=(len(group)>=1000 and len(successful)/len(group)>=.99)
+        physical[device]={
+            "n":len(group),"successful":len(successful),
+            "coverage_qualified":qualified,
+            "first_audio_p95_ms":percentile(successful,95),
+            "target_met":bool(qualified and percentile(successful,95)<=3000),
+        }
+    qualified=bool(physical and all(v["coverage_qualified"] for v in physical.values()))
     return {"schema_version":1,"total":len(records),"successful":len(ok),
             "failed":len(records)-len(ok),
             "completion_rate":round(len(ok)/len(records),4) if records else None,
-            "breakdown":breakdown,
+            "breakdown":breakdown,"physical_by_device":physical,
             "physical_coverage_qualified":qualified,
-            "physical_audio_slo_met":bool(qualified and percentile(physical_ok,95)<=3000),
-            "limitations":"Qualified physical output requires acoustic_loopback; proxy samples cannot pass it"}
+            "physical_audio_slo_met":bool(qualified and
+                                        all(v["target_met"] for v in physical.values())),
+            "limitations":"Per-device acoustic loopback required; proxy samples cannot qualify"}
 
 
 def main():
