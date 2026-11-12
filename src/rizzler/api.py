@@ -21,6 +21,7 @@ from .voice import VoiceEngine, ProviderSet
 from .security import validate_session_id
 from .identity import Identity, OIDCSettings
 from .operations import Operations
+from .tool_registry import capabilities
 
 WEB = Path(__file__).with_name('web')
 
@@ -201,7 +202,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             "work_agent": "available" if work is not None else "disabled",
             "file_uploads": "available" if work is not None else "disabled",
             "job_tracking": "available" if work is not None else "disabled"},
-            "registry": __import__("rizzler.tool_registry",fromlist=["capabilities"]).capabilities(cfg,work is not None),
+            "registry": capabilities(cfg,work is not None),
             "note": "Configured does not prove live Google Search availability or current source freshness"}
 
     if identity is not None:
