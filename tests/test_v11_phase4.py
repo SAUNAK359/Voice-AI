@@ -105,6 +105,7 @@ def test_explicit_memory_commands_and_disabled_safeguard(tmp_path):
 
 def test_authenticated_memory_api_and_privacy_bounds(tmp_path,monkeypatch):
     monkeypatch.setenv("RIZZLER_MEMORY_ENABLED","1")
+    monkeypatch.setenv("RIZZLER_DEMO_MEMORY_SINGLE_USER","1")
     monkeypatch.setenv("RIZZLER_MEMORY_ROOT",str(tmp_path/"memory"))
     monkeypatch.setenv("RIZZLER_MEMORY_KEY",MEMKEY)
     cfg=Settings(access_key=KEY)
