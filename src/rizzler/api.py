@@ -481,8 +481,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         try:
             session = sessions.sessions.get(owner)
             if session is not None and session.task is not None and not session.task.done():
-                await session.cancel()
-                session.generation += 1
+                raise HTTPException(status_code=429,detail="Finish the active turn before deletion")
             deleted = await asyncio.to_thread(visual.store.delete,owner,uid)
             if session is not None:
                 session.visuals[:] = [v for v in session.visuals if v != uid]
@@ -514,11 +513,11 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             raise HTTPException(status_code=429,detail="Voice turn already active")
         task=asyncio.current_task()
         session.task=task
-        seq=session.generation+1
-        session.generation=seq
+        seq=session.visual_generation+1
+        session.visual_generation=seq
         try:
             result=await visual.ask(owner,question,ids)
-            if seq!=session.generation:
+            if seq!=session.visual_generation:
                 raise HTTPException(status_code=409,detail="Visual request superseded")
             session.history=(session.history + [
                 {"role":"user","content":question + " [visual attachments provided]"},
@@ -604,6 +603,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         session.history.clear()
         session.visuals.clear()
         session.visual_analysis = None
+        session.visual_generation += 1
         session.generation += 1
         return {'ok': True}
 
@@ -882,6 +882,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                         session.history.clear()
                         session.visuals.clear()
                         session.visual_analysis = None
+                        session.visual_generation += 1
                         pcm.clear()
                         frames = None
                         recording = False
