@@ -73,11 +73,14 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
     def agent_statuses(req: Request, jid: str):
         who = owner(req)
         try:
+            parent = store.get(who, jid)
             steps = store.agent_steps(who, jid)
         except Missing:
             raise HTTPException(status_code=404, detail="Job not found") from None
         now = __import__("time").time()
         for step in steps:
+            if parent["status"] in ("cancelled", "failed") and step["status"] == "queued":
+                step["status"] = "not_executed"
             deadline = step.pop("deadline")
             finished = step["finished"]
             if step["status"] == "completed":
