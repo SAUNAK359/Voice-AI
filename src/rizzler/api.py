@@ -32,7 +32,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     production = mode == "production"
     cfg = settings or Settings.from_env()
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
-    engine, sessions = VoiceEngine(cfg, models), Sessions()
+    sessions = Sessions()
     operations = Operations()
     ops_token = environ.get("RIZZLER_OPERATIONS_TOKEN", "")
     if production and (len(ops_token) < 32 or ops_token == environ.get("RIZZLER_SESSION_SIGNING_KEY", "")):
@@ -82,6 +82,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     else:
         work = None
 
+    from .voice_tools import VoiceTools
+    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg))
     @asynccontextmanager
     async def lifespan(app):
         yield
@@ -98,9 +100,11 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         from .work_api import router
         app.include_router(router(work, work_signing_key, identity=identity))
 
+        # Keep backward-compatible private Work API; the primary application
+        # now shows Work job cards inside the voice conversation.
         @app.get('/work')
         def work_dashboard():
-            return FileResponse(WEB / 'work.html')
+            return RedirectResponse('/', status_code=302)
 
     @app.middleware('http')
     async def protect_response(request: Request, call_next):
@@ -287,7 +291,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             session.task = task
             events, samples = [], bytearray()
             try:
-                async for event in engine.events(bytes(raw), rate, list(session.history)):
+                async for event in engine.events(bytes(raw), rate, list(session.history), owner=sid, sequence=generation):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -360,7 +364,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             async def stream_turn(recorded: bytes, seq: int):
                 async with sessions.inference:
                     try:
-                        async for event in engine.events(recorded, rate, list(session.history)):
+                        async for event in engine.events(recorded, rate, list(session.history), owner=sid, sequence=seq):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
