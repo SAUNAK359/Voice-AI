@@ -53,8 +53,13 @@ def test_sql_is_computed_and_has_no_write_privileges(tmp_path):
     result = analyze_sql(csv)
     assert result["summary"]["rows"] == result["summary"]["sql_row_count"] == 3
     assert result["summary"]["numeric"]["amount"]["mean"] == 20
+    assert result["summary"]["sql_numeric_columns_verified"] == 1
+    assert result["sql_verified_metrics"]["amount"]["mean"] == 20
     assert execute_readonly_sql(["a"], [["x"], ["y"]],
                "SELECT COUNT(*) FROM dataset") == [(2,)]
+    assert execute_readonly_sql(["category", "amount"],
+               [["North", "10"], ["South", "20"]],
+               "SELECT AVG(CAST(c1 AS REAL)) FROM dataset") == [(15.0,)]
     for unsafe in ("DELETE FROM dataset", "ATTACH DATABASE '/tmp/bad' AS evil",
                    "SELECT load_extension('malicious')",
                    "SELECT * FROM sqlite_master"):
