@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from .audio import pcm16_to_mono
 from .config import Settings
 from .provider_types import ASRProvider, LLMProvider, TTSProvider
+from .speech_text import for_speech
 
 
 def phrases(text: str, flush: bool = False) -> tuple[list[str], str]:
@@ -33,10 +34,10 @@ class ProviderSet:
 
 
 class VoiceEngine:
-    def __init__(self, settings: Settings, providers: ProviderSet):
-        self.settings, self.providers = settings, providers
+    def __init__(self, settings: Settings, providers: ProviderSet, tools=None):
+        self.settings, self.providers, self.tools = settings, providers, tools
 
-    async def events(self, pcm: bytes, rate: int, history: list[dict]) -> AsyncIterator[dict]:
+    async def events(self, pcm: bytes, rate: int, history: list[dict], owner: str | None = None, sequence: int = 0) -> AsyncIterator[dict]:
         """Stream status, transcript, text, PCM16 and final metrics.
 
         A single producer and speech worker share bounded queues. On disconnect,
@@ -57,6 +58,15 @@ class VoiceEngine:
                     if not transcript:
                         raise ValueError('No clear speech recognized')
                     await output.put({'type': 'status', 'label': 'Generating response'})
+                    tool_result = None
+                    if self.tools is not None and owner is not None:
+                        tool_result = await self.tools.execute(transcript, owner, sequence)
+                        if tool_result is not None:
+                            await output.put({'type':'tool_result',
+                                'tool':tool_result['tool'],
+                                'verified':tool_result.get('verified',False),
+                                'elapsed_ms':tool_result.get('tool_elapsed_ms'),
+                                'job':tool_result.get('job')})
                     speech_queue = asyncio.Queue(maxsize=5)
                     first_pcm_ms = None
                     tts_ms = 0.0
@@ -86,7 +96,14 @@ class VoiceEngine:
                     pending = ''
                     first_text_ms = None
                     llm_started = time.perf_counter()
-                    async for delta in self.providers.llm.stream(transcript, history):
+                    async def responses():
+                        if tool_result is not None:
+                            yield tool_result['text']
+                        else:
+                            async for item in self.providers.llm.stream(transcript, history):
+                                yield item
+
+                    async for delta in responses():
                         if worker.done():
                             await worker  # propagate TTS failure promptly
                         if not delta:
@@ -97,14 +114,21 @@ class VoiceEngine:
                         if len(answer) > 12000:
                             raise ValueError('Model output exceeded maximum response length')
                         await output.put({'type': 'assistant_text', 'text': answer, 'final': False})
-                        speakable, pending = phrases(pending + delta)
-                        for phrase in speakable:
-                            await speech_queue.put(phrase)
+                        if tool_result is None:
+                            speakable, pending = phrases(pending + delta)
+                            for phrase in speakable:
+                                cleaned = for_speech(phrase)
+                                if cleaned:
+                                    await speech_queue.put(cleaned)
                     if not answer.strip():
                         raise ValueError('Gemini returned no visible response')
+                    if tool_result is not None:
+                        pending = tool_result['spoken']
                     speakable, pending = phrases(pending, flush=True)
                     for phrase in speakable:
-                        await speech_queue.put(phrase)
+                        cleaned = for_speech(phrase)
+                        if cleaned:
+                            await speech_queue.put(cleaned)
                     await speech_queue.put(None)
                     await worker
                     if not audio_bytes:
@@ -117,6 +141,8 @@ class VoiceEngine:
                         'post_pause_first_audio_ms': round(first_pcm_ms, 2) if first_pcm_ms is not None else None,
                         'total_server_ms': round((time.perf_counter() - start) * 1000, 2),
                         'audio_bytes': audio_bytes,
+                        'tool':tool_result['tool'] if tool_result else None,
+                        'tool_ms':tool_result.get('tool_elapsed_ms') if tool_result else None,
                         'measurement': 'server_submit_to_first_pcm_not_browser_audible',
                         'outcome': 'ok',
                     }})
