@@ -52,6 +52,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
     if not cfg.gemini_api_key: raise RuntimeError("Gemini key is required for grounded research")
     from google import genai
     from google.genai import types
+    from .work_agents import read_skill
     client=genai.Client(api_key=cfg.gemini_api_key)
     try:
         async with asyncio.timeout(min(90,cfg.request_timeout)):
@@ -60,6 +61,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 contents=("Research the following objective. Provide dated, attributed "
                           "findings with sources and uncertainty. Never invent citations:\n"+objective[:8000]),
                 config=types.GenerateContentConfig(
+                    system_instruction=read_skill("research")[:6500],
                     tools=[types.Tool(google_search=types.GoogleSearch())],
                     temperature=0.2,max_output_tokens=1300))
         urls=[]
@@ -85,73 +87,34 @@ class WorkWorker:
         self.identity=secrets.token_hex(12)
 
     async def once(self) -> bool:
-        claim=self.store.claim(self.identity,lease_seconds=45)
-        if not claim: return False
-        jid,owner,fence=claim["id"],claim["owner"],claim["fence"]
-        payload=claim["payload"]
-        stage=self.store.root/"staging"/jid/str(fence)
-        stage.mkdir(parents=True,exist_ok=True,mode=0o700)
-        # Heartbeat protects long model calls against lost ownership.
+        claim = self.store.claim(self.identity, lease_seconds=45)
+        if not claim:
+            return False
+        jid, fence = claim["id"], claim["fence"]
+        # The WorkStore is authoritative for all specialist progress and
+        # checkpoint transitions; Voice turns remain independent of these jobs.
         async def heartbeat():
             while True:
                 await asyncio.sleep(12)
-                self.store.renew(jid,self.identity,fence,lease_seconds=45)
-        guard=asyncio.create_task(heartbeat())
+                self.store.renew(jid, self.identity, fence, lease_seconds=45)
+        guard = asyncio.create_task(heartbeat(), name="work-lease-heartbeat")
         try:
-            formats=payload["deliverables"]
-            uploaded=[self.store.upload(owner,uid) for uid in payload["uploads"]]
-            self.store.renew(jid,self.identity,fence,stage="analysis")
-            table=None;summary=None
-            if uploaded:
-                if len(uploaded)>1:
-                    raise ValueError("Only one dataset per job is currently supported")
-                table=await asyncio.to_thread(read_dataset,uploaded[0])
-                summary=await asyncio.to_thread(analyze,*table)
-            if "data_analysis" in formats and summary is None:
-                raise ValueError("Data analysis requires a dataset")
-            if "research" in formats:
-                self.store.renew(jid,self.identity,fence,stage="research")
-                text,sources=await self.researcher(payload["objective"])
-            else:
-                self.store.renew(jid,self.identity,fence,stage="planning")
-                text=await self.composer(payload["objective"],summary)
-                sources=[]
-            if summary:
-                text += "\n\n## Dataset quality (computed, not model-generated)\n"+json.dumps(summary,indent=2)
-            self.store.renew(jid,self.identity,fence,stage="rendering")
-            receipts=[]
-            for kind in formats:
-                if kind=="zip":continue
-                if kind not in FORMATS:continue
-                path=stage/(kind+"."+kind)
-                await asyncio.to_thread(render_one,kind,path,payload["objective"][:120],text,table,sources)
-                receipts.append(verify_artifact(path,kind))
-                self.store.renew(jid,self.identity,fence,lease_seconds=45)
-            if "zip" in formats:
-                import zipfile
-                zpath=stage/"zip.zip"
-                manifest={"schema_version":1,"files":[{"name":r.name,"sha256":r.sha256,
-                    "bytes":r.byte_size} for r in receipts]}
-                if not receipts:raise ValueError("ZIP requires at least one other requested file")
-                with zipfile.ZipFile(zpath,"w",compression=zipfile.ZIP_DEFLATED) as archive:
-                    for r in receipts: archive.write(stage/r.name,arcname=r.name)
-                    archive.writestr("MANIFEST.json",json.dumps(manifest,indent=2))
-                    archive.writestr("README.txt","Rizzler Work Agent verified bundle\n")
-                receipts.append(verify_artifact(zpath,"zip"))
-            self.store.renew(jid,self.identity,fence,stage="validating")
-            self.store.finish(jid,self.identity,fence,text,receipts,stage)
-            return True
-        except (StaleLease,InterruptedError):
-            self.store.fail(jid,self.identity,fence,"cancelled_or_stale")
+            from .work_specialists import execute_specialists
+            await execute_specialists(
+                self.store, claim, self.identity, self.composer, self.researcher)
+        except (StaleLease, InterruptedError):
+            self.store.fail(jid, self.identity, fence, "cancelled_or_stale")
+        except asyncio.CancelledError:
+            # Never silently mark a interrupted worker's job as successful.
+            self.store.fail(jid, self.identity, fence, "worker_interrupted")
+            raise
         except Exception:
-            # Never return exception strings that could include prompts, keys or PII.
-            self.store.fail(jid,self.identity,fence,"execution_error")
+            # Error strings could include user prompts and provider secrets.
+            self.store.fail(jid, self.identity, fence, "execution_error")
         finally:
             guard.cancel()
-            await asyncio.gather(guard,return_exceptions=True)
-            shutil.rmtree(stage,ignore_errors=True)
+            await asyncio.gather(guard, return_exceptions=True)
         return True
-
 
 async def serve(store,interval=1):
     worker=WorkWorker(store)

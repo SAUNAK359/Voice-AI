@@ -69,6 +69,44 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
         try:return store.get(owner(req),jid)
         except Missing:raise HTTPException(status_code=404,detail="Job not found")
 
+    @api.get("/jobs/{jid}/agents")
+    def agent_statuses(req: Request, jid: str):
+        who = owner(req)
+        try:
+            parent = store.get(who, jid)
+            steps = store.agent_steps(who, jid)
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
+        now = __import__("time").time()
+        for step in steps:
+            if parent["status"] in ("cancelled", "failed") and step["status"] == "queued":
+                step["status"] = "not_executed"
+            deadline = step.pop("deadline")
+            finished = step["finished"]
+            if step["status"] == "completed":
+                step["sla"] = "met" if finished <= deadline else "breached"
+            elif step["status"] == "running":
+                step["sla"] = "overdue" if now > deadline else "within_target"
+            else:
+                step["sla"] = "not_applicable"
+            step["target_deadline"] = deadline
+            try:
+                step["quality"] = json.loads(step.pop("qa_json")) if step.get("qa_json") else None
+            except ValueError:
+                step["quality"] = None
+            step.pop("qa_json", None)
+        return {"job_id": jid, "agents": steps,
+                "sla_definition": "Best-effort stage target, not a contractual guarantee"}
+
+    @api.get("/jobs/{jid}/quality")
+    def job_quality(req: Request, jid: str):
+        try:
+            return store.quality_report(owner(req), jid)
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
+        except ValueError:
+            raise HTTPException(status_code=503, detail="Quality evidence unavailable") from None
+
     @api.get("/jobs/{jid}/voice-status")
     def voice_status(req: Request, jid: str):
         try:

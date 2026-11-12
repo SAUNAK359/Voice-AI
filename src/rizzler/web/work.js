@@ -14,10 +14,28 @@ function err(x){$('work-error').textContent=x?.message||String(x)}
 async function refresh(){try{const data=await call('/jobs');const pane=$('jobs');pane.replaceChildren();
  for(const item of data.jobs){const row=el('p'),btn=el('button',item.status+' · '+item.id.slice(0,8)+' · '+item.stage);
  btn.onclick=()=>details(item.id);row.append(btn);pane.append(row)}}catch(e){err(e)}}
-async function details(id){try{const [job,ev,art]=await Promise.all([
- call('/jobs/'+id),call('/jobs/'+id+'/events'),call('/jobs/'+id+'/artifacts')]);const pane=$('job-detail');pane.replaceChildren(el('h3',job.status+' · '+job.stage));
+async function details(id){try{const [job,ev,art,agentData]=await Promise.all([
+ call('/jobs/'+id),call('/jobs/'+id+'/events'),call('/jobs/'+id+'/artifacts'),call('/jobs/'+id+'/agents')]);
+ const pane=$('job-detail');pane.replaceChildren(el('h3',job.status+' · '+job.stage));
+ const heading=el('h4','Specialist agents · persisted status and targets');pane.append(heading);
+ for(const a of agentData.agents){
+   const elapsed=a.finished>0?Math.round(a.finished-a.started)+'s':'active';
+   const row=el('p',a.agent+' · '+a.status+' · attempt '+a.attempt+' · '+elapsed+' · target '+a.sla);
+   if(a.quality?.passed)row.append(el('span',' · QA passed ('+(a.quality.checks||[]).join(', ')+')'));
+   pane.append(row);
+ }
  for(const e of ev.events)pane.append(el('p',new Date(e.at*1000).toLocaleString()+' · '+e.stage+' · '+e.message));
  if(job.status==='completed')pane.append(el('p',job.result.slice(0,1500)));
+ if(job.status==='completed'){
+  const quality=await call('/jobs/'+id+'/quality');
+  if(quality.quality?.passed){
+    const score=quality.quality.artifact_quality||{};
+    pane.append(el('h4','Verified artifact QA'));
+    for(const [format,report] of Object.entries(score)){
+      pane.append(el('p',format.toUpperCase()+' · '+report.checks.join(', ')));
+    }
+  }
+ }
  for(const a of art.artifacts){const btn=el('button','Download '+a.kind+' ('+a.size+' bytes)');
  btn.onclick=async()=>{try{const r=await call('/artifacts/'+a.id);const blob=await r.blob(),url=URL.createObjectURL(blob);
  const link=document.createElement('a');link.href=url;link.download=a.name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(e){err(e)}};
