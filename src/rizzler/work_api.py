@@ -98,6 +98,15 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
         return {"job_id": jid, "agents": steps,
                 "sla_definition": "Best-effort stage target, not a contractual guarantee"}
 
+    @api.get("/jobs/{jid}/quality")
+    def job_quality(req: Request, jid: str):
+        try:
+            return store.quality_report(owner(req), jid)
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
+        except ValueError:
+            raise HTTPException(status_code=503, detail="Quality evidence unavailable") from None
+
     @api.get("/jobs/{jid}/voice-status")
     def voice_status(req: Request, jid: str):
         try:
