@@ -197,3 +197,71 @@ def test_corrupted_specialist_checkpoint_is_never_published(tmp_path,monkeypatch
     assert asyncio.run(WorkWorker(store,composer=composer).once())
     assert store.get("owner_1",job["id"])["status"]=="failed"
     assert store.artifacts("owner_1",job["id"])==[]
+
+
+def test_fenced_promotion_rejects_stale_native_renderer(tmp_path, monkeypatch):
+    """A renderer finishing after timeout must never overwrite recovered work."""
+    from rizzler.artifacts import verify_artifact
+    import rizzler.work_store as module
+    clock = [1000.0]
+    monkeypatch.setattr(module.time, "time", lambda: clock[0])
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Produce a comprehensive verified report.",
+                       ["md"], "staging_fence_001", [])
+    jid = job["id"]
+    old = store.claim("old_worker", 20)
+    oldpath = store.root / "attempts" / "owner_1" / jid / str(old["fence"]) / "pdf_visual" / "md.md"
+    oldpath.parent.mkdir(parents=True)
+    oldpath.write_text("# Stale report\nThis output belongs to an expired worker attempt.", encoding="utf-8")
+    stale_receipt = verify_artifact(oldpath, "md")
+    clock[0] += 21
+    new = store.claim("new_worker", 20)
+    path = store.root / "attempts" / "owner_1" / jid / str(new["fence"]) / "pdf_visual" / "md.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("# New verified report\nThis output belongs to the current worker only.", encoding="utf-8")
+    receipt = verify_artifact(path, "md")
+    final = store.agent_publish(jid, "new_worker", new["fence"], "owner_1", path, receipt)
+    with pytest.raises(StaleLease):
+        store.agent_publish(jid, "old_worker", old["fence"], "owner_1", oldpath, stale_receipt)
+    assert final.read_bytes() == b"# New verified report\nThis output belongs to the current worker only."
+    assert oldpath.exists()
+
+
+def test_terminal_parent_settles_every_pending_agent(tmp_path):
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Create an independent business report.",
+                       ["docx", "md"], "terminal_agents_001", [])
+    claim = store.claim("agent_worker", 30)
+    store.agent_begin(job["id"], "agent_worker", claim["fence"], "orchestrator", 150)
+    store.fail(job["id"], "agent_worker", claim["fence"], "execution_error")
+    stages = {x["agent"]: x for x in store.agent_steps("owner_1", job["id"])}
+    assert stages["orchestrator"]["status"] == "failed"
+    assert stages["orchestrator"]["finished"] >= stages["orchestrator"]["started"]
+    assert {x["status"] for name, x in stages.items() if name != "orchestrator"} == {"skipped"}
+    assert all(x["finished"] > 0 for x in stages.values())
+
+
+def test_pending_quality_is_not_published_as_final(tmp_path):
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Produce a useful standalone report.",
+                       ["md"], "quality_not_yet_committed", [])
+    claim = store.claim("qa_worker", 30)
+    store.agent_begin(job["id"], "qa_worker", claim["fence"], "quality", 45)
+    store.agent_complete(job["id"], "qa_worker", claim["fence"], "quality",
+                         {"passed": True, "missing": []},
+                         {"passed": True, "checks": ["test_only"]})
+    state = store.quality_report("owner_1", job["id"])
+    assert state["status"] == "running" and state["quality"] is None
+    store.fail(job["id"], "qa_worker", claim["fence"])
+    state = store.quality_report("owner_1", job["id"])
+    assert state["status"] == "failed" and state["quality"] is None
+
+
+def test_cancelled_before_execution_settles_agent_steps(tmp_path):
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Create a report with verified formatting.",
+                       ["pptx", "pdf"], "before_execution_cancelled", [])
+    store.cancel("owner_1", job["id"])
+    statuses = store.agent_steps("owner_1", job["id"])
+    assert statuses and all(x["status"] == "cancelled" for x in statuses)
+    assert all(x["finished"] > 0 for x in statuses)
