@@ -24,6 +24,9 @@
 <form id="visual-form"><label for="visual-question">Ask about the selected visuals</label>
 <textarea id="visual-question" maxlength="2000" rows="2" required placeholder="What does this diagram show?"></textarea>
 <button type="submit" id="visual-ask">Analyze visuals</button></form>
+<div id="visual-report-panel" hidden><label for="visual-report-format">Create a verified-format report from the analysis</label>
+<select id="visual-report-format"><option value="pdf">PDF report</option><option value="docx">Word report</option><option value="pptx">PowerPoint</option><option value="md">Markdown</option></select>
+<button type="button" id="visual-report">Submit report to Work Agent</button></div>
 <p class="small">Responses describe user-provided evidence, not independently verified facts. PDF analysis reads up to three pages per document.</p>
 </section>
 <section id="memory-panel" hidden aria-label="Private saved memory">
