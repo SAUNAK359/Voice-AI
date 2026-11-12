@@ -8,7 +8,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 import hashlib
 import hmac
-import os
 from pathlib import Path
 import re
 import secrets
