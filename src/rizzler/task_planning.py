@@ -19,7 +19,9 @@ RESEARCH_REQUEST = re.compile(
     r"find sources|verify sources|source-based|market trends|"
     r"compare competitors|competitive landscape|current sources)\b", re.I)
 DATA_REQUEST = re.compile(r"\b(?:analy[sz]e|analysis|statistics|data profile|dataset|spreadsheet|csv)\b", re.I)
-RESEARCH_NEGATION = re.compile(r"\b(?:do not|don't|without|no|avoid)\s+(?:any\s+)?(?:web\s+)?research\b", re.I)
+RESEARCH_NEGATION = re.compile(
+    r"\b(?:do not|don't|without|no|avoid)\s+(?:any\s+)?(?:web\s+)?"
+    r"(?:research|search|browse|look\s+up)\b", re.I)
 DATA_NEGATION = re.compile(r"\b(?:do not|don't|without|avoid)\s+(?:any\s+)?(?:analy[sz]e|analysis)\b", re.I)
 
 
