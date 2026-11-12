@@ -7,9 +7,11 @@ import re
 import time
 
 from .math_engine import solve_equations
+from .research_evidence import source_records, evidence_summary
+from .task_planning import propose_scope
 
 SEARCH_INTENT = re.compile(r"\b(?:search(?: the)? web|web search|look (?:up|online)|browse|research online|current (?:stock price|share price|news|exchange rate)|latest (?:news|price|updates)|(?:stock|share) price (?:of|for)|today['’]?s? (?:news|price|weather))\b", re.I)
-WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|analy[sz]e)\b", re.I)
+WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|research|analy[sz]e)\b", re.I)
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
 STATUS_INTENT = re.compile(r"\b(?:status|progress|how(?:'s| is) (?:the|my) (?:job|task|report)|is (?:the|my) (?:report|presentation|job|task) (?:ready|done)|what(?:'s| is) (?:happening|running))\b", re.I)
 CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort) (?:the |my |that |current |last )?(?:work|job|task|report|analysis|presentation)\b", re.I)
@@ -67,25 +69,19 @@ async def grounded_search(query: str, settings) -> dict:
                 config=types.GenerateContentConfig(
                     tools=[types.Tool(google_search=types.GoogleSearch())],
                     temperature=0.1,max_output_tokens=450))
-        urls=[]
-        for candidate in getattr(response,"candidates",[]) or []:
-            meta=getattr(candidate,"grounding_metadata",None)
-            for chunk in getattr(meta,"grounding_chunks",[]) or []:
-                web=getattr(chunk,"web",None)
-                url=getattr(web,"uri",None)
-                if isinstance(url,str) and url.startswith("https://") and len(url)<=2048:
-                    urls.append(url)
-        urls=list(dict.fromkeys(urls))[:8]
+        evidence = source_records(response)
+        urls = [item["url"] for item in evidence[:8]]
         answer=(getattr(response,"text","") or "").strip()
         if not urls or not answer:
             return {"text":"I couldn't verify that information from grounded live sources. I won't guess.",
                     "spoken":"I couldn't verify that from live sources, so I won't guess.",
                     "sources":[],"verified":False}
-        return {"text":answer+"\n\n**Sources:**\n" +"\n".join(
-                    f"- [Source {i}]( {url} )".replace("( ","(").replace(" )",")")
-                    for i,url in enumerate(urls,1)),
+        summary=evidence_summary(evidence)
+        return {"text":answer+"\n\n**Provider-attributed sources (not independently audited):**\n" +
+                "\n".join(f"- [Source {i}]({url})" for i,url in enumerate(urls,1)),
                 "spoken":re.sub(r"\[[^]]+\]\([^)]*\)|https?://\S+|\*","",answer)[:850],
-                "sources":urls,"verified":True}
+                "sources":urls,"evidence":evidence[:8],"evidence_summary":summary,
+                "verified":True}
     except (TimeoutError,Exception):
         return {"text":"Live search is temporarily unavailable. No current data has been verified.",
                 "spoken":"Live search is temporarily unavailable, so I can't verify current data.",
@@ -139,13 +135,21 @@ class VoiceTools:
                 return {"tool":"work_submit","text":"Attach the CSV or XLSX dataset in this conversation first. I won't invent input data.",
                         "spoken":"Please attach the dataset in this conversation before I analyze it.",
                         "verified":False}
+            scope=await propose_scope(text,formats,(uploads or [])[:1] if data_needed else [],self.settings)
+            if scope["research"] and "research" not in formats:
+                formats.append("research")
+            if scope["analysis"] and "data_analysis" not in formats:
+                formats.insert(0,"data_analysis")
             idem=hashlib.sha256((owner+"|"+nonce+"|"+str(sequence)+"|"+text).encode()).hexdigest()[:48]
             try:
                 job=await asyncio.to_thread(self.store.submit,owner,text,formats,idem,(uploads or [])[:1] if data_needed else [])
+                graph=await asyncio.to_thread(self.store.job_plan,owner,job["id"])
                 result={"tool":"work_submit","text":("**Work queued** · "+job["id"]+"\n\nRequested: "+", ".join(formats)+
-                                  ". I'll keep this job running independently of the conversation."),
-                        "spoken":"Your work is queued. You can keep talking while I work on it.",
-                        "verified":True,"job":job}
+                                  ". Execution plan: "+str(len(graph["steps"]))+" verified stages. "
+                                  "I'll keep this job running independently of the conversation."),
+                        "spoken":"Your work is queued with a verified execution plan. You can keep talking while it runs.",
+                        "verified":True,"job":job,"plan":graph,
+                        "planner":scope["source"],"planner_ms":scope["planner_ms"]}
             except Exception:
                 result={"tool":"work_submit","text":"The Work Agent couldn't accept this task. Nothing has been queued.",
                         "spoken":"The task wasn't accepted. I haven't started any background work.",
