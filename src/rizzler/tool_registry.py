@@ -34,7 +34,8 @@ VOICE_TOOLS = {
     "work_cancel": Tool("work_cancel", "private_artifact", 5, "Cancel owner-scoped job"),
     "memory_save": Tool("memory_save", "private_artifact", 5, "Explicit opt-in encrypted private fact", ("text",)),
     "memory_list": Tool("memory_list", "read_only", 5, "List or retrieve private saved facts"),
-    "memory_clear": Tool("memory_clear", "private_artifact", 5, "Delete all owner memories"),
+    "memory_clear": Tool("memory_clear", "private_artifact", 5, "Propose deleting all owner memories"),
+    "memory_clear_confirm": Tool("memory_clear_confirm", "private_artifact", 5, "Confirm explicit owner deletion"),
     "memory_remove": Tool("memory_remove", "private_artifact", 5, "Delete one owner memory", ("id",)),
 }
 SPECIALIST_TOOLS = {
