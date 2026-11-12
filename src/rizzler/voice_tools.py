@@ -15,7 +15,7 @@ SEARCH_INTENT = re.compile(r"\b(?:search(?: the)? web|web search|look (?:up|onli
 WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|research|analy[sz]e)\b", re.I)
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
 STATUS_INTENT = re.compile(r"\b(?:(?:status|progress)\b.{0,35}\b(?:my|job|task|report|work|presentation|analysis)\b|(?:my|the|this)\s+(?:job|task|report|work|presentation)\s+(?:status|progress)\b|how(?:'s| is)\s+(?:my|the)\s+(?:job|task|report|work)\b|is\s+(?:my|the)\s+(?:report|presentation|job|task)\s+(?:ready|done)\b)\b", re.I)
-CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort) (?:the |my |that |current |last )?(?:work|job|task|report|analysis|presentation)\b", re.I)
+CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort)\s+(?:the\s+|my\s+|that\s+)?(?:current\s+|last\s+)?(?:work|job|task|report|analysis|presentation)\b", re.I)
 
 
 def classify_tool(text: str, have_work: bool) -> str | None:
