@@ -83,6 +83,9 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         return result
 
     planned = {spec.name: spec for spec in plan(payload)}
+    graph = store.job_plan(owner, jid)
+    dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
+    finished = set()
 
     semaphore = asyncio.Semaphore(2)  # Protect speech responsiveness on CPU hosts.
 
@@ -91,8 +94,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         if not selected:
             return
         async def bounded(spec):
+            if not dependencies[spec.name].issubset(finished):
+                raise ValueError("Unmet planned specialist dependency")
             async with semaphore:
-                return await run_agent(spec)
+                result = await run_agent(spec)
+                finished.add(spec.name)
+                return result
         # TaskGroup cancels and joins sibling tasks on failure. Native threads
         # continue only inside their isolated, fenced attempt directory.
         async with asyncio.TaskGroup() as group:
