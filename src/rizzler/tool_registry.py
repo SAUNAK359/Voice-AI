@@ -28,6 +28,7 @@ class Tool:
 
 VOICE_TOOLS = {
     "web_search": Tool("web_search", "read_only", 22, "Source-grounded live query", ("query",)),
+    "visual_analyze": Tool("visual_analyze","read_only",35,"Analyze explicitly shared visual evidence",("question","attachment_ids")),
     "symbolic_math": Tool("symbolic_math", "read_only", 6, "Verified bounded equations", ("equations",)),
     "work_submit": Tool("work_submit", "private_artifact", 10, "Submit owner-scoped work", ("objective", "deliverables")),
     "work_status": Tool("work_status", "read_only", 5, "Read owner-scoped job status"),
