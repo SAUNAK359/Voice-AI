@@ -190,6 +190,19 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     def runtime():
         return {"mode": mode, "work_enabled": work is not None}
 
+    @app.get('/api/voice/tools')
+    def voice_tool_catalog(request: Request):
+        # Capabilities are server-observed configuration, not model promises.
+        auth(request, True)
+        from importlib.util import find_spec
+        return {"tools": {
+            "web_search": "configured" if cfg.gemini_api_key else "unavailable",
+            "symbolic_math": "available" if find_spec("sympy") is not None else "unavailable",
+            "work_agent": "available" if work is not None else "disabled",
+            "file_uploads": "available" if work is not None else "disabled",
+            "job_tracking": "available" if work is not None else "disabled"},
+            "note": "Configured does not prove live Google Search availability or current source freshness"}
+
     if identity is not None:
         @app.get('/auth/login')
         def login():
