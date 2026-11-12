@@ -8,7 +8,7 @@ import time
 
 from .math_engine import solve_equations
 
-SEARCH_INTENT = re.compile(r"\b(?:search(?: the)? web|look (?:up|online)|browse|research online|current (?:stock price|share price|news|exchange rate)|latest (?:news|price|updates)|(?:stock|share) price (?:of|for)|today['’]?s? (?:news|price|weather))\b", re.I)
+SEARCH_INTENT = re.compile(r"\b(?:search(?: the)? web|web search|look (?:up|online)|browse|research online|current (?:stock price|share price|news|exchange rate)|latest (?:news|price|updates)|(?:stock|share) price (?:of|for)|today['’]?s? (?:news|price|weather))\b", re.I)
 WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|analy[sz]e)\b", re.I)
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
 STATUS_INTENT = re.compile(r"\b(?:status|progress|how(?:'s| is) (?:the|my) (?:job|task|report)|is (?:the|my) (?:report|presentation|job|task) (?:ready|done)|what(?:'s| is) (?:happening|running))\b", re.I)
@@ -96,12 +96,25 @@ class VoiceTools:
         intent=classify_tool(text,self.store is not None)
         if not intent:return None
         started=time.perf_counter()
+        if intent=="web_search" and re.search(r"\\b(?:can you|do you|have you|are you able|access to|search tools|web search tools)\\b",text,re.I) and not re.search(r"\\b(?:current|latest|today|look up|search for|stock price|share price)\\b",text,re.I):
+            ready=bool(self.settings.gemini_api_key)
+            return {"tool":"web_search",
+                    "text":("I can search live sources when the Gemini grounding service is available. Ask me what to look up." if ready
+                            else "The search tool is installed, but its Gemini API key has not been configured."),
+                    "spoken":("Yes, I can search current sources. What would you like me to look up?" if ready
+                              else "Search is installed, but the provider is not configured."),
+                    "verified":ready,"tool_elapsed_ms":0}
         if intent=="math":
             try:
                 result=await asyncio.wait_for(asyncio.to_thread(solve_equations,text),timeout=6)
                 if result is None:
-                    return None
-                result["tool"]="symbolic_math"
+                    result={"tool":"symbolic_math",
+                            "text":"I couldn't parse both equations safely. Please type them as two equations, for example a+b=sqrt(7) and b^2=3/a.",
+                            "spoken":"I couldn't parse both equations clearly. Please type them and I'll verify the solution.",
+                            "verified":False}
+                else:
+                    result["tool"]="symbolic_math"
+                    result["verified"]=True
             except Exception:
                 result={"tool":"symbolic_math","text":"I couldn't verify a solution to those equations. Please send them in written mathematical form.",
                         "spoken":"I couldn't verify the equations. Please type them so I can solve them precisely.","verified":False}
