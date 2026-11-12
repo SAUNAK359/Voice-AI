@@ -20,8 +20,10 @@ RESEARCH_COMMAND = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+)?resear
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
 STATUS_INTENT = re.compile(r"\b(?:(?:status|progress)\b.{0,35}\b(?:my|job|task|report|work|presentation|analysis)\b|(?:my|the|this)\s+(?:job|task|report|work|presentation)\s+(?:status|progress)\b|how(?:'s| is)\s+(?:my|the)\s+(?:job|task|report|work)\b|is\s+(?:my|the)\s+(?:report|presentation|job|task)\s+(?:ready|done)\b)\b", re.I)
 VISUAL_INTENT = re.compile(
-    r"\b(?:this|these|that|attached|uploaded|screenshot|screen|image|photo|picture|"
-    r"diagram|chart|pdf|document|page|visible|look at|see here|analy[sz]e the image)\b",re.I)
+    r"\\b(?:screenshot|screen|image|photo|picture|diagram|chart|pdf|"
+    r"document|figure|visible|attached|uploaded)\\b|"
+    r"\\b(?:look at|can you see|what do you see|what is this|what's this|"
+    r"explain this|read this|describe this|identify this|in this)\\b",re.I)
 
 CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort)\s+(?:the\s+|my\s+|that\s+)?(?:current\s+|last\s+)?(?:work|job|task|report|analysis|presentation)\b", re.I)
 
@@ -170,9 +172,17 @@ class VoiceTools:
             return {"tool":intent,"text":line,"spoken":line,"verified":False}
 
     async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None)->dict|None:
-        # Speech is finalized by ASR before this path is reached. Attached
-        # content cannot decide whether a privileged tool should run.
-        if self.visual is not None and visuals and VISUAL_INTENT.search(text):
+        memory_intent=self.memory_intent(text)
+        if memory_intent is not None:
+            return self._memory_command(memory_intent,text,owner)
+        intent=classify_tool(text,self.store is not None)
+        if intent == "work_submit" and visuals:
+            line=("I can analyze the selected image first. To create a report "
+                  "from its findings, use the explicit Submit report action.")
+            return {"tool":"visual_analyze","text":line,"spoken":line,"verified":False}
+        # Finalized speech can read visual evidence; only explicit supported
+        # intents can trigger private writes, independent of visual content.
+        if intent is None and self.visual is not None and visuals and VISUAL_INTENT.search(text):
             require_tool("visual_analyze",explicit_private_write=False,
                          allowed=frozenset(VOICE_TOOLS))
             started=time.perf_counter()
@@ -188,10 +198,6 @@ class VoiceTools:
                 return {"tool":"visual_analyze","text":line,"spoken":line,
                         "verified":False,
                         "tool_elapsed_ms":round((time.perf_counter()-started)*1000,2)}
-        memory_intent=self.memory_intent(text)
-        if memory_intent is not None:
-            return self._memory_command(memory_intent,text,owner)
-        intent=classify_tool(text,self.store is not None)
         if not intent:return None
         permission_name = "symbolic_math" if intent == "math" else intent
         require_tool(permission_name, explicit_private_write=intent in ("work_submit","work_cancel"),
