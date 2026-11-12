@@ -33,3 +33,12 @@
 .bubble.assistant pre{font-family:ui-monospace,Consolas,monospace;white-space:pre-wrap;background:#081823;border-radius:8px;padding:12px;font-size:12px}
 .bubble.assistant .rich-bullet{padding-left:5px}
 @media(max-width:760px){.upload-label input{max-width:130px}#work-jobs{max-height:300px}}
+
+/* V11 visual input is explicit and separate from microphone capture. */
+.visual-panel{border-top:1px solid var(--border);padding:16px 0}
+.visual-toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.visual-list{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.visual-list button{max-width:100%;overflow-wrap:anywhere}
+.visual-panel textarea,.visual-panel select{width:100%;box-sizing:border-box;border:1px solid var(--border);background:#0b1b27;color:var(--fg);border-radius:9px;padding:10px;margin:7px 0;resize:vertical}
+.visual-panel form button,.visual-panel #visual-report{margin:8px 0}
+#visual-status{font-size:12px;color:var(--muted);min-height:22px;margin:10px 0;overflow-wrap:anywhere}

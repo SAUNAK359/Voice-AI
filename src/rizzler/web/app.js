@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- memoryEnabled:false,workEnabled:false,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -201,7 +201,7 @@ async function openMic(){
    navigator.mediaDevices.addEventListener('devicechange',s.deviceListener);
  }
 }
-async function disconnect(){s.session=false;s.recording=false;clearTimeout(s.reconnectTimer);s.reconnecting=false;
+async function disconnect(){s.visualIDs=[];renderVisuals();s.session=false;s.recording=false;clearTimeout(s.reconnectTimer);s.reconnecting=false;
  stopAudio();s.ledger.cancel(s.fence.generation);s.request?.abort();s.ws?.close();s.media?.getTracks().forEach(t=>t.stop());
  if(s.deviceListener){navigator.mediaDevices?.removeEventListener?.('devicechange',s.deviceListener);s.deviceListener=null;}
  await s.ctx?.close();s.ctx=null;s.mode='offline';$('connection').textContent='Disconnected';status('offline','Session ended');
@@ -223,6 +223,112 @@ async function connectSession(){
  }catch(err){$('error').textContent=err.message;status('error',err.message);
    s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
 }
+
+function renderVisuals(){
+ s.visualAnalysis=null;$('visual-report-panel').hidden=true;
+ const container=$('visual-list');if(!container)return;
+ container.replaceChildren();
+ for(const selected of s.visualIDs){
+  const button=document.createElement('button');
+  button.type='button';button.textContent='Remove '+selected.name;
+  button.onclick=async()=>{
+   try{const res=await fetch('/api/visual/attachments/'+encodeURIComponent(selected.id),
+      {method:'DELETE',headers:headers()});
+    if(!res.ok)throw Error('Unable to delete selected visual');
+    s.visualIDs=s.visualIDs.filter(x=>x.id!==selected.id);renderVisuals();
+   }catch(e){$('visual-status').textContent=e.message}
+  };
+  container.append(button);
+ }
+}
+async function uploadVisual(file){
+ if(!s.visualEnabled||!s.session)throw Error('Connect your private session first');
+ if(!file||file.size>8000000||file.size<32)throw Error('Visual file must be 32 bytes to 8 MB');
+ const response=await fetch('/api/visual/attachments',{
+  method:'POST',headers:{...headers(),'x-file-name':file.name,
+    'content-type':'application/octet-stream'},body:file});
+ if(!response.ok)throw Error('Visual upload rejected ('+response.status+')');
+ const record=await response.json();
+ s.visualIDs=[...s.visualIDs.filter(x=>x.id!==record.id),record].slice(-4);
+ renderVisuals();
+ $('visual-status').textContent='Shared '+record.name+' for this session. You can ask by text or voice.';
+ return record;
+}
+$('visual-file').addEventListener('change',async e=>{
+ try{if(e.target.files?.length)await uploadVisual(e.target.files[0]);}
+ catch(err){$('visual-status').textContent=err.message}
+ finally{e.target.value=''}
+});
+$('visual-screen').addEventListener('click',async()=>{
+ let capture=null;
+ try{
+  if(!s.session)throw Error('Connect your session before screen capture');
+  if(!navigator.mediaDevices?.getDisplayMedia)throw Error('Screen capture unsupported in this browser');
+  capture=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+  const track=capture.getVideoTracks()[0];
+  const video=document.createElement('video');
+  video.srcObject=capture;video.muted=true;
+  await video.play();
+  if(video.readyState<2)throw Error('No screenshot frames available');
+  const canvas=document.createElement('canvas');
+  const scale=Math.min(1,1920/video.videoWidth,1920/video.videoHeight);
+  canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
+  canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
+  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));
+  if(!blob)throw Error('Could not encode screenshot');
+  track.stop();capture.getTracks().forEach(x=>x.stop());capture=null;
+  await uploadVisual(new File([blob],'screen-capture.jpg',{type:'image/jpeg'}));
+ }catch(err){$('visual-status').textContent='Capture unavailable: '+err.message}
+ finally{capture?.getTracks().forEach(x=>x.stop())}
+});
+$('visual-clear').addEventListener('click',async()=>{
+ const snapshot=[...s.visualIDs];s.visualIDs=[];renderVisuals();
+ await Promise.allSettled(snapshot.map(x=>fetch('/api/visual/attachments/'+encodeURIComponent(x.id),
+     {method:'DELETE',headers:headers()})));
+ $('visual-status').textContent='Visual selection cleared.';
+});
+$('visual-form').addEventListener('submit',async e=>{
+ e.preventDefault();
+ if(!s.session){$('visual-status').textContent='Connect first.';return}
+ if(!s.visualIDs.length){$('visual-status').textContent='Attach an image or PDF first.';return}
+ if(s.recording||s.request||s.playing.size){$('visual-status').textContent='Finish the active voice turn first.';return}
+ const question=$('visual-question').value.trim();
+ if(!question)return;
+ const button=$('visual-ask');button.disabled=true;
+ const ids=s.visualIDs.map(x=>x.id),seq=++s.visualSeq;
+ $('visual-status').textContent='Analyzing shared visual evidence…';
+ message('user',question,seq,true);
+ try{
+  const response=await fetch('/api/visual/ask',{method:'POST',headers:{
+   ...headers(),'content-type':'application/json'},body:JSON.stringify({
+    question,attachment_ids:ids})});
+  if(!response.ok)throw Error('Visual analysis unavailable ('+response.status+')');
+  const result=await response.json();
+  message('assistant',result.answer,seq,true);
+  s.visualAnalysis=result.analysis_id;
+  $('visual-report-panel').hidden=!s.workEnabled || !s.visualAnalysis;
+  $('visual-status').textContent='Response ready. Evidence is user-provided, not independently verified.';
+ }catch(err){$('visual-status').textContent=err.message}
+ finally{button.disabled=false}
+});
+
+$('visual-report').addEventListener('click',async()=>{
+ if(!s.visualAnalysis||!s.workEnabled){$('visual-status').textContent='Analyze visuals and enable Work first.';return}
+ const b=$('visual-report');b.disabled=true;
+ try{
+  const res=await fetch('/api/visual/report',{method:'POST',
+    headers:{...headers(),'content-type':'application/json'},
+    body:JSON.stringify({analysis_id:s.visualAnalysis,
+        format:$('visual-report-format').value})});
+  if(!res.ok)throw Error('Work report not accepted ('+res.status+')');
+  const item=await res.json();
+  $('visual-status').textContent='Work queued: '+item.job.id.slice(0,10)+'. You can continue speaking.';
+  if(s.workEnabled)refreshWork();
+ }catch(err){$('visual-status').textContent=err.message}
+ finally{b.disabled=false}
+});
+
 document.addEventListener('pointerdown',()=>{
  if(s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{});
 },{passive:true});
@@ -239,6 +345,7 @@ $('logout').addEventListener('click',async()=>{
   const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
   const d=await r.json();s.production=d.mode==='production';
   s.workEnabled=!!d.work_enabled;$('work-panel').hidden=!s.workEnabled;
+  s.visualEnabled=!!d.multimodal_enabled;$('visual-panel').hidden=!s.visualEnabled;
   s.memoryEnabled=!!d.encrypted_memory_enabled;$('memory-open').hidden=!s.memoryEnabled;
   $('logout').hidden=!s.production;
   if(s.production){
@@ -368,7 +475,7 @@ $('mute').addEventListener('click',()=>{s.muted=!s.muted;$('mute').textContent=s
  if(s.muted){interrupt();s.recording=false;s.gate.reset();status('muted','Microphone muted')}else status('listening','Speak naturally')});
 $('send').addEventListener('click',()=>{if(s.recording){finish();return}if(s.recentBytes<s.rate*2*.35)return;
  start(true);finish()});
-$('reset').addEventListener('click',async()=>{interrupt();s.history.clear();$('messages').replaceChildren();s.ledger.cancel(s.fence.generation);
+$('reset').addEventListener('click',async()=>{interrupt();s.history.clear();s.visualIDs=[];renderVisuals();$('messages').replaceChildren();s.ledger.cancel(s.fence.generation);
  if(!sendWs({type:'new_conversation'}))await fetch('/api/reset',{method:'POST',headers:headers()}).catch(()=>{});
  status('listening','New conversation')});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{})});

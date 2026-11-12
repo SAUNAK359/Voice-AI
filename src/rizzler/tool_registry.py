@@ -28,6 +28,7 @@ class Tool:
 
 VOICE_TOOLS = {
     "web_search": Tool("web_search", "read_only", 22, "Source-grounded live query", ("query",)),
+    "visual_analyze": Tool("visual_analyze","read_only",35,"Analyze explicitly shared visual evidence",("question","attachment_ids")),
     "symbolic_math": Tool("symbolic_math", "read_only", 6, "Verified bounded equations", ("equations",)),
     "work_submit": Tool("work_submit", "private_artifact", 10, "Submit owner-scoped work", ("objective", "deliverables")),
     "work_status": Tool("work_status", "read_only", 5, "Read owner-scoped job status"),
@@ -46,9 +47,10 @@ SPECIALIST_TOOLS = {
 REGISTRY = {**VOICE_TOOLS, **SPECIALIST_TOOLS}
 
 
-def capabilities(settings, have_work: bool, memory_enabled: bool = False) -> list[dict]:
+def capabilities(settings, have_work: bool, memory_enabled: bool = False, visual_enabled: bool = False) -> list[dict]:
     return [
         spec.public(
+            (visual_enabled and bool(settings.gemini_api_key)) if name == "visual_analyze" else
             bool(settings.gemini_api_key) if name in ("web_search", "research") else
             find_spec("sympy") is not None if name == "symbolic_math" else
             have_work if name in ("work_submit", "work_status", "work_cancel", *SPECIALIST_TOOLS) else
