@@ -48,3 +48,13 @@ def test_incomplete_or_corrupt_latency_never_passes_qualification():
     with pytest.raises(ValueError,match="Duplicate"):
         evaluate([row(1),row(1)])
     assert evaluate([])["completion_rate"] is None
+
+
+def test_per_device_qualification_cannot_hide_weak_device():
+    desktop=[row(i,"acoustic_loopback") for i in range(1000)]
+    mobile=[{**row(i+1000,"acoustic_loopback"),"device":"ios-safari"}
+            for i in range(20)]
+    verdict=evaluate(desktop+mobile)
+    assert verdict["physical_by_device"]["android-chrome"]["coverage_qualified"]
+    assert not verdict["physical_by_device"]["ios-safari"]["coverage_qualified"]
+    assert not verdict["physical_audio_slo_met"]
