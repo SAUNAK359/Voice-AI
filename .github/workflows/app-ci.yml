@@ -38,6 +38,8 @@ jobs:
         run: python -m py_compile scripts/evaluate_reasoning.py
       - name: Check source syntax
         run: python -m compileall -q src/rizzler
+      - name: Evaluate frozen voice tool routing (no side-effect false positives)
+        run: python scripts/evaluate_tool_routing.py --output /tmp/rizzler_v11_routing.json
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
