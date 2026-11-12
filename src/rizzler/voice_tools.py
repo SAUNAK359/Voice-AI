@@ -107,7 +107,7 @@ class VoiceTools:
         require_tool(permission_name, explicit_private_write=intent in ("work_submit","work_cancel"),
                      allowed=frozenset(VOICE_TOOLS))
         started=time.perf_counter()
-        if intent=="web_search" and re.search(r"\b(?:can you|do you|have you|are you able|access to|search tools|web search tools)\\b",text,re.I) and not re.search(r"\b(?:current|latest|today|look up|search for|stock price|share price)\\b",text,re.I):
+        if intent=="web_search" and re.search(r"\b(?:can you|do you|have you|are you able|access to|search tools|web search tools)\b",text,re.I) and not re.search(r"\b(?:current|latest|today|look up|search for|for|about|stock price|share price)\b",text,re.I):
             ready=bool(self.settings.gemini_api_key)
             return {"tool":"web_search",
                     "text":("I can search live sources when the Gemini grounding service is available. Ask me what to look up." if ready
