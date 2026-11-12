@@ -110,7 +110,9 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
             ".\n\n" + "\n".join(
                 "- "+rec["url"]+" (provider: "+rec["publisher"]+")" for rec in records)
             )
-        return "# Grounded research report\n\n"+"\n\n".join(sections)+limitations,urls
+        return {"text":"# Grounded research report\n\n"+"\n\n".join(sections)+limitations,
+                "sources":urls, "evidence":records,
+                "evidence_summary":audit, "partial":len(successful)<len(requests)}
     finally:
         await client.aio.aclose()
 
