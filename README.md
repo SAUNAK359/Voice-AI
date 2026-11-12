@@ -77,6 +77,10 @@ This package is **not** the complete CUDA/voice server installation: to run the 
 
 ## Getting started on Kaggle
 
+**V11 canonical runtime:** Use [Rizzler V11 Unified Native Kaggle](notebooks/Rizzler_V11_Unified_Native_Kaggle.ipynb), which installs the current native `src/rizzler` package and launches both FastAPI and the supervised Work worker. Supply `GEMINI_API_KEY` and `RIZZLER_ACCESS_KEY` through Kaggle Secrets. GPU and live provider qualification remain required. The notebook is session-ephemeral and is **not** equivalent to a persistent production deployment.
+
+The following V9 standalone instructions are retained only for reproducing archived benchmark snapshots, not for launching V11.
+
 1. Create a Kaggle notebook, enable **Internet** and an **NVIDIA GPU** (T4/P100 where supported).
 2. In **Add-ons → Secrets**, add `GEMINI_API_KEY` and `RIZZLER_ACCESS_KEY` (at least 16 random characters). Enable them for this notebook.
 3. Upload/import [`notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb`](notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb), then **Run All in cell order**. Do not replace Kaggle's installed PyTorch/CUDA with an AMD ROCm wheel.

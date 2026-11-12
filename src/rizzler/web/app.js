@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- workEnabled:false,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -239,6 +239,7 @@ $('logout').addEventListener('click',async()=>{
   const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
   const d=await r.json();s.production=d.mode==='production';
   s.workEnabled=!!d.work_enabled;$('work-panel').hidden=!s.workEnabled;
+  s.memoryEnabled=!!d.encrypted_memory_enabled;$('memory-open').hidden=!s.memoryEnabled;
   $('logout').hidden=!s.production;
   if(s.production){
     const who=await fetch('/auth/session');
@@ -249,6 +250,51 @@ $('logout').addEventListener('click',async()=>{
  }catch(e){status('error','Cannot verify runtime access')}
 })();
 
+async function refreshMemories(){
+ if(!s.memoryEnabled||(!s.production&&!s.key))return;
+ const feedback=$('memory-feedback'),target=$('memory-items');
+ try{
+  const res=await fetch('/api/voice/memories',{headers:headers()});
+  if(!res.ok)throw Error('Memory list unavailable');
+  const {items=[]}=await res.json();target.replaceChildren();
+  if(!items.length){feedback.textContent='No saved memories.';return}
+  feedback.textContent=items.length+' saved memories.';
+  for(const item of items){
+   const card=document.createElement('article');card.className='job-card';
+   const text=document.createElement('p');text.textContent=item.text;
+   const remove=document.createElement('button');remove.type='button';remove.textContent='Delete';
+   remove.addEventListener('click',async()=>{
+    try{
+     const r=await fetch('/api/voice/memories/'+encodeURIComponent(item.id),
+       {method:'DELETE',headers:headers()});
+     if(!r.ok)throw Error('Deletion failed');await refreshMemories();
+    }catch(e){feedback.textContent=e.message}
+   });
+   card.append(text,remove);target.append(card);
+  }
+ }catch(e){feedback.textContent=e.message}
+}
+$('memory-open').addEventListener('click',async()=>{
+ $('memory-panel').hidden=!$('memory-panel').hidden;
+ if(!$('memory-panel').hidden)await refreshMemories();
+});
+$('memory-form').addEventListener('submit',async e=>{
+ e.preventDefault();const text=$('memory-fact').value.trim();
+ try{
+  const r=await fetch('/api/voice/memories',{method:'POST',
+   headers:{...headers(),'content-type':'application/json'},
+   body:JSON.stringify({text})});
+  if(!r.ok)throw Error('Could not save memory (check length and content)');
+  $('memory-fact').value='';await refreshMemories();
+ }catch(error){$('memory-feedback').textContent=error.message}
+});
+$('memory-clear').addEventListener('click',async()=>{
+ if(!window.confirm('Permanently delete all saved memories for this account?'))return;
+ try{
+  const res=await fetch('/api/voice/memories',{method:'DELETE',headers:headers()});
+  if(!res.ok)throw Error('Could not delete saved memories');await refreshMemories();
+ }catch(error){$('memory-feedback').textContent=error.message}
+});
 async function refreshToolCatalog(){
  try{
   const r=await fetch('/api/voice/tools',{headers:headers()});

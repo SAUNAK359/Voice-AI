@@ -24,8 +24,8 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "bytes": 2188,
-      "sha256": "a9e847545f32dce80591ee6c80feb25513ec56913b2403729f4c0eb236749b59"
+      "bytes": 2253,
+      "sha256": "965e4c71da0f916890775ddda5815d7a19eb7f5bd97d9a1faa781301a5075567"
     },
     {
       "path": ".github/workflows/codeql.yml",
@@ -94,8 +94,8 @@
     },
     {
       "path": "docs/kaggle-setup.md",
-      "bytes": 2746,
-      "sha256": "f66e302e9e21ad401872e7e5b3d4215aae81109bcbe3e6ec0d2a8a5d0bbd7e53"
+      "bytes": 2540,
+      "sha256": "ca917cdc230329fa0c7cc28a13f87cb7801c0d01aaa89e0c1c643742782dd7a5"
     },
     {
       "path": "docs/project-brief.md",
@@ -179,8 +179,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 11262,
-      "sha256": "1c756a833cde8d656785142c90e07b9575d743e4947155859e00fbee1b236e27"
+      "bytes": 11850,
+      "sha256": "ff6fcd4118d5d696b95c598754681f4a296d23ad841cc951fc4b3e72b3a363e5"
     },
     {
       "path": "schemas/work-handoff-example.json",

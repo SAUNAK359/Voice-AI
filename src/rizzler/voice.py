@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import secrets
+import sqlite3
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -138,7 +139,20 @@ class VoiceEngine:
                         if tool_result is not None:
                             yield tool_result['text']
                         else:
-                            source = self.providers.llm.stream(transcript, history)
+                            memory = getattr(self.tools, "memory", None) if self.tools else None
+                            if (memory is not None and owner is not None and
+                                    hasattr(self.providers.llm, "stream_with_memory")):
+                                try:
+                                    facts = await asyncio.wait_for(
+                                        asyncio.to_thread(memory.relevant,owner,transcript),
+                                        timeout=1.5)
+                                except (ValueError, OSError, RuntimeError, TimeoutError,
+                                        sqlite3.DatabaseError):
+                                    facts = []
+                                source = self.providers.llm.stream_with_memory(
+                                    transcript, history, facts)
+                            else:
+                                source = self.providers.llm.stream(transcript, history)
                             first = asyncio.create_task(anext(source), name='gemini-first-text')
                             try:
                                 try:

@@ -32,6 +32,11 @@ VOICE_TOOLS = {
     "work_submit": Tool("work_submit", "private_artifact", 10, "Submit owner-scoped work", ("objective", "deliverables")),
     "work_status": Tool("work_status", "read_only", 5, "Read owner-scoped job status"),
     "work_cancel": Tool("work_cancel", "private_artifact", 5, "Cancel owner-scoped job"),
+    "memory_save": Tool("memory_save", "private_artifact", 5, "Explicit opt-in encrypted private fact", ("text",)),
+    "memory_list": Tool("memory_list", "read_only", 5, "List or retrieve private saved facts"),
+    "memory_clear": Tool("memory_clear", "private_artifact", 5, "Propose deleting all owner memories"),
+    "memory_clear_confirm": Tool("memory_clear_confirm", "private_artifact", 5, "Confirm explicit owner deletion"),
+    "memory_remove": Tool("memory_remove", "private_artifact", 5, "Delete one owner memory", ("id",)),
 }
 SPECIALIST_TOOLS = {
     name: Tool(name, "read_only" if name in ("research", "sql_analytics") else "private_artifact",
@@ -41,12 +46,13 @@ SPECIALIST_TOOLS = {
 REGISTRY = {**VOICE_TOOLS, **SPECIALIST_TOOLS}
 
 
-def capabilities(settings, have_work: bool) -> list[dict]:
+def capabilities(settings, have_work: bool, memory_enabled: bool = False) -> list[dict]:
     return [
         spec.public(
             bool(settings.gemini_api_key) if name in ("web_search", "research") else
             find_spec("sympy") is not None if name == "symbolic_math" else
-            have_work if name in ("work_submit", "work_status", "work_cancel", *SPECIALIST_TOOLS) else True
+            have_work if name in ("work_submit", "work_status", "work_cancel", *SPECIALIST_TOOLS) else
+            memory_enabled if name.startswith("memory_") else True
         ) for name, spec in REGISTRY.items()
     ]
 

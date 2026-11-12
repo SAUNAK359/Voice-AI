@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import secrets
+import sqlite3
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -84,7 +85,24 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         work = None
 
     from .voice_tools import VoiceTools
-    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg))
+    memory = None
+    if environ.get("RIZZLER_MEMORY_ENABLED","").strip().lower() in ("1","true","yes"):
+        if not production and environ.get("RIZZLER_DEMO_MEMORY_SINGLE_USER","") != "1":
+            raise ValueError("Demo memory requires explicit single-user trust acknowledgement")
+        from .memory import MemoryStore
+        memory_key = environ.get("RIZZLER_MEMORY_KEY","")
+        if not memory_key or memory_key in (cfg.access_key, work_signing_key,
+                environ.get("RIZZLER_SESSION_SIGNING_KEY","")):
+            raise ValueError("Memory encryption requires an independent secret")
+        memory_root = environ.get("RIZZLER_MEMORY_ROOT","")
+        if not memory_root:
+            if not work_root:
+                raise ValueError("Encrypted memory requires an explicit persistent root")
+            memory_root = str(Path(work_root) / "private_memory")
+        if not Path(memory_root).is_absolute():
+            raise ValueError("Private memory requires an absolute storage path")
+        memory = MemoryStore(memory_root,memory_key)
+    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory))
     @asynccontextmanager
     async def lifespan(app):
         # Optional one-time provider prewarm, performed after API starts
@@ -117,6 +135,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app.state.settings, app.state.sessions = cfg, sessions
     app.state.operations = operations
     app.state.work, app.state.identity = work, identity
+    app.state.memory = memory
     app.state.production = production
     app.add_exception_handler(AdmissionBusy, lambda request, exc: JSONResponse(
         status_code=429, content={'detail': 'Voice capacity busy; retry later'}))
@@ -191,7 +210,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     @app.get('/api/runtime')
     def runtime():
-        return {"mode": mode, "work_enabled": work is not None}
+        return {"mode":mode,"work_enabled":work is not None,
+                "encrypted_memory_enabled":memory is not None,
+                "runtime":"native_v11"}
 
     @app.get('/api/voice/tools')
     def voice_tool_catalog(request: Request):
@@ -203,8 +224,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             "symbolic_math": "available" if find_spec("sympy") is not None else "unavailable",
             "work_agent": "available" if work is not None else "disabled",
             "file_uploads": "available" if work is not None else "disabled",
-            "job_tracking": "available" if work is not None else "disabled"},
-            "registry": capabilities(cfg,work is not None),
+            "job_tracking": "available" if work is not None else "disabled",
+            "memory": "available" if memory is not None else "disabled"},
+            "registry": capabilities(cfg,work is not None,memory_enabled=memory is not None),
             "note": "Configured does not prove live Google Search availability or current source freshness"}
 
     if identity is not None:
@@ -334,6 +356,59 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     def authorize(request: Request):
         auth(request)
         return {'ok': True}
+
+    @app.get('/api/voice/memories')
+    def list_memories(request: Request):
+        owner = auth(request, True)
+        if memory is None:
+            return {"enabled":False,"items":[]}
+        try:
+            return {"enabled":True,"items":memory.list(owner)}
+        except (ValueError, OSError, RuntimeError, sqlite3.DatabaseError):
+            raise HTTPException(status_code=503, detail="Private memory unavailable") from None
+
+    @app.post('/api/voice/memories')
+    async def save_memory(request: Request):
+        owner = auth(request, True)
+        if memory is None:
+            raise HTTPException(status_code=409,detail="Private memory disabled")
+        data=bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data)>2048:
+                raise HTTPException(status_code=413,detail="Memory text too large")
+        try:
+            payload=json.loads(data)
+            if not isinstance(payload,dict) or set(payload)!={"text"}:
+                raise ValueError("Invalid memory input")
+            result=memory.remember(owner,payload["text"])
+        except (ValueError,TypeError,UnicodeError):
+            raise HTTPException(status_code=400,detail="Invalid memory input") from None
+        except (OSError,RuntimeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=503,detail="Private memory unavailable") from None
+        return result
+
+    @app.delete('/api/voice/memories/{memory_id}')
+    def delete_memory(request: Request, memory_id: str):
+        owner = auth(request, True)
+        if memory is None:
+            raise HTTPException(status_code=409,detail="Private memory disabled")
+        try:
+            return {"deleted":memory.delete(owner,memory_id)}
+        except ValueError:
+            raise HTTPException(status_code=400,detail="Invalid memory identifier") from None
+        except (OSError,RuntimeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=503,detail="Private memory unavailable") from None
+
+    @app.delete('/api/voice/memories')
+    def clear_memories(request: Request):
+        owner = auth(request, True)
+        if memory is None:
+            raise HTTPException(status_code=409,detail="Private memory disabled")
+        try:
+            return {"deleted":memory.delete(owner)}
+        except (OSError,RuntimeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=503,detail="Private memory unavailable") from None
 
     @app.post('/api/reset')
     async def reset(request: Request):
