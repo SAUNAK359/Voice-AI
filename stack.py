@@ -467,13 +467,18 @@ class Gateway:
                 continue
             if not pod:
                 continue
-            if row['status'] == 'starting':
+            if row['status'] in ('starting', 'running'):
                 try:
                     state = await self.provider.state(pod)
                     if state.get('status') in ('ERROR', 'TERMINATED', 'EXITED'):
-                        self._set(ident, status='stopping', expires=now)
-                    elif state.get('status') == 'RUNNING' and await self.provider.ready(pod):
+                        self._set(ident, status='stopping', expires=now,
+                                  last_error='upstream_exited')
+                    elif row['status'] == 'starting' and state.get('status') == 'RUNNING' and await self.provider.ready(pod):
                         self._set(ident, status='running')
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == 404:
+                        self._set(ident, status='stopping', expires=now,
+                                  last_error='upstream_missing')
                 except Exception:
                     continue
 
