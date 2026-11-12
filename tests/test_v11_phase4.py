@@ -67,7 +67,7 @@ def test_memory_limits_dedup_expiry_tamper_and_secret_rejection(tmp_path):
     with sqlite3.connect(mem.path) as db:
         db.execute("UPDATE memory SET ciphertext=? WHERE owner=?",
                    (b"modified",OWNER_A))
-    with pytest.raises(ValueError,match="Corrupt"):
+    with pytest.raises(ValueError,match="integrity"):
         mem.list(OWNER_A)
     assert mem.delete(OWNER_A)==2
 
