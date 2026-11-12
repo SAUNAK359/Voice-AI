@@ -178,3 +178,16 @@ def test_config_fails_closed_when_unconfigured(tmp_path):
         Config(origin='https://example.org', key='a'*64, mode='runpod', db_path=tmp_path/'x')
     with pytest.raises(ValueError):
         Config(origin='https://example.org', key='short', db_path=tmp_path/'x')
+
+
+def test_inflight_stream_terminates_at_absolute_deadline():
+    from stack import expiring_chunks
+    async def exercise():
+        async def slow():
+            yield b'first'
+            await asyncio.sleep(.12)
+            yield b'should-never-be-served'
+        expires = time.time() + .035
+        parts = [part async for part in expiring_chunks(slow(), expires)]
+        return parts
+    assert asyncio.run(exercise()) == [b'first']
