@@ -44,8 +44,12 @@ networked agents or third-party tools, rather than adding latency and risk.
    unindexed. Background attempt files require retention/garbage-collection
    policy before high-volume deployment.
 
-All status and artifact endpoints are owner-scoped. No model-produced task
-claim is a substitute for persisted evidence. Quality reports only show
+All status and artifact endpoints are owner-scoped. The Work dashboard polls
+current job events and specialist states every 8 seconds while visible,
+showing elapsed time, per-agent target and independently stored QA verdicts.
+The Voice status endpoint constructs its spoken report from the same durable
+ledger, never from model-invented percentage estimates. No model-produced task
+claim substitutes for persisted evidence. Quality reports only show
 `completed` when the parent job is actually committed.
 
 ## Concrete stage SLAs (targets, not guarantees)
