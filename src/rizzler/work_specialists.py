@@ -82,11 +82,27 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 context["receipts"][receipt.kind] = receipt
         return result
 
-    for spec in plan(payload):
-        await run_agent(spec)
-        # Never allow a restored worker to retain the job without renewing
-        # its parent lease between independently committed sub-agent stages.
+    planned = {spec.name: spec for spec in plan(payload)}
+
+    async def stage_group(names):
+        selected = [planned[name] for name in names if name in planned]
+        if not selected:
+            return
+        # TaskGroup cancels and joins sibling tasks if any specialist fails.
+        # Each specialist commits independently under the same parent fence.
+        async with asyncio.TaskGroup() as group:
+            for spec in selected:
+                group.create_task(run_agent(spec), name="specialist-" + spec.name)
         store.renew(jid, worker_id, fence, lease_seconds=45)
+
+    # Independent evidence acquisition can overlap. Content generation waits
+    # for evidence, documents share that evidence, ZIP waits for other files,
+    # and final QA runs only after every required artifact is available.
+    await stage_group(("research", "sql_analytics"))
+    await stage_group(("orchestrator",))
+    await stage_group(("powerpoint", "word", "excel"))
+    await stage_group(("pdf_visual",))
+    await stage_group(("quality",))
 
     text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
     if context["summary"]:
