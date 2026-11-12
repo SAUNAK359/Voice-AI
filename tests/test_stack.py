@@ -191,3 +191,21 @@ def test_inflight_stream_terminates_at_absolute_deadline():
         parts = [part async for part in expiring_chunks(slow(), expires)]
         return parts
     assert asyncio.run(exercise()) == [b'first']
+
+
+def test_upstream_exits_before_deadline_and_gateway_stops_lease(setup):
+    client, gate, provider, now = setup
+    client.get('/')
+    assert launch(client).status_code == 202
+    client.portal.call(asyncio.sleep, .01)
+    tick(client, gate)
+    assert client.get('/api/status').json()['status'] == 'running'
+
+    async def exited(_):
+        return {'status': 'EXITED'}
+    provider.state = exited
+    tick(client, gate)
+    assert client.get('/api/status').json()['status'] == 'expired'
+    tick(client, gate)
+    assert client.get('/api/status').json()['status'] == 'ended'
+    assert not provider.pods
