@@ -20,10 +20,10 @@ RESEARCH_COMMAND = re.compile(r"^\s*(?:please\s+|can you\s+|could you\s+)?resear
 OUTPUT_INTENT = re.compile(r"\b(?:report|research report|powerpoint|presentation|slides?|excel|spreadsheet|workbook|word document|docx|pdf|csv|data analysis|dataset)\b", re.I)
 STATUS_INTENT = re.compile(r"\b(?:(?:status|progress)\b.{0,35}\b(?:my|job|task|report|work|presentation|analysis)\b|(?:my|the|this)\s+(?:job|task|report|work|presentation)\s+(?:status|progress)\b|how(?:'s| is)\s+(?:my|the)\s+(?:job|task|report|work)\b|is\s+(?:my|the)\s+(?:report|presentation|job|task)\s+(?:ready|done)\b)\b", re.I)
 VISUAL_INTENT = re.compile(
-    r"\\b(?:screenshot|screen|image|photo|picture|diagram|chart|pdf|"
-    r"document|figure|visible|attached|uploaded)\\b|"
-    r"\\b(?:look at|can you see|what do you see|what is this|what's this|"
-    r"explain this|read this|describe this|identify this|in this)\\b",re.I)
+    r"\b(?:screenshot|screen|image|photo|picture|diagram|chart|pdf|"
+    r"document|figure|visible|attached|uploaded)\b|"
+    r"\b(?:look at|can you see|what do you see|what is this|what's this|"
+    r"explain this|read this|describe this|identify this|in this)\b",re.I)
 
 CANCEL_INTENT = re.compile(r"\b(?:cancel|stop|abort)\s+(?:the\s+|my\s+|that\s+)?(?:current\s+|last\s+)?(?:work|job|task|report|analysis|presentation)\b", re.I)
 
