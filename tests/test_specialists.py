@@ -197,3 +197,144 @@ def test_corrupted_specialist_checkpoint_is_never_published(tmp_path,monkeypatch
     assert asyncio.run(WorkWorker(store,composer=composer).once())
     assert store.get("owner_1",job["id"])["status"]=="failed"
     assert store.artifacts("owner_1",job["id"])==[]
+
+
+def test_fenced_promotion_rejects_stale_native_renderer(tmp_path, monkeypatch):
+    """A renderer finishing after timeout must never overwrite recovered work."""
+    from rizzler.artifacts import verify_artifact
+    import rizzler.work_store as module
+    clock = [1000.0]
+    monkeypatch.setattr(module.time, "time", lambda: clock[0])
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Produce a comprehensive verified report.",
+                       ["md"], "staging_fence_001", [])
+    jid = job["id"]
+    old = store.claim("old_worker", 20)
+    oldpath = store.root / "attempts" / "owner_1" / jid / str(old["fence"]) / "pdf_visual" / "md.md"
+    oldpath.parent.mkdir(parents=True)
+    oldpath.write_text("# Stale report\nThis output belongs to an expired worker attempt.", encoding="utf-8")
+    stale_receipt = verify_artifact(oldpath, "md")
+    clock[0] += 21
+    new = store.claim("new_worker", 20)
+    path = store.root / "attempts" / "owner_1" / jid / str(new["fence"]) / "pdf_visual" / "md.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("# New verified report\nThis output belongs to the current worker only.", encoding="utf-8")
+    receipt = verify_artifact(path, "md")
+    final = store.agent_publish(jid, "new_worker", new["fence"], "owner_1", path, receipt)
+    with pytest.raises(StaleLease):
+        store.agent_publish(jid, "old_worker", old["fence"], "owner_1", oldpath, stale_receipt)
+    assert final.read_bytes() == b"# New verified report\nThis output belongs to the current worker only."
+    assert oldpath.exists()
+
+
+def test_terminal_parent_settles_every_pending_agent(tmp_path):
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Create an independent business report.",
+                       ["docx", "md"], "terminal_agents_001", [])
+    claim = store.claim("agent_worker", 30)
+    store.agent_begin(job["id"], "agent_worker", claim["fence"], "orchestrator", 150)
+    store.fail(job["id"], "agent_worker", claim["fence"], "execution_error")
+    stages = {x["agent"]: x for x in store.agent_steps("owner_1", job["id"])}
+    assert stages["orchestrator"]["status"] == "failed"
+    assert stages["orchestrator"]["finished"] >= stages["orchestrator"]["started"]
+    assert {x["status"] for name, x in stages.items() if name != "orchestrator"} == {"skipped"}
+    assert all(x["finished"] > 0 for x in stages.values())
+
+
+def test_pending_quality_is_not_published_as_final(tmp_path):
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Produce a useful standalone report.",
+                       ["md"], "quality_not_yet_committed", [])
+    claim = store.claim("qa_worker", 30)
+    store.agent_begin(job["id"], "qa_worker", claim["fence"], "quality", 45)
+    store.agent_complete(job["id"], "qa_worker", claim["fence"], "quality",
+                         {"passed": True, "missing": []},
+                         {"passed": True, "checks": ["test_only"]})
+    state = store.quality_report("owner_1", job["id"])
+    assert state["status"] == "running" and state["quality"] is None
+    store.fail(job["id"], "qa_worker", claim["fence"])
+    state = store.quality_report("owner_1", job["id"])
+    assert state["status"] == "failed" and state["quality"] is None
+
+
+def test_cancelled_before_execution_settles_agent_steps(tmp_path):
+    store = WorkStore(tmp_path / "work")
+    job = store.submit("owner_1", "Create a report with verified formatting.",
+                       ["pptx", "pdf"], "before_execution_cancelled", [])
+    store.cancel("owner_1", job["id"])
+    statuses = store.agent_steps("owner_1", job["id"])
+    assert statuses and all(x["status"] == "cancelled" for x in statuses)
+    assert all(x["finished"] > 0 for x in statuses)
+
+
+def test_independent_document_agents_overlap_and_use_verified_sql_data(tmp_path, monkeypatch):
+    """Two independent specialist renderers run concurrently with shared evidence."""
+    import threading
+    from docx import Document
+    from pptx import Presentation
+    import rizzler.work_specialists as specialists
+    actual = specialists.render_one
+    rendezvous = threading.Barrier(2, timeout=8)
+    concurrent = []
+
+    def tracked(kind, path, title, text, table, sources):
+        if kind in ("docx", "pptx"):
+            concurrent.append(kind)
+            rendezvous.wait()
+        return actual(kind, path, title, text, table, sources)
+
+    monkeypatch.setattr(specialists, "render_one", tracked)
+    store = WorkStore(tmp_path / "work")
+    upload = store.register_upload("owner_1", "sales.csv",
+                b"region,revenue\nNorth,10\nSouth,30\n")
+    job = store.submit("owner_1", "Prepare a complete report on the sales data.",
+                       ["data_analysis", "docx", "pptx"], "parallel_evidence_001",
+                       [upload["id"]])
+    assert asyncio.run(WorkWorker(store, composer=composer).once())
+    assert store.get("owner_1", job["id"])["status"] == "completed"
+    assert set(concurrent) == {"docx", "pptx"}
+    artifacts = store.artifacts("owner_1", job["id"])
+    document = next(x for x in artifacts if x["kind"] == "docx")
+    slides = next(x for x in artifacts if x["kind"] == "pptx")
+    doc = Document(store.artifact("owner_1", document["id"])[0])
+    paragraphs = "\n".join(p.text for p in doc.paragraphs)
+    assert "Verified dataset evidence" in paragraphs and "mean 20" in paragraphs
+    deck = Presentation(store.artifact("owner_1", slides["id"])[0])
+    slide_text = "\n".join(shape.text for slide in deck.slides
+                              for shape in slide.shapes if shape.has_text_frame)
+    assert "Verified dataset evidence" in slide_text
+    assert "mean 20" in slide_text
+
+
+def test_energy_and_empathy_prosody_remain_bounded():
+    assert expressive_speech_speed("Excellent! Your report is verified.") > expressive_speech_speed(
+        "I'm sorry, the report failed validation.")
+    assert expressive_speech_speed("Did you want me to continue?") < expressive_speech_speed(
+        "Great news! Your presentation is completed.")
+    assert 1 <= expressive_speech_speed("Warning, something failed!") <= 1.24
+
+
+def test_live_agent_status_and_voice_are_ledger_grounded(tmp_path, monkeypatch):
+    monkeypatch.setenv("RIZZLER_WORK_ROOT", str(tmp_path / "work"))
+    monkeypatch.setenv("RIZZLER_WORK_SIGNING_KEY", SIGNING)
+    with TestClient(create_app(Settings(access_key=KEY))) as client:
+        store = client.app.state.work
+        job = store.submit("owner_1", "Produce a well-structured report.",
+                           ["md"], "live_agent_status_001", [])
+        headers = {"Authorization": "Bearer " + issue_token("owner_1", SIGNING)}
+        queued = client.get(f"/api/work/jobs/{job['id']}/agents", headers=headers).json()
+        assert all(s["target_seconds"] > 0 for s in queued["agents"])
+        assert all(s["elapsed_seconds"] is None for s in queued["agents"])
+        claim = store.claim("worker", 45)
+        store.agent_begin(job["id"], "worker", claim["fence"], "orchestrator", 150)
+        states = client.get(f"/api/work/jobs/{job['id']}/agents", headers=headers).json()
+        running = next(s for s in states["agents"] if s["agent"] == "orchestrator")
+        assert running["elapsed_seconds"] >= 0
+        assert running["target_seconds"] == 150
+        spoken = client.get(f"/api/work/jobs/{job['id']}/voice-status", headers=headers)
+        assert spoken.status_code == 200
+        assert "orchestrator" in spoken.json()["text"]
+        assert "completed" not in spoken.json()["status"]
+        assert client.get(f"/api/work/jobs/{job['id']}/agents",
+                          headers={"Authorization": "Bearer " + issue_token("owner_2", SIGNING)}
+                          ).status_code == 404

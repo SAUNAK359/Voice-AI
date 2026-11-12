@@ -49,8 +49,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 read_skill(spec.name) if spec.name in (
                     "research", "sql_analytics", "powerpoint", "word",
                     "excel", "pdf_visual") else None
+                attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
+                attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
                 result = await asyncio.wait_for(invoke(spec, checkpoint, context, formats,
-                         payload, store, owner, composer, researcher),
+                         payload, store, owner, composer, researcher,
+                         jid, worker_id, fence, attempt),
                          timeout=spec.sla_seconds * 2)
                 qa = gate_agent(spec.name, result, formats)
                 for receipt in result_receipts(result):
@@ -79,22 +82,54 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 context["receipts"][receipt.kind] = receipt
         return result
 
-    for spec in plan(payload):
-        await run_agent(spec)
-        # Never allow a restored worker to retain the job without renewing
-        # its parent lease between independently committed sub-agent stages.
+    planned = {spec.name: spec for spec in plan(payload)}
+
+    semaphore = asyncio.Semaphore(2)  # Protect speech responsiveness on CPU hosts.
+
+    async def stage_group(names):
+        selected = [planned[name] for name in names if name in planned]
+        if not selected:
+            return
+        async def bounded(spec):
+            async with semaphore:
+                return await run_agent(spec)
+        # TaskGroup cancels and joins sibling tasks on failure. Native threads
+        # continue only inside their isolated, fenced attempt directory.
+        async with asyncio.TaskGroup() as group:
+            for spec in selected:
+                group.create_task(bounded(spec), name="specialist-" + spec.name)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
-    text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
+    await stage_group(("research", "sql_analytics"))
+    await stage_group(("orchestrator",))
+    # Include computed evidence in every rendered report, not merely in the
+    # persisted parent job summary after documents have already been saved.
     if context["summary"]:
-        text += "\n\n## Dataset quality (independently computed)\n" + json.dumps(
-            context["summary"], ensure_ascii=False, indent=2)
+        summary = context["summary"]
+        numeric = list(summary.get("numeric", {}).items())
+        lines = [f"Rows: {summary['rows']}; duplicate rows: {summary['duplicates']}.",
+                 "Numerical field summaries (computed independently):"]
+        for name, stats in numeric[:10]:
+            lines.append(f"{name}: count {stats['count']}, mean {stats['mean']}, "
+                         f"min {stats['min']}, max {stats['max']}.")
+        if len(numeric) > 10:
+            lines.append(f"{len(numeric)-10} additional numeric fields omitted from this briefing.")
+        proof = " ".join(lines)
+        context["text"] = (context["text"] or "# Verified data analysis\n"
+                           "This report contains independently computed dataset statistics.") + (
+                           "\n\n## Verified dataset evidence\n" + proof)
+    await stage_group(("powerpoint", "word", "excel"))
+    await stage_group(("pdf_visual",))
+    await stage_group(("quality",))
+
+    text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
     receipts = list(context["receipts"].values())
     store.finish(jid, worker_id, fence, text, receipts, checkpoint)
 
 
 async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
-                 payload: dict, store, owner, composer, researcher):
+                 payload: dict, store, owner, composer, researcher,
+                 jid: str, worker_id: str, fence: int, attempt: Path):
     name = spec.name
     if name == "research":
         text, sources = await researcher(payload["objective"])
@@ -150,35 +185,31 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             from .work_skills import read_dataset
             table = await asyncio.to_thread(read_dataset,
                                              store.upload(owner, payload["uploads"][0]))
-        path = checkpoint / (kind + "." + kind)
-        working = checkpoint / (kind + "." + kind + ".partial")
-        try:
-            await asyncio.to_thread(render_one, kind, working, payload["objective"][:120],
-                                    context["text"] or "# Dataset analysis\nVerified dataset statistics",
-                                    table, context["sources"])
-            verify_artifact(working, kind)
-            working.replace(path)
-            receipts.append(verify_artifact(path, kind))
-        finally:
-            working.unlink(missing_ok=True)
+        working = attempt / (kind + "." + kind)
+        await asyncio.to_thread(render_one, kind, working, payload["objective"][:120],
+                                context["text"] or "# Dataset analysis\nVerified dataset statistics",
+                                table, context["sources"])
+        receipt = verify_artifact(working, kind)
+        promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
+        if not verify_checkpoint(promoted, receipt):
+            raise ValueError("Published specialist artifact failed checksum")
+        receipts.append(receipt)
     if "zip" in requested:
         contents = list(context["receipts"].values()) + receipts
         if not contents:
             raise ValueError("ZIP requires a source output")
-        path = checkpoint / "zip.zip"
-        partial = checkpoint / "zip.zip.partial"
-        try:
-            with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                for item in contents:
-                    archive.write(checkpoint / item.name, arcname=item.name)
-                archive.writestr("MANIFEST.json", json.dumps(
-                    {"schema_version": 1, "files": [
-                        {"name": r.name, "sha256": r.sha256, "bytes": r.byte_size}
-                        for r in contents]}, indent=2))
-            verify_artifact(partial, "zip")
-            partial.replace(path)
-            receipts.append(verify_artifact(path, "zip"))
-        finally:
-            partial.unlink(missing_ok=True)
+        working = attempt / "zip.zip"
+        with zipfile.ZipFile(working, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for item in contents:
+                archive.write(checkpoint / item.name, arcname=item.name)
+            archive.writestr("MANIFEST.json", json.dumps(
+                {"schema_version": 1, "files": [
+                    {"name": r.name, "sha256": r.sha256, "bytes": r.byte_size}
+                    for r in contents]}, indent=2))
+        receipt = verify_artifact(working, "zip")
+        promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
+        if not verify_checkpoint(promoted, receipt):
+            raise ValueError("Published archive failed checksum")
+        receipts.append(receipt)
     return {"receipts": [asdict(r) for r in receipts],
             "agent": name, "requested": requested}

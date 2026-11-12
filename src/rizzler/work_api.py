@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from .work_auth import verify_token
 from .identity import Identity
 from .work_skills import SKILLS
+from .work_agents import SPECS
 from .work_store import WorkStore, Conflict, Missing
 from .upload_scan import ScanUnavailable
 
@@ -83,6 +84,10 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
                 step["status"] = "not_executed"
             deadline = step.pop("deadline")
             finished = step["finished"]
+            step["target_seconds"] = SPECS[step["agent"]].sla_seconds
+            step["elapsed_seconds"] = round(max(0, (
+                finished if finished > 0 else now) - step["started"]), 2
+            ) if step["started"] > 0 else None
             if step["status"] == "completed":
                 step["sla"] = "met" if finished <= deadline else "breached"
             elif step["status"] == "running":
@@ -125,7 +130,15 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None)
             elif j["cancel_requested"]:
                 line="Cancellation is pending. The worker has not acknowledged it yet."
             else:
-                line="The job is "+state+". Last recorded stage: "+stage+"."
+                steps=store.agent_steps(who,jid)
+                done=sum(step["status"]=="completed" for step in steps)
+                running=[step["agent"].replace("_"," ") for step in steps
+                         if step["status"]=="running"]
+                line=f"{done} of {len(steps)} specialist stages completed."
+                if running:
+                    line+=" Working now: "+", ".join(running[:2])+"."
+                else:
+                    line+=" Job is "+state+"."
             return {"job_id":jid,"status":state,"text":line}
         except Missing:
             raise HTTPException(status_code=404, detail="Job not found")

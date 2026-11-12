@@ -207,18 +207,26 @@ class GeminiLLM:
 
 
 def expressive_speech_speed(text: str) -> float:
-    """Lightweight prosody variation within tested KittenTTS speed bounds.
+    """Context-sensitive, bounded speech rhythm, never simulated emotions.
 
-    This is rhythm control, not neural emotion cloning or voice styling.
+    Reassurance and errors are spoken more deliberately; confirmed successes
+    get a little more energy. Voice cloning, pitch and timbre are unchanged.
     """
-    text = text.strip()
-    if text.endswith("?"):
+    sample = text.strip()
+    lower = sample.casefold()
+    if any(word in lower for word in ("failed", "failure", "error", "sorry",
+                                     "unavailable", "cannot", "can't", "warning")):
+        return 1.04
+    if sample.endswith("?"):
         return 1.08
-    if text.endswith("!"):
-        return 1.22
-    if len(text) <= 65:
+    if any(word in lower for word in ("completed", "verified", "excellent",
+                                     "great news", "all done", "successfully")):
+        return 1.20
+    if sample.endswith("!"):
+        return 1.19
+    if len(sample) <= 65:
         return 1.12
-    return 1.16
+    return 1.15
 
 
 class KittenSpeech:
