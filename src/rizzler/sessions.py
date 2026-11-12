@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 @dataclass
 class Session:
     client_id: str
+    nonce: str = field(default_factory=lambda: secrets.token_hex(16))
     history: list[dict] = field(default_factory=list)
     uploads: list[str] = field(default_factory=list)
     generation: int = 0
