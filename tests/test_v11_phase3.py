@@ -76,7 +76,7 @@ def test_admission_is_fifo_owner_isolated_bounded_and_cancel_safe():
         await asyncio.wait_for(wait_for(lambda:pool.queued==2),1)
         with pytest.raises(AdmissionBusy):
             async with pool.permit("d",timeout=.1):
-                pass
+                raise AssertionError("Bounded admission queue overflow")
         release.set()
         await asyncio.gather(a,b,c)
         assert events==["a","b","c"]
