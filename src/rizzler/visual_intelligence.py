@@ -6,8 +6,7 @@ URL fetching can be authorized by visual model output or extracted PDF text.
 from __future__ import annotations
 
 import asyncio
-from io import BytesIO
-import re
+import math
 
 from .media_store import MediaStore
 
@@ -31,10 +30,15 @@ def evidence(meta: dict, payload: bytes, *, max_pages=3) -> tuple[list[bytes], s
                     raise ValueError("PDF page exceeds visual bounds")
                 plain = page.get_text("text")[:4500]
                 texts.append(f"[Document page {index + 1} text]\n{plain}")
+                # Reject before allocating the native pixmap: a tiny PDF can
+                # describe enormous canvas dimensions and exhaust worker RAM.
+                out_width = math.ceil(page.rect.width * 1.25)
+                out_height = math.ceil(page.rect.height * 1.25)
+                if (out_width > 5000 or out_height > 5000 or
+                        out_width * out_height > 8_000_000):
+                    raise ValueError("PDF rasterized page exceeds pixel budget")
                 pix = page.get_pixmap(matrix=fitz.Matrix(1.25,1.25),
                                       colorspace=fitz.csRGB,alpha=False)
-                if pix.width*pix.height>8_000_000:
-                    raise ValueError("PDF rasterized page exceeds pixel budget")
                 pictures.append(pix.tobytes("jpeg",jpg_quality=76))
     except ValueError:
         raise
@@ -104,22 +108,24 @@ class VisualService:
         from .tool_registry import require_tool, VOICE_TOOLS
         require_tool("visual_analyze",explicit_private_write=False,
                      allowed=frozenset(VOICE_TOOLS))
-        images, manifests = [], []
-        for uid in attachment_ids:
-            metadata, raw = await asyncio.to_thread(self.store.read,owner,uid)
-            parts, note = await asyncio.to_thread(evidence,metadata,raw)
-            if len(images)+len(parts)>8:
-                raise ValueError("Too many visual pages in one analysis")
-            images.extend(parts)
-            manifests.append(f"{metadata['name']} [{metadata['mime']}]: {note}")
-        if not images:
-            raise ValueError("No visual evidence could be decoded")
+        # Page decoding must be within the same bounded admission slot as
+        # provider inference, not done concurrently before admission.
         try:
             async with asyncio.timeout(2.0):
                 await self._capacity.acquire()
         except asyncio.TimeoutError:
             raise RuntimeError("Visual analysis capacity busy") from None
         try:
+            images, manifests = [], []
+            for uid in attachment_ids:
+                metadata, raw = await asyncio.to_thread(self.store.read,owner,uid)
+                parts, note = await asyncio.to_thread(evidence,metadata,raw)
+                if len(images)+len(parts)>8:
+                    raise ValueError("Too many visual pages in one analysis")
+                images.extend(parts)
+                manifests.append(f"{metadata['name']} [{metadata['mime']}]: {note}")
+            if not images:
+                raise ValueError("No visual evidence could be decoded")
             answer = await asyncio.wait_for(self.provider.analyze(
                 question,images,"\n".join(manifests)[:14000]),timeout=40)
         finally:
