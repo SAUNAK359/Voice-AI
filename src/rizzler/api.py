@@ -21,6 +21,7 @@ from .voice import VoiceEngine, ProviderSet
 from .security import validate_session_id
 from .identity import Identity, OIDCSettings
 from .operations import Operations
+from .tool_registry import capabilities
 
 WEB = Path(__file__).with_name('web')
 
@@ -201,6 +202,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             "work_agent": "available" if work is not None else "disabled",
             "file_uploads": "available" if work is not None else "disabled",
             "job_tracking": "available" if work is not None else "disabled"},
+            "registry": capabilities(cfg,work is not None),
             "note": "Configured does not prove live Google Search availability or current source freshness"}
 
     if identity is not None:
@@ -285,10 +287,13 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             from .work_store import Missing
             try:
                 return {'job':work.get(sid,jid),
+                        'plan':work.job_plan(sid,jid),
                         'agents':work.agent_steps(sid,jid),
                         'artifacts':work.artifacts(sid,jid)}
             except Missing:
                 raise HTTPException(status_code=404,detail='Job not found') from None
+            except ValueError:
+                raise HTTPException(status_code=503,detail='Work execution plan integrity failed') from None
 
         @app.get('/api/voice/artifacts/{aid}')
         def voice_artifact(request: Request,aid: str):
