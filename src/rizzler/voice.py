@@ -1,6 +1,7 @@
 """Bounded incremental speech pipeline with TTS overlapped with Gemini output."""
 from __future__ import annotations
 import asyncio
+import secrets
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -45,6 +46,7 @@ class VoiceEngine:
         """
         output: asyncio.Queue = asyncio.Queue(maxsize=48)
         start = time.perf_counter()
+        trace = secrets.token_hex(8)  # Safe opaque ID, never a transcript hash.
         async def producer():
             worker = None
             try:
@@ -54,6 +56,9 @@ class VoiceEngine:
                     asr_start = time.perf_counter()
                     transcript = await asyncio.to_thread(self.providers.asr.transcribe, audio)
                     asr_ms = (time.perf_counter() - asr_start) * 1000
+                    if not isinstance(transcript,str) or len(transcript)>8000 or any(
+                            ord(c)<32 and c not in '\n\t' for c in transcript):
+                        raise ValueError('ASR transcript invalid or excessive')
                     await output.put({'type': 'transcript', 'text': transcript, 'final': True})
                     if not transcript:
                         raise ValueError('No clear speech recognized')
@@ -62,22 +67,44 @@ class VoiceEngine:
                     first_pcm_ms = None
                     tts_ms = 0.0
                     audio_bytes = 0
+                    first_phrase_ms = None
                     async def speak():
-                        nonlocal first_pcm_ms, tts_ms, audio_bytes
+                        nonlocal first_pcm_ms, tts_ms, audio_bytes, first_phrase_ms
                         begun = False
                         while True:
                             phrase = await speech_queue.get()
                             if phrase is None:
                                 break
                             t0 = time.perf_counter()
-                            raw = await asyncio.to_thread(self.providers.tts.synthesize, phrase)
+                            if first_phrase_ms is None:
+                                first_phrase_ms = (t0-start)*1000
+                            for retry in range(2):
+                                try:
+                                    raw = await asyncio.wait_for(
+                                        asyncio.to_thread(self.providers.tts.synthesize,phrase),
+                                        timeout=min(16.0,self.settings.request_timeout/2))
+                                    if (not isinstance(raw, bytes) or not raw or len(raw)%2 or
+                                            len(raw)>self.settings.sample_rate*2*35):
+                                        raise ValueError('TTS returned invalid PCM16')
+                                    if not any(raw):
+                                        raise ValueError('TTS returned silent PCM16')
+                                    if getattr(self.providers.tts, "enforce_audibility", False):
+                                        import numpy as np
+                                        waveform = np.frombuffer(raw,dtype='<i2').astype(np.float32)
+                                        if (float(np.sqrt(np.mean(waveform*waveform)))<40 or
+                                                float(np.max(np.abs(waveform)))<80):
+                                            raise ValueError('TTS returned inaudible PCM16')
+                                    break
+                                except (Exception, TimeoutError):
+                                    if retry:
+                                        raise ValueError('Speech synthesis unavailable') from None
                             tts_ms += (time.perf_counter() - t0) * 1000
-                            if not isinstance(raw, bytes) or not raw or len(raw) % 2:
-                                raise ValueError('TTS returned empty/invalid PCM16')
                             if not begun:
                                 begun = True
                                 first_pcm_ms = (time.perf_counter() - start) * 1000
                                 await output.put({'type': 'audio_begin', 'sample_rate': self.settings.sample_rate})
+                            if audio_bytes + len(raw) > self.settings.sample_rate * 2 * 90:
+                                raise ValueError('TTS response exceeds 90-second output budget')
                             audio_bytes += len(raw)
                             block = 960 * 2  # 40 ms @ 24 kHz, PCM16 mono
                             for i in range(0, len(raw), block):
@@ -117,10 +144,8 @@ class VoiceEngine:
                                 try:
                                     first_text = await asyncio.wait_for(asyncio.shield(first), timeout=1.2)
                                 except asyncio.TimeoutError:
-                                    # This is not a tool-success claim; it only acknowledges a
-                                    # complex question during remote model latency.
-                                    if len(transcript) >= 85:
-                                        await speech_queue.put('Let me work that through.')
+                                    # Wait for actual answer content rather than repeatedly
+                                    # speaking generic filler under cloud model latency.
                                     first_text = await first
                                 yield first_text
                                 async for item in source:
@@ -163,15 +188,24 @@ class VoiceEngine:
                         cleaned = for_speech(phrase)
                         if cleaned:
                             await speech_queue.put(cleaned)
+                    # Display text is independently usable even when speech
+                    # synthesis later fails. Never mark the *audio* turn done
+                    # until actual non-silent PCM has been produced.
+                    await output.put({'type': 'assistant_text', 'text': answer, 'final': True})
                     await speech_queue.put(None)
                     await worker
                     if not audio_bytes:
                         raise ValueError('No TTS audio was produced')
-                    await output.put({'type': 'assistant_text', 'text': answer, 'final': True})
                     await output.put({'type': 'metrics', 'data': {
                         'asr_ms': round(asr_ms, 2),
                         'llm_first_text_ms': round(first_text_ms, 2) if first_text_ms is not None and tool_result is None else None,
                         'tts_total_ms': round(tts_ms, 2),
+                        'tts_first_phrase_ms': round(first_phrase_ms,2) if first_phrase_ms is not None else None,
+                        'tts_first_phrase_to_pcm_ms': round(first_pcm_ms-first_phrase_ms,2)
+                            if first_pcm_ms is not None and first_phrase_ms is not None else None,
+                        'trace_id': trace,
+                        'sequence':sequence,
+                        'input_audio_seconds':round(len(pcm)/(rate*2),3),
                         'post_pause_first_audio_ms': round(first_pcm_ms, 2) if first_pcm_ms is not None else None,
                         'total_server_ms': round((time.perf_counter() - start) * 1000, 2),
                         'audio_bytes': audio_bytes,

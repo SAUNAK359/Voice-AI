@@ -230,6 +230,8 @@ def expressive_speech_speed(text: str) -> float:
 
 
 class KittenSpeech:
+    enforce_audibility = True
+
     def __init__(self, settings: Settings):
         self.settings, self._model, self._lock = settings, None, threading.Lock()
 
