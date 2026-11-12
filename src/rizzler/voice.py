@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import secrets
+import sqlite3
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -145,7 +146,8 @@ class VoiceEngine:
                                     facts = await asyncio.wait_for(
                                         asyncio.to_thread(memory.relevant,owner,transcript),
                                         timeout=1.5)
-                                except (ValueError, OSError, RuntimeError, TimeoutError):
+                                except (ValueError, OSError, RuntimeError, TimeoutError,
+                                        sqlite3.DatabaseError):
                                     facts = []
                                 source = self.providers.llm.stream_with_memory(
                                     transcript, history, facts)
