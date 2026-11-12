@@ -294,6 +294,24 @@ class WorkStore:
                           error_code,result_sha256,qa_json FROM agent_steps
                    WHERE job_id=? ORDER BY started,agent""", (jid,))]
 
+    def quality_report(self, owner: str, jid: str) -> dict:
+        """Authenticated quality evidence from an integrity-checked durable checkpoint."""
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE id=? AND owner=?",
+                         (jid,owner)).fetchone() is None:
+                raise Missing("Job not found")
+            row = c.execute("""SELECT status,result_json,result_sha256 FROM agent_steps
+                               WHERE job_id=? AND agent='quality'""", (jid,)).fetchone()
+            if not row or row["status"] != "completed":
+                return {"job_id": jid, "status": "not_completed", "quality": None}
+            raw = row["result_json"]
+            if hashlib.sha256(raw.encode()).hexdigest() != row["result_sha256"]:
+                raise ValueError("Persisted quality verdict corrupted")
+            data = json.loads(raw)
+            if data.get("passed") is not True:
+                raise ValueError("Invalid persisted quality result")
+            return {"job_id": jid, "status": "completed", "quality": data}
+
     def agent_checkpoint(self, jid: str, worker: str, fence: int, agent: str):
         """A committed step is reusable only while the caller owns the parent lease."""
         from .work_agents import SPECS
