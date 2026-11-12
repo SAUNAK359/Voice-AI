@@ -17,6 +17,7 @@ from .artifacts import verify_artifact
 from .contracts import FILE_FORMATS
 from .work_agents import SPECS, gate_agent, plan, read_skill, result_receipts, verify_checkpoint
 from .work_skills import render_one
+from .work_ir import compile_ir
 from .work_sql import analyze_sql
 
 
@@ -125,6 +126,9 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         context["text"] = (context["text"] or "# Verified data analysis\n"
                            "This report contains independently computed dataset statistics.") + (
                            "\n\n## Verified dataset evidence\n" + proof)
+    context["artifact_ir"] = compile_ir(payload["objective"][:120],
+        context["text"] or "# Dataset analysis\nVerified dataset statistics",
+        context["sources"], context["summary"])
     await stage_group(("powerpoint", "word", "excel"))
     await stage_group(("pdf_visual",))
     await stage_group(("quality",))
@@ -171,7 +175,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             detailed_qa[receipt.kind] = await asyncio.to_thread(
                 inspect_artifact, checkpoint / receipt.name, receipt.kind,
                 dataset_rows=context["summary"]["rows"] if context["summary"] else None,
-                bundle_receipts=bundle)
+                bundle_receipts=bundle, artifact_ir=context["artifact_ir"])
             verified = verify_artifact(checkpoint / receipt.name, receipt.kind)
             if verified.sha256 != receipt.sha256 or not verified.verified:
                 raise ValueError("Final quality gate failed structural receipt")
@@ -184,6 +188,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         if not context["text"] and not context["summary"]:
             raise ValueError("No substantive evidence to publish")
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
+                "artifact_ir_schema": context["artifact_ir"].schema_version,
+                "artifact_ir_sha256": context["artifact_ir"].sha256,
                 "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
                 "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
@@ -200,9 +206,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             table = await asyncio.to_thread(read_dataset,
                                              store.upload(owner, payload["uploads"][0]))
         working = attempt / (kind + "." + kind)
-        await asyncio.to_thread(render_one, kind, working, payload["objective"][:120],
-                                context["text"] or "# Dataset analysis\nVerified dataset statistics",
-                                table, context["sources"])
+        ir = context["artifact_ir"]
+        await asyncio.to_thread(render_one, kind, working, ir.title,
+                                ir.content, table, list(ir.sources))
         receipt = verify_artifact(working, kind)
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):

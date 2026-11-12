@@ -12,11 +12,14 @@ from pathlib import Path
 import zipfile
 
 from .artifacts import verify_artifact
+from .work_ir import ArtifactIR
+import html as html_lib
 
 
 def inspect_artifact(path: Path, kind: str, *,
                      dataset_rows: int | None = None,
-                     bundle_receipts: dict | None = None) -> dict:
+                     bundle_receipts: dict | None = None,
+                     artifact_ir: ArtifactIR | None = None) -> dict:
     receipt = verify_artifact(path, kind)
     checks = ["sha256_receipt_valid", "format_structure_valid"]
     details: dict = {}
@@ -56,6 +59,12 @@ def inspect_artifact(path: Path, kind: str, *,
                 if observed != dataset_rows:
                     raise ValueError("XLSX source row count differs from computed dataset")
                 details["dataset_rows"] = observed
+                if "Checks" not in wb.sheetnames:
+                    raise ValueError("Dataset formula-check worksheet missing")
+                formula = (f"=ROWS(Data!A2:A{dataset_rows+1})" if dataset_rows else "=COUNTA(Data!A2:A2)")
+                if wb["Checks"]["B2"].value != formula or wb["Checks"]["C2"].value != dataset_rows:
+                    raise ValueError("Workbook source-row formula or expected value mismatch")
+                checks.append("formula_contract_matches_independent_row_count")
             details["sheets"] = wb.sheetnames
             checks.append("required_worksheets_present")
         finally:
@@ -113,6 +122,49 @@ def inspect_artifact(path: Path, kind: str, *,
                     raise ValueError("ZIP artifact checksum or size mismatch")
             checks.append("manifest_member_hashes_reconciled")
             details["bundled"] = len(entries)
+    # Check information coverage; this does not verify the truth of the claims.
+    if artifact_ir is not None and kind in ("docx","pptx","xlsx","json","md","txt","html"):
+        headings = [h for h, _ in artifact_ir.sections]
+        sources = list(artifact_ir.sources)
+        if kind == "docx":
+            doc = __import__("docx").Document(path)
+            present = [p.text for p in doc.paragraphs]
+            actual_sources = [p.text for p in doc.paragraphs if p.text in sources]
+            valid = all(h in present for h in headings) and actual_sources == sources
+        elif kind == "pptx":
+            from pptx import Presentation
+            deck = Presentation(path)
+            slide_titles = [s.shapes.title.text for s in deck.slides if s.shapes.title]
+            all_text = "\n".join(shape.text for slide in deck.slides
+                                 for shape in slide.shapes if shape.has_text_frame)
+            valid = all(h in slide_titles for h in headings) and all(
+                src in all_text for src in sources)
+        elif kind == "xlsx":
+            from openpyxl import load_workbook
+            wb = load_workbook(path, read_only=True)
+            try:
+                present = [r[0] for r in wb["Summary"].iter_rows(
+                           min_row=3, min_col=1, max_col=1, values_only=True)]
+                actual_sources = ([r[0] for r in wb["Sources"].iter_rows(values_only=True)]
+                                  if "Sources" in wb else [])
+                valid = present == headings and actual_sources == sources
+            finally:
+                wb.close()
+        elif kind == "json":
+            data = json.loads(path.read_text(encoding="utf-8"))
+            valid = ([s.get("heading") for s in data.get("sections",[])] == headings
+                     and data.get("sources") == sources)
+        else:
+            rendered = path.read_text(encoding="utf-8")
+            expected = [html_lib.escape(h) if kind=="html" else h for h in headings]
+            expected_sources = ([html_lib.escape(src) for src in sources]
+                                if kind=="html" else sources)
+            valid = all(h in rendered for h in expected) and all(
+                src in rendered for src in expected_sources)
+        if not valid:
+            raise ValueError("Artifact IR sections or source provenance missing")
+        details["ir_sha256"] = artifact_ir.sha256
+        checks.append("artifact_ir_headings_and_sources_reconciled")
     # PDF/SVG are checked by structural verifier; visual inspection is separate.
     return {"kind":kind,"passed":True,"checks":checks,"metrics":details,
             "limitations":"No claim of independent factual or pixel-level visual perfection"}
