@@ -50,4 +50,4 @@ jobs:
           node --check src/rizzler/web/rich-text.js
           node --check stack_site.js
       - name: Browser voice regression tests
-        run: node --test tests/test_voice_core.cjs
+        run: node --test tests/test_voice_core.cjs tests/test_rich_text.cjs
