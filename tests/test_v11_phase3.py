@@ -71,7 +71,7 @@ def test_admission_is_fifo_owner_isolated_bounded_and_cancel_safe():
         await asyncio.wait_for(wait_for(lambda:pool.queued==1),1)
         with pytest.raises(AdmissionBusy):
             async with pool.permit("b",timeout=.1):
-                pass
+                raise AssertionError("Duplicate owner was admitted")
         c=asyncio.create_task(later("c"))
         await asyncio.wait_for(wait_for(lambda:pool.queued==2),1)
         with pytest.raises(AdmissionBusy):
