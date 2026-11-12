@@ -89,8 +89,14 @@ def test_durable_specialist_workflow_and_cross_owner_access(tmp_path):
     assert len(store.artifacts("owner_1", job["id"])) == 7
     reopened = WorkStore(root)
     assert len(reopened.agent_steps("owner_1", job["id"])) == len(states)
+    quality = reopened.quality_report("owner_1", job["id"])
+    assert quality["quality"]["passed"]
+    assert quality["quality"]["artifact_quality"]["pptx"]["metrics"]["slides"] >= 2
+    assert quality["quality"]["artifact_quality"]["zip"]["metrics"]["bundled"] == 6
     with pytest.raises(Missing):
         reopened.agent_steps("owner_2", job["id"])
+    with pytest.raises(Missing):
+        reopened.quality_report("owner_2", job["id"])
     assert reopened.events("owner_1", job["id"])
 
 
@@ -160,3 +166,34 @@ def test_expressive_prosody_bounded_and_safe():
     assert expressive_speech_speed("Excellent, it's ready!") > expressive_speech_speed("Is it done?")
     assert 1.0 <= expressive_speech_speed("A long and calm explanation of verified research evidence.") <= 1.24
     assert "never pretend to use a tool" in GeminiLLM.SYSTEM.lower()
+
+
+def test_corrupted_specialist_checkpoint_is_never_published(tmp_path,monkeypatch):
+    import rizzler.work_store as module
+    from rizzler.artifacts import verify_artifact
+    from dataclasses import asdict
+    now=[1000.0]
+    monkeypatch.setattr(module.time,"time",lambda:now[0])
+    store=WorkStore(tmp_path/"durable")
+    job=store.submit("owner_1","Produce a fully validated business report.",
+                     ["md"],"tamper_test_001",[])
+    old=store.claim("old_worker",45)
+    text=asyncio.run(composer("report",None))
+    store.agent_begin(job["id"],"old_worker",old["fence"],"orchestrator",150)
+    store.agent_complete(job["id"],"old_worker",old["fence"],"orchestrator",
+                         {"text":text},gate_agent("orchestrator",{"text":text},{"md"}))
+    path=store.root/"checkpoints"/"owner_1"/job["id"]/"md.md"
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text("# Verified report\nOriginal meaningful analysis from a deterministic fixture.",
+                    encoding="utf-8")
+    receipt=verify_artifact(path,"md")
+    result={"receipts":[asdict(receipt)]}
+    store.agent_begin(job["id"],"old_worker",old["fence"],"pdf_visual",120)
+    store.agent_complete(job["id"],"old_worker",old["fence"],"pdf_visual",
+                         result,gate_agent("pdf_visual",result,{"md"}))
+    path.write_text("# Tampered report\nSubstituted contents must never be published.",
+                    encoding="utf-8")
+    now[0]+=46
+    assert asyncio.run(WorkWorker(store,composer=composer).once())
+    assert store.get("owner_1",job["id"])["status"]=="failed"
+    assert store.artifacts("owner_1",job["id"])==[]
