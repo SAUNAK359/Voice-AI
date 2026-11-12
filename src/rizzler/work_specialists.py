@@ -139,8 +139,15 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                  jid: str, worker_id: str, fence: int, attempt: Path):
     name = spec.name
     if name == "research":
-        text, sources = await researcher(payload["objective"])
-        return {"text": text, "sources": sources}
+        found = await researcher(payload["objective"])
+        if isinstance(found, dict):
+            if set(found).issuperset({"text","sources"}):
+                return found
+            raise ValueError("Research provider returned malformed evidence")
+        text, sources = found
+        return {"text": text, "sources": sources,
+                "evidence_summary": {"citation_verification":"provider_attribution_only",
+                                     "source_document_fetch":False}}
     if name == "sql_analytics":
         uploads = payload.get("uploads", [])
         if len(uploads) != 1:
