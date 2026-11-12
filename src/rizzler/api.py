@@ -16,7 +16,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from .config import Settings
 from .providers import WhisperASR, GeminiLLM, KittenSpeech
-from .sessions import Sessions
+from .sessions import Sessions, AdmissionBusy
+from .voice_protocol import VERSION, AudioFrameState, output_packet, legacy_output_packet
 from .voice import VoiceEngine, ProviderSet
 from .security import validate_session_id
 from .identity import Identity, OIDCSettings
@@ -118,6 +119,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app.state.operations = operations
     app.state.work, app.state.identity = work, identity
     app.state.production = production
+    app.add_exception_handler(AdmissionBusy, lambda request, exc: JSONResponse(
+        status_code=429, content={'detail': 'Voice capacity busy; retry later'}))
     if work:
         from .work_api import router
         app.include_router(router(work, work_signing_key, identity=identity))
@@ -355,8 +358,6 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     @app.post('/api/turn')
     async def http_turn(request: Request):
         sid = auth(request, True)
-        if sessions.inference.locked():
-            raise HTTPException(status_code=409, detail='Model busy; retry')
         try:
             rate = int(request.headers.get('x-sample-rate', '48000'))
         except ValueError:
@@ -376,7 +377,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         session = sessions.get(sid)
         generation = session.generation + 1
         session.generation = generation
-        async with sessions.inference:
+        async with sessions.inference.permit(sid, timeout=2.5):
             task = asyncio.current_task()
             session.task = task
             events, samples = [], bytearray()
@@ -404,6 +405,13 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             finally:
                 if session.task is task:
                     session.task = None
+
+    @app.get('/api/voice/admission')
+    def voice_admission(request: Request):
+        auth(request, True)
+        return {'queue_depth': sessions.inference.queued,
+                'busy': sessions.inference.locked(),
+                'max_queue': sessions.inference.max_waiting}
 
     @app.websocket('/ws')
     async def websocket(ws: WebSocket):
@@ -434,6 +442,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                         await ws.close(code=1008)
                         return
                     sid = validate_session_id(first.get('client_id', ''))
+                protocol = first.get('protocol', 1)
+                if type(protocol) is not int or protocol not in (1, VERSION):
+                    await ws.close(code=1003)
+                    return
                 rate = int(first.get('sample_rate', 48000))
                 if not 8000 <= rate <= 96000:
                     await ws.close(code=1008)
@@ -448,37 +460,101 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             except (asyncio.TimeoutError, ValueError, TypeError, KeyError, RuntimeError):
                 await ws.close(code=1008)
                 return
-            await ws.send_json({'type': 'ready', 'sample_rate': cfg.sample_rate})
+            await ws.send_json({'type': 'ready', 'sample_rate': cfg.sample_rate,
+                                'protocol':protocol})
             pcm = bytearray()
             recording = False
+            frames = None
+            interim_task = None
+            last_interim_sample = 0
+            enable_interim = (protocol == VERSION and
+                environ.get('RIZZLER_INTERIM_ASR','').lower() in ('1','true','yes'))
+            async def provisional(data: bytes, generation: int):
+                # Provisional labels are explicitly non-authoritative. Only
+                # VoiceEngine.events() receives final utterances for tools.
+                try:
+                    from .audio import pcm16_to_mono
+                    audio = await asyncio.to_thread(pcm16_to_mono, data, rate)
+                    text = await asyncio.wait_for(asyncio.to_thread(
+                        models.asr.transcribe, audio), timeout=5.0)
+                    if (recording and generation == session.generation and
+                            isinstance(text,str) and text.strip()):
+                        await ws.send_json({'type':'interim_transcript',
+                            'generation':generation, 'text':text[:180],
+                            'final':False})
+                except (Exception, asyncio.CancelledError):
+                    pass
             async def stream_turn(recorded: bytes, seq: int):
-                async with sessions.inference:
-                    try:
-                        async for event in engine.events(recorded, rate, list(session.history), owner=sid, sequence=seq, uploads=list(session.uploads), nonce=session.nonce):
+                try:
+                    async with sessions.inference.permit(sid, timeout=2.5):
+                        emitted = 0
+                        async for event in engine.events(recorded, rate, list(session.history),
+                                                         owner=sid, sequence=seq,
+                                                         uploads=list(session.uploads),
+                                                         nonce=session.nonce):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
-                                await ws.send_bytes(struct.pack('<I', seq) + event['data'])
+                                if protocol == VERSION:
+                                    await ws.send_bytes(output_packet(seq, emitted,
+                                        cfg.sample_rate, event['data']))
+                                    emitted += 1
+                                else:
+                                    await ws.send_bytes(legacy_output_packet(seq, event['data']))
                             else:
                                 if event['type'] == 'done':
                                     session.history = event.pop('history')
                                 await ws.send_json({'generation': seq, **event})
-                    except WebSocketDisconnect:
-                        return
+                except (AdmissionBusy, asyncio.TimeoutError):
+                    if seq == session.generation:
+                        await ws.send_json({'type':'error', 'generation':seq,
+                                            'message':'Voice busy; please retry'})
+                except WebSocketDisconnect:
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    if seq == session.generation:
+                        try:
+                            await ws.send_json({'type':'error', 'generation':seq,
+                                'message':'Voice response unavailable; please retry'})
+                        except (RuntimeError, WebSocketDisconnect):
+                            pass
+                finally:
+                    if session.task is asyncio.current_task():
+                        session.task = None
             while True:
                 data = await ws.receive()
                 if data['type'] == 'websocket.disconnect':
                     break
                 if data.get('bytes') is not None:
                     if recording:
-                        raw = data['bytes']
-                        if len(raw) <= 16384 and len(raw) % 2 == 0:
+                        try:
+                            raw = (frames.receive(data['bytes']) if protocol == VERSION
+                                   else data['bytes'])
+                            if not raw or len(raw) % 2 or len(raw) > (
+                                    4096 if protocol == VERSION else 16384):
+                                raise ValueError('Invalid PCM frame')
+                            if len(pcm) + len(raw) > rate * cfg.max_audio_seconds * 2:
+                                raise ValueError('Audio duration limit exceeded')
                             pcm.extend(raw)
-                            if len(pcm) > rate * cfg.max_audio_seconds * 2:
-                                recording = False
-                                pcm.clear()
-                                await ws.send_json({'type': 'error', 'generation': session.generation,
-                                    'message': 'Audio duration limit exceeded'})
+                            if (enable_interim and len(pcm)//2-last_interim_sample >= rate*2
+                                    and (interim_task is None or interim_task.done())
+                                    and len(pcm) >= rate*2*2):
+                                last_interim_sample = len(pcm)//2
+                                snapshot = bytes(pcm[-rate*2*3:])
+                                interim_task = asyncio.create_task(
+                                    provisional(snapshot, session.generation),
+                                    name='voice-provisional-caption')
+                        except ValueError:
+                            recording = False
+                            pcm.clear()
+                            frames = None
+                            if interim_task is not None:
+                                interim_task.cancel()
+                            await ws.send_json({'type':'error',
+                                'generation':session.generation,
+                                'message':'Audio frame invalid; retry the utterance'})
                     continue
                 if not data.get('text'):
                     continue
@@ -492,6 +568,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                         await session.cancel()
                         session.generation = seq
                         pcm.clear()
+                        frames = AudioFrameState(seq, rate, cfg.max_audio_seconds) if protocol == VERSION else None
+                        if interim_task is not None:
+                            interim_task.cancel()
+                        last_interim_sample = 0
                         recording = True
                         await ws.send_json({'type': 'status', 'generation': seq, 'label': 'Listening'})
                     elif kind == 'speech_end' and recording:
@@ -499,28 +579,46 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                         if seq != session.generation:
                             continue
                         recording = False
-                        if sessions.inference.locked():
-                            await ws.send_json({'type': 'error', 'generation': seq, 'message': 'Model busy'})
+                        if interim_task is not None:
+                            interim_task.cancel()
+                        if not pcm or len(pcm) < rate * 2 // 5:
+                            pcm.clear()
+                            await ws.send_json({'type':'error','generation':seq,
+                                'message':'Utterance incomplete; please retry'})
+                            continue
+                        if sessions.inference.queued >= sessions.inference.max_waiting:
+                            pcm.clear()
+                            await ws.send_json({'type':'error','generation':seq,
+                                'message':'Voice queue full; please retry'})
                             continue
                         session.task = asyncio.create_task(stream_turn(bytes(pcm), seq), name='ws-voice-turn')
                         pcm.clear()
+                        frames = None
                     elif kind == 'interrupt':
                         await session.cancel()
                         # The browser increments generation on its next speech_start.
                         # Bumping it here would reject that first new utterance.
                         recording = False
                         pcm.clear()
+                        frames = None
+                        if interim_task is not None:
+                            interim_task.cancel()
                         await ws.send_json({'type': 'interrupted', 'generation': session.generation})
                     elif kind == 'new_conversation':
                         await session.cancel()
                         session.history.clear()
                         pcm.clear()
+                        frames = None
                         recording = False
+                        if interim_task is not None:
+                            interim_task.cancel()
                 except (ValueError, TypeError, json.JSONDecodeError):
                     continue
         except WebSocketDisconnect:
             pass
         finally:
+            if 'interim_task' in locals() and interim_task is not None:
+                interim_task.cancel()
             if session and session.websocket is ws:
                 await session.cancel()
                 session.websocket = None

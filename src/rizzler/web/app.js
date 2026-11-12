@@ -1,11 +1,12 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-const {VoiceGate,TurnFence,TimingLedger,scheduleBlock}=window.RizzlerVoice;
+const {VoiceGate,TurnFence,TimingLedger,scheduleBlock,VoiceFrames,PlaybackBudget}=window.RizzlerVoice;
 const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:false,recording:false,
  rate:48000,ctx:null,media:null,src:null,worklet:null,pre:[],preBytes:0,recent:[],recentBytes:0,
  chunks:[],chunkBytes:0,playing:new Set(),nextAudio:0,
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
+ protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
  workEnabled:false,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
@@ -14,7 +15,7 @@ const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
 function status(p,d=''){document.body.className=p;$('phase').textContent=p[0].toUpperCase()+p.slice(1);$('detail').textContent=d}
 function message(role,text,seq,final=false){const id=role+seq;let el=s.history.get(id);if(!el){document.querySelector('.empty')?.remove();el=document.createElement('article');el.className='bubble '+role;const label=document.createElement('small');label.textContent=role==='user'?'You':'Rizzler';const body=document.createElement('div');el.append(label,body);$('messages').append(el);s.history.set(id,el)}if(role==='assistant'&&window.RizzlerRich&&final){window.RizzlerRich.render(el.lastChild,text)}else if(role==='assistant'){el.lastChild.textContent=window.RizzlerRich?window.RizzlerRich.latex(text.replace(/\\\(|\\\)|\$/g,'')):text}else el.lastChild.textContent=text;$('messages').scrollTop=$('messages').scrollHeight}
 function noteLatency(){const q=s.ledger.summary();const extra=q.n?` · Output-start proxy p50 ${q.p50} / p95 ${q.p95} / p99 ${q.p99} ms (n=${q.n})`:'';$('clientmetrics').textContent='Browser pause-to-scheduled-playback (not physically measured speaker audio)'+extra}
-function stopAudio(){s.epoch++;s.fence.cancel();for(const a of s.playing){try{a.onended=null;a.stop()}catch(_){ }try{a.disconnect()}catch(_){}}s.playing.clear();s.nextAudio=0;s.allowSeq=0}
+function stopAudio(){s.epoch++;s.fence.cancel();s.frames?.reset();for(const a of s.playing){try{a.onended=null;a.stop()}catch(_){ }try{a.disconnect()}catch(_){}}s.playing.clear();s.nextAudio=0;s.allowSeq=0}
 function interrupt(){const active=s.playing.size||s.request||['thinking','speaking'].includes(document.body.className);
  if(!active)return;
  stopAudio();s.request?.abort();s.request=null;
@@ -26,6 +27,7 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  switch(msg.type){
  case'ready':$('connection').textContent='WebSocket live';break;
  case'status':if(!s.recording)status((msg.label||'thinking').toLowerCase());break;
+ case'interim_transcript':if(s.recording)status('listening','Provisional: '+String(msg.text||'').slice(0,100));break;
  case'transcript':message('user',msg.text,seq);break;
  case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
  case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();break;
@@ -37,6 +39,10 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'error':s.ledger.cancel(seq);stopAudio();status('error',msg.message||'Voice turn failed');break;
  }}
 function playback(samples,seq,rate=24000){if(!s.fence.accepts(seq)||seq!==s.allowSeq||s.recording||!s.ctx||!samples.length)return;
+ if(s.ctx.state!=='running'){status('error','Audio suspended. Tap the page to re-enable playback.');return}
+ if(rate!==24000 || !s.budget.accepts(s.ctx.currentTime,s.nextAudio,samples.length/rate)){
+   interrupt();status('error','Playback buffer exceeded its safety budget; answer remains in chat.');return;
+ }
  const epoch=s.epoch,ctx=s.ctx,buffer=ctx.createBuffer(1,samples.length,rate),arr=buffer.getChannelData(0);
  for(let i=0;i<samples.length;i++)arr[i]=samples[i]/32768;
  const node=ctx.createBufferSource();node.buffer=buffer;node.connect(ctx.destination);
@@ -49,7 +55,24 @@ function playback(samples,seq,rate=24000){if(!s.fence.accepts(seq)||seq!==s.allo
  node.start(timeline.start);
  if(epoch===s.epoch)status('speaking','Speak to interrupt.');
 }
-function wsAudio(raw){if(raw.byteLength<6||raw.byteLength%2!==0)return;const seq=new DataView(raw).getUint32(0,true);if(!s.fence.accepts(seq))return;playback(new Int16Array(raw,4),seq)}
+function wsAudio(raw){
+ try{
+  if(s.protocol===2){
+   if(raw.byteLength<16)return;
+   const sourceGeneration=new DataView(raw).getUint32(4,true);
+   if(!s.fence.accepts(sourceGeneration))return;
+   const frame=s.frames.output(raw);
+   playback(frame.samples,frame.generation,frame.rate);
+  }else{
+   if(raw.byteLength<6||raw.byteLength%2!==0)return;
+   const seq=new DataView(raw).getUint32(0,true);
+   if(!s.fence.accepts(seq))return;
+   playback(new Int16Array(raw,4),seq);
+  }
+ }catch(_){
+  interrupt();status('error','Invalid or out-of-order voice audio was rejected.');
+ }
+}
 function concat(parts){const size=parts.reduce((n,x)=>n+x.length,0),out=new Uint8Array(size);let pos=0;for(const x of parts){out.set(x,pos);pos+=x.length}return out}
 async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortController();s.request=ctrl;
  try{const res=await fetch('/api/turn',{method:'POST',headers:{...headers(),'x-sample-rate':String(s.rate),'content-type':'application/octet-stream'},body:bytes,signal:ctrl.signal});
@@ -65,10 +88,20 @@ async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortContr
  }catch(e){if(e.name!=='AbortError'&&s.fence.accepts(seq)){s.ledger.cancel(seq);status('error','Request failed: '+e.message)}}
  finally{if(s.request===ctrl)s.request=null}}
 function sendWs(msg){if(s.mode!=='ws'||s.ws?.readyState!==1)return false;s.ws.send(JSON.stringify(msg));return true}
+function sendPcm(raw){
+ if(s.mode!=='ws'||s.ws?.readyState!==1||s.ws.bufferedAmount>256000)return false;
+ try{
+  s.ws.send(s.protocol===2?s.frames.input(
+   new Int16Array(raw.buffer,raw.byteOffset,raw.byteLength/2),s.fence.generation):raw);
+  return true;
+ }catch(_){return false}
+}
 function start(manual=false){if(s.recording||s.muted||!s.session)return;
  interrupt();const seq=s.fence.next();const initial=manual?s.recent:s.pre;
  s.recording=true;s.chunks=initial.slice();s.chunkBytes=initial.reduce((n,x)=>n+x.length,0);s.done=false;
- if(sendWs({type:'speech_start',generation:seq}))for(const x of initial){if(s.ws.bufferedAmount<256000)s.ws.send(x)}
+ s.frames?.reset();
+ if(sendWs({type:'speech_start',generation:seq}))
+   for(const x of initial)if(!sendPcm(x)){sendWs({type:'interrupt'});setFallback('HTTPS fallback (send overflow)');break;}
  status('listening','Capturing speech…');
 }
 function finish(){if(!s.recording)return;s.recording=false;
@@ -89,7 +122,7 @@ function onSamples(samples){if(!s.session||s.muted)return;
  if(s.recording){
    s.chunks.push(raw);s.chunkBytes+=raw.length;
    if(s.mode==='ws'&&s.ws?.readyState===1){
-     if(s.ws.bufferedAmount<256000)s.ws.send(raw);
+     if(sendPcm(raw)){} 
      else { // Never transmit a partial voice turn as a complete utterance.
        sendWs({type:'interrupt'});s.mode='http';$('connection').textContent='HTTPS fallback (network congestion)';
      }
@@ -107,10 +140,14 @@ function connectWs(){return new Promise((resolve,reject)=>{
  const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);
  s.ws=ws;ws.binaryType='arraybuffer';let ready=false;
  const timeout=setTimeout(()=>{if(!ready){ws.close();reject(Error('WebSocket timeout'))}},6000);
- ws.onopen=()=>ws.send(JSON.stringify({type:'auth',token:s.key,client_id:s.sessionId,sample_rate:s.rate}));
+ ws.onopen=()=>ws.send(JSON.stringify({type:'auth',token:s.key,
+   client_id:s.sessionId,sample_rate:s.rate,protocol:2}));
  ws.onmessage=e=>{if(ws!==s.ws)return;
  if(typeof e.data==='string'){let m;try{m=JSON.parse(e.data)}catch(_){return}
- if(m.type==='ready'&&!ready){ready=true;clearTimeout(timeout);s.reconnectAttempts=0;resolve()}
+ if(m.type==='ready'&&!ready){
+   s.protocol=m.protocol===2?2:1;s.frames=new VoiceFrames(s.rate);
+   ready=true;clearTimeout(timeout);s.reconnectAttempts=0;resolve();
+ }
  server(m);
  }else wsAudio(e.data)};
  ws.onclose=()=>{if(!ready){clearTimeout(timeout);reject(Error('WebSocket unavailable'))}
@@ -122,22 +159,32 @@ function connectWs(){return new Promise((resolve,reject)=>{
  })}
 function scheduleReconnect(){if(s.reconnecting||!s.session||s.recording||s.reconnectAttempts>=5)return;
  s.reconnecting=true;const delay=Math.min(15000,1000*2**s.reconnectAttempts++);
- s.reconnectTimer=setTimeout(async()=>{s.reconnecting=false;if(!s.session||s.recording||s.mode==='ws')return;
+ s.reconnectTimer=setTimeout(async()=>{s.reconnecting=false;if(!s.session||s.recording||s.request||s.playing.size||s.mode==='ws')return;
  try{await connectWs();s.mode='ws';$('connection').textContent='WebSocket restored'}
  catch(_){scheduleReconnect()}},delay);
 }
 async function openMic(){
  const media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});
  s.media=media;const ctx=new AudioContext({latencyHint:'interactive'});s.ctx=ctx;await ctx.resume();s.rate=ctx.sampleRate;
- s.gate=new VoiceGate(s.rate);await ctx.audioWorklet.addModule('/static/capture.js');
+ s.gate=new VoiceGate(s.rate);s.frames=new VoiceFrames(s.rate);
+ await ctx.audioWorklet.addModule('/static/capture.js');
  const source=ctx.createMediaStreamSource(media),worklet=new AudioWorkletNode(ctx,'rizzler-capture');
  worklet.port.onmessage=e=>onSamples(e.data);const silent=ctx.createGain();silent.gain.value=0;
  source.connect(worklet);worklet.connect(silent);silent.connect(ctx.destination);
  s.src=source;s.worklet=worklet;
- media.getAudioTracks().forEach(track=>track.addEventListener('ended',()=>{if(s.session){stopAudio();setFallback('Microphone disconnected');status('error','Microphone ended; reconnect to restore capture')}}));
+ media.getAudioTracks().forEach(track=>track.addEventListener('ended',()=>{
+   if(s.session){interrupt();s.recording=false;status('error','Microphone disconnected. Reconnect to resume.');}
+ }));
+ if(navigator.mediaDevices?.addEventListener){
+   s.deviceListener=()=>{if(s.session&&s.media?.getAudioTracks().every(t=>t.readyState==='ended')){
+     interrupt();status('error','Audio input changed. Reconnect your microphone.');
+   }};
+   navigator.mediaDevices.addEventListener('devicechange',s.deviceListener);
+ }
 }
 async function disconnect(){s.session=false;s.recording=false;clearTimeout(s.reconnectTimer);s.reconnecting=false;
  stopAudio();s.ledger.cancel(s.fence.generation);s.request?.abort();s.ws?.close();s.media?.getTracks().forEach(t=>t.stop());
+ if(s.deviceListener){navigator.mediaDevices?.removeEventListener?.('devicechange',s.deviceListener);s.deviceListener=null;}
  await s.ctx?.close();s.ctx=null;s.mode='offline';$('connection').textContent='Disconnected';status('offline','Session ended');
  $('connect').textContent='Connect microphone';for(const id of ['mute','send','reset'])$(id).disabled=true;
 }
@@ -157,6 +204,9 @@ async function connectSession(){
  }catch(err){$('error').textContent=err.message;status('error',err.message);
    s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
 }
+document.addEventListener('pointerdown',()=>{
+ if(s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{});
+},{passive:true});
 $('unlock').addEventListener('submit',async e=>{e.preventDefault();s.key=$('key').value;await connectSession()});
 $('connect').addEventListener('click',()=>s.session?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
 $('logout').addEventListener('click',async()=>{

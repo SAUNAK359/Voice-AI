@@ -76,5 +76,51 @@
     const start = Math.max(now + lead, previousEnd);
     return {start, end: start + duration};
   }
-  return {VoiceGate, TurnFence, TimingLedger, scheduleBlock};
+  const INPUT_MAGIC = 0x32565a52, OUTPUT_MAGIC = 0x324f5a52;
+  class VoiceFrames {
+    constructor(rate) {
+      if (!Number.isInteger(rate) || rate < 8000 || rate > 96000) throw new RangeError('Sample rate');
+      this.rate = rate; this.reset();
+    }
+    reset() { this.sequence = 0; this.ms = 0; this.expectedOutput = 0; }
+    input(samples, generation) {
+      if (!(samples instanceof Int16Array) || samples.length < 1 || samples.length > 2048 ||
+          !Number.isSafeInteger(generation) || generation < 1 || generation > 2147483647)
+        throw new RangeError('Invalid voice frame');
+      const buffer = new ArrayBuffer(20 + samples.length * 2);
+      const view = new DataView(buffer);
+      view.setUint32(0, INPUT_MAGIC, true);
+      view.setUint32(4, generation, true);
+      view.setUint32(8, this.sequence++, true);
+      view.setUint32(12, Math.floor(this.ms), true);
+      view.setUint32(16, samples.length, true);
+      new Int16Array(buffer, 20).set(samples);
+      this.ms += samples.length * 1000 / this.rate;
+      return buffer;
+    }
+    output(raw) {
+      if (!(raw instanceof ArrayBuffer) || raw.byteLength <= 16 ||
+          (raw.byteLength - 16) % 2 || raw.byteLength > 4112)
+        throw new RangeError('Invalid received PCM');
+      const view = new DataView(raw);
+      if (view.getUint32(0, true) !== OUTPUT_MAGIC ||
+          view.getUint32(8, true) !== this.expectedOutput++ ||
+          view.getUint32(12, true) !== 24000)
+        throw new RangeError('Wrong audio generation sequence or rate');
+      return {generation: view.getUint32(4,true),
+              rate: view.getUint32(12,true), samples: new Int16Array(raw,16)};
+    }
+  }
+  class PlaybackBudget {
+    constructor(maxSeconds=25) {
+      if (!Number.isFinite(maxSeconds) || maxSeconds < 1 || maxSeconds > 60)
+        throw new RangeError('Invalid playback budget');
+      this.maxSeconds=maxSeconds;
+    }
+    accepts(now, pendingEnd, duration) {
+      return [now,pendingEnd,duration].every(Number.isFinite) && duration>0 &&
+        Math.max(0,pendingEnd-now)+duration <= this.maxSeconds;
+    }
+  }
+  return {VoiceGate, TurnFence, TimingLedger, scheduleBlock, VoiceFrames, PlaybackBudget};
 });
