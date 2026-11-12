@@ -2,8 +2,6 @@
 from __future__ import annotations
 import asyncio
 import importlib.util
-import json
-import os
 import secrets
 import sqlite3
 import unittest
@@ -37,7 +35,8 @@ def test_encrypted_memory_never_persists_plaintext_or_cross_owner_context(tmp_pa
     fact="I prefer concise technical explanations with practical examples"
     receipt=memory.remember(OWNER_A,fact)
     assert receipt["created"] is True
-    assert memory.remember(OWNER_A,fact)["id"]==receipt["id"]
+    duplicate=memory.remember(OWNER_A,fact)
+    assert duplicate["id"]==receipt["id"]
     assert memory.list(OWNER_A)[0]["text"]==fact
     assert not memory.list(OWNER_B)
     assert memory.relevant(OWNER_A,"technical explanations please")==[fact]
@@ -46,8 +45,10 @@ def test_encrypted_memory_never_persists_plaintext_or_cross_owner_context(tmp_pa
     assert fact.encode() not in binary
     with pytest.raises(Exception):
         MemoryStore(tmp_path/"private","different-secret-"+secrets.token_urlsafe(32)).list(OWNER_A)
-    assert memory.delete(OWNER_B,receipt["id"])==0
-    assert memory.delete(OWNER_A,receipt["id"])==1
+    foreign_delete=memory.delete(OWNER_B,receipt["id"])
+    assert foreign_delete==0
+    owner_delete=memory.delete(OWNER_A,receipt["id"])
+    assert owner_delete==1
     assert memory.list(OWNER_A)==[]
 
 
@@ -69,7 +70,8 @@ def test_memory_limits_dedup_expiry_tamper_and_secret_rejection(tmp_path):
                    (b"modified",OWNER_A))
     with pytest.raises(ValueError,match="integrity"):
         mem.list(OWNER_A)
-    assert mem.delete(OWNER_A)==2
+    removed=mem.delete(OWNER_A)
+    assert removed==2
 
 
 def test_memory_age_and_retention_automatic_prune(tmp_path):
@@ -117,17 +119,20 @@ def test_authenticated_memory_api_and_privacy_bounds(tmp_path,monkeypatch):
         hb={"x-rizzler-key":KEY,"x-session-id":OWNER_B}
         assert client.get("/api/runtime").json()["encrypted_memory_enabled"] is True
         assert client.get("/api/voice/memories").status_code==401
-        assert client.post("/api/voice/memories",headers=ha,json={
-            "text":"I prefer examples about network programming"}).status_code==200
+        saved=client.post("/api/voice/memories",headers=ha,json={
+            "text":"I prefer examples about network programming"})
+        assert saved.status_code==200
         listed=client.get("/api/voice/memories",headers=ha).json()["items"]
         assert len(listed)==1 and "network programming" in listed[0]["text"]
         assert client.get("/api/voice/memories",headers=hb).json()["items"]==[]
         uid=listed[0]["id"]
-        assert client.delete("/api/voice/memories/"+uid,headers=hb).json()["deleted"]==0
+        foreign_delete=client.delete("/api/voice/memories/"+uid,headers=hb).json()
+        assert foreign_delete["deleted"]==0
         assert len(client.get("/api/voice/memories",headers=ha).json()["items"])==1
         assert client.post("/api/voice/memories",headers=ha,json={
             "text":"api_key: do not record"}).status_code==400
-        assert client.delete("/api/voice/memories/"+uid,headers=ha).json()["deleted"]==1
+        own_delete=client.delete("/api/voice/memories/"+uid,headers=ha).json()
+        assert own_delete["deleted"]==1
         assert client.get("/api/voice/memories",headers=ha).json()["items"]==[]
 
 
@@ -166,4 +171,30 @@ def test_relevant_memory_fed_only_to_llm_not_tool_dispatch(tmp_path):
                          16000,[],owner=OWNER_A)]
         assert any(e["type"]=="done" for e in events),events
         assert "Python programming examples" in llm.received[0][1][0]
+    asyncio.run(run())
+
+
+def test_memory_database_outage_degrades_to_llm_without_tool_execution(tmp_path):
+    memory=store(tmp_path)
+    memory.remember(OWNER_A,"I like short Python examples")
+    class DeadMemory:
+        def relevant(self,owner,query):
+            raise sqlite3.DatabaseError("database unavailable")
+    class ASR:
+        def transcribe(self,wave):return "Explain Python variables"
+    class LLM:
+        async def stream_with_memory(self,text,history,facts):
+            assert facts==[]
+            yield "A variable names a value in Python."
+        async def stream(self,*args):
+            raise AssertionError("Expected memory-aware provider")
+            yield ""
+    class TTS:
+        def synthesize(self,text):return np.full(2400,300,dtype="<i2").tobytes()
+    tools=VoiceTools(None,Settings(access_key=KEY),DeadMemory())
+    engine=VoiceEngine(Settings(access_key=KEY),ProviderSet(ASR(),LLM(),TTS()),tools)
+    async def run():
+        events=[e async for e in engine.events(np.ones(16000,dtype="<i2").tobytes(),
+                             16000,[],owner=OWNER_A)]
+        assert any(e["type"]=="done" for e in events),events
     asyncio.run(run())
