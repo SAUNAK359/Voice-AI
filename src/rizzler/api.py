@@ -102,7 +102,28 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         if not Path(memory_root).is_absolute():
             raise ValueError("Private memory requires an absolute storage path")
         memory = MemoryStore(memory_root,memory_key)
-    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory))
+    visual = None
+    if environ.get("RIZZLER_VISUAL_ENABLED","").strip().lower() in ("1","true","yes"):
+        from .media_store import MediaStore
+        from .visual_intelligence import GeminiVision, VisualService
+        media_key = environ.get("RIZZLER_VISUAL_KEY","")
+        media_root = environ.get("RIZZLER_VISUAL_ROOT","") or (
+            str(Path(work_root)/"visuals") if work_root else "")
+        if (not media_root or not media_key or media_key in (
+                cfg.access_key, work_signing_key,
+                environ.get("RIZZLER_MEMORY_KEY",""),
+                environ.get("RIZZLER_SESSION_SIGNING_KEY",""))):
+            raise ValueError("Visual attachments require independent encryption and an absolute storage root")
+        if production:
+            if work is None:
+                raise ValueError("Production visual media requires the Work security layer")
+            visual_scanner = scanner
+        else:
+            # Demo mode is explicitly single-trust, not a production malware gate.
+            visual_scanner = None
+        visual = VisualService(MediaStore(media_root,media_key,scanner=visual_scanner),
+                               GeminiVision(cfg))
+    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory, visual))
     @asynccontextmanager
     async def lifespan(app):
         # Optional one-time provider prewarm, performed after API starts
@@ -136,6 +157,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app.state.operations = operations
     app.state.work, app.state.identity = work, identity
     app.state.memory = memory
+    app.state.visual = visual
     app.state.production = production
     app.add_exception_handler(AdmissionBusy, lambda request, exc: JSONResponse(
         status_code=429, content={'detail': 'Voice capacity busy; retry later'}))
@@ -212,6 +234,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     def runtime():
         return {"mode":mode,"work_enabled":work is not None,
                 "encrypted_memory_enabled":memory is not None,
+                "multimodal_enabled":visual is not None,
                 "runtime":"native_v11"}
 
     @app.get('/api/voice/tools')
@@ -225,7 +248,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             "work_agent": "available" if work is not None else "disabled",
             "file_uploads": "available" if work is not None else "disabled",
             "job_tracking": "available" if work is not None else "disabled",
-            "memory": "available" if memory is not None else "disabled"},
+            "memory": "available" if memory is not None else "disabled",
+            "visual_analysis": "configured" if visual is not None and cfg.gemini_api_key else "disabled"},
             "registry": capabilities(cfg,work is not None,memory_enabled=memory is not None),
             "note": "Configured does not prove live Google Search availability or current source freshness"}
 
@@ -410,12 +434,107 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         except (OSError,RuntimeError,sqlite3.DatabaseError):
             raise HTTPException(status_code=503,detail="Private memory unavailable") from None
 
+
+    @app.post('/api/visual/attachments', status_code=201)
+    async def visual_upload(request: Request):
+        owner = auth(request, True)
+        if visual is None:
+            raise HTTPException(status_code=409,detail="Visual attachments disabled")
+        name = request.headers.get("x-file-name","")
+        content = bytearray()
+        async for part in request.stream():
+            content.extend(part)
+            if len(content) > 8_000_000:
+                raise HTTPException(status_code=413,detail="Visual upload too large")
+        try:
+            receipt = await asyncio.to_thread(
+                visual.store.save,owner,name,bytes(content))
+            session = sessions.get(owner)
+            session.visuals[:] = list(dict.fromkeys([*session.visuals,receipt["id"]]))[-4:]
+            return receipt
+        except OverflowError:
+            raise HTTPException(status_code=429,detail="Visual attachment quota reached") from None
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=400,detail="Invalid or unsupported visual upload") from None
+        except Exception as exc:
+            # A malware scanner outage is never treated as a clean scan.
+            if production:
+                raise HTTPException(status_code=503,detail="Visual inspection service unavailable") from None
+            raise HTTPException(status_code=503,detail="Visual storage unavailable") from None
+
+    @app.get('/api/visual/attachments')
+    def visual_list(request: Request):
+        owner = auth(request, True)
+        return {"enabled":visual is not None,
+                "attachments":visual.store.list(owner) if visual else []}
+
+    @app.delete('/api/visual/attachments/{uid}')
+    def visual_delete(request: Request, uid: str):
+        owner = auth(request, True)
+        if visual is None:
+            raise HTTPException(status_code=409,detail="Visual attachments disabled")
+        try:
+            deleted = visual.store.delete(owner,uid)
+            session = sessions.sessions.get(owner)
+            if session is not None:
+                session.visuals[:] = [v for v in session.visuals if v != uid]
+            return {"deleted":deleted}
+        except ValueError:
+            raise HTTPException(status_code=400,detail="Invalid attachment ID") from None
+
+    @app.post('/api/visual/ask')
+    async def visual_ask(request: Request):
+        owner = auth(request, True)
+        if visual is None:
+            raise HTTPException(status_code=409,detail="Visual analysis disabled")
+        raw=bytearray()
+        async for part in request.stream():
+            raw.extend(part)
+            if len(raw)>12_000:
+                raise HTTPException(status_code=413,detail="Visual request too large")
+        try:
+            body=json.loads(raw)
+            if not isinstance(body,dict) or set(body)!={"question","attachment_ids"}:
+                raise ValueError("Invalid visual request schema")
+            question=body["question"]
+            ids=body["attachment_ids"]
+        except (ValueError,TypeError,UnicodeError):
+            raise HTTPException(status_code=400,detail="Invalid visual request") from None
+        session=sessions.get(owner)
+        if session.task is not None and not session.task.done():
+            raise HTTPException(status_code=429,detail="Voice turn already active")
+        task=asyncio.current_task()
+        session.task=task
+        seq=session.generation+1
+        session.generation=seq
+        try:
+            result=await visual.ask(owner,question,ids)
+            if seq!=session.generation:
+                raise HTTPException(status_code=409,detail="Visual request superseded")
+            session.history=(session.history + [
+                {"role":"user","content":question + " [visual attachments provided]"},
+                {"role":"assistant","content":result["answer"]}])[-8:]
+            return result
+        except ValueError:
+            raise HTTPException(status_code=400,detail="Invalid visual analysis input") from None
+        except Exception as exc:
+            from .media_store import MediaMissing
+            if isinstance(exc,MediaMissing):
+                raise HTTPException(status_code=404,detail="Visual attachment unavailable") from None
+            if isinstance(exc,RuntimeError) and "capacity busy" in str(exc):
+                raise HTTPException(status_code=429,detail="Visual analysis busy") from None
+            raise HTTPException(status_code=503,detail="Visual analysis unavailable; nothing verified") from None
+        finally:
+            if session.task is task:
+                session.task=None
+
     @app.post('/api/reset')
     async def reset(request: Request):
         sid = auth(request, True)
         session = sessions.get(sid)
         await session.cancel()
         session.history.clear()
+        session.visuals.clear()
         session.generation += 1
         return {'ok': True}
 
@@ -464,7 +583,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 events, samples = [], bytearray()
                 async for event in engine.events(bytes(raw), rate, list(session.history),
                                                 owner=sid, sequence=generation,
-                                                uploads=list(session.uploads), nonce=session.nonce):
+                                                uploads=list(session.uploads), nonce=session.nonce,
+                                                visuals=list(session.visuals)):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -574,7 +694,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                         async for event in engine.events(recorded, rate, list(session.history),
                                                          owner=sid, sequence=seq,
                                                          uploads=list(session.uploads),
-                                                         nonce=session.nonce):
+                                                         nonce=session.nonce,
+                                                         visuals=list(session.visuals)):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
