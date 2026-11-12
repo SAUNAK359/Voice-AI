@@ -13,9 +13,9 @@ from .speech_text import for_speech
 def phrases(text: str, flush: bool = False) -> tuple[list[str], str]:
     """Yield speakable phrases without emitting isolated single-word fragments."""
     parts = []
-    while len(text) >= 32:
-        ends = [i + 1 for i, c in enumerate(text[:125]) if c in '.!?;:' and i >= 27]
-        stop = ends[0] if ends else (text.rfind(' ', 50, 110) if len(text) >= 110 else -1)
+    while len(text) >= 20:
+        ends = [i + 1 for i, c in enumerate(text[:110]) if c in '.!?;:' and i >= 17]
+        stop = ends[0] if ends else (text.rfind(' ', 40, 90) if len(text) >= 90 else -1)
         if stop <= 0:
             break
         parts.append(text[:stop].strip())
@@ -58,15 +58,6 @@ class VoiceEngine:
                     if not transcript:
                         raise ValueError('No clear speech recognized')
                     await output.put({'type': 'status', 'label': 'Generating response'})
-                    tool_result = None
-                    if self.tools is not None and owner is not None:
-                        tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads)
-                        if tool_result is not None:
-                            await output.put({'type':'tool_result',
-                                'tool':tool_result['tool'],
-                                'verified':tool_result.get('verified',False),
-                                'elapsed_ms':tool_result.get('tool_elapsed_ms'),
-                                'job':tool_result.get('job')})
                     speech_queue = asyncio.Queue(maxsize=5)
                     first_pcm_ms = None
                     tts_ms = 0.0
@@ -92,6 +83,24 @@ class VoiceEngine:
                             for i in range(0, len(raw), block):
                                 await output.put({'type': 'audio', 'data': raw[i:i + block]})
                     worker = asyncio.create_task(speak(), name='rizzler-tts')
+                    tool_result = None
+                    if self.tools is not None and owner is not None:
+                        from .voice_tools import classify_tool
+                        intent = classify_tool(transcript, self.tools.store is not None)
+                        if intent == 'web_search':
+                            await output.put({'type':'status','label':'Searching verified sources'})
+                            await speech_queue.put('I will check current sources.')
+                        if intent == 'math':
+                            await output.put({'type':'status','label':'Verifying the equations'})
+                        if intent == 'work_submit':
+                            await output.put({'type':'status','label':'Delegating to Work Agent'})
+                        tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads)
+                        if tool_result is not None:
+                            await output.put({'type':'tool_result',
+                                'tool':tool_result['tool'],
+                                'verified':tool_result.get('verified',False),
+                                'elapsed_ms':tool_result.get('tool_elapsed_ms'),
+                                'job':tool_result.get('job')})
                     answer = ''
                     pending = ''
                     first_text_ms = None
@@ -100,8 +109,26 @@ class VoiceEngine:
                         if tool_result is not None:
                             yield tool_result['text']
                         else:
-                            async for item in self.providers.llm.stream(transcript, history):
-                                yield item
+                            source = self.providers.llm.stream(transcript, history)
+                            first = asyncio.create_task(anext(source), name='gemini-first-text')
+                            try:
+                                try:
+                                    first_text = await asyncio.wait_for(asyncio.shield(first), timeout=1.2)
+                                except asyncio.TimeoutError:
+                                    # This is not a tool-success claim; it only acknowledges a
+                                    # complex question during remote model latency.
+                                    if len(transcript) >= 85:
+                                        await speech_queue.put('Let me work that through.')
+                                    first_text = await first
+                                yield first_text
+                                async for item in source:
+                                    yield item
+                            except StopAsyncIteration:
+                                return
+                            finally:
+                                if not first.done():
+                                    first.cancel()
+                                await asyncio.gather(first, return_exceptions=True)
 
                     async for delta in responses():
                         if worker.done():
