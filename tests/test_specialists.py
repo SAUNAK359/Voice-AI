@@ -142,7 +142,9 @@ def test_specialist_status_endpoint_scoped_to_owner(tmp_path,monkeypatch):
                          ["md"],"status_visible_001",[])
         a=client.get("/api/work/jobs/"+job["id"]+"/agents",
                      headers={"Authorization":"Bearer "+issue_token("owner_1",SIGNING)})
-        assert a.status_code==200 and a.json()["agents"]==[]
+        assert a.status_code == 200
+        assert {x["agent"] for x in a.json()["agents"]} == {"orchestrator", "pdf_visual", "quality"}
+        assert all(x["status"] == "queued" for x in a.json()["agents"])
         b=client.get("/api/work/jobs/"+job["id"]+"/agents",
                      headers={"Authorization":"Bearer "+issue_token("owner_2",SIGNING)})
         assert b.status_code==404
