@@ -74,6 +74,23 @@ function wsAudio(raw){
  }
 }
 function concat(parts){const size=parts.reduce((n,x)=>n+x.length,0),out=new Uint8Array(size);let pos=0;for(const x of parts){out.set(x,pos);pos+=x.length}return out}
+async function scheduleHttpAudio(pcm,seq,rate,signal){
+ if(rate!==24000||pcm.byteLength%2)throw Error('Unexpected HTTP voice sample format');
+ const samples=new Int16Array(pcm.buffer,pcm.byteOffset,pcm.byteLength/2);
+ // A full HTTP response can exceed the *queued* playback budget. Stream it
+ // into short scheduled PCM segments with a bounded maximum lead.
+ for(let offset=0;offset<samples.length;offset+=960){
+  const part=samples.subarray(offset,Math.min(offset+960,samples.length));
+  while(s.ctx?.state==='running'&&!s.budget.accepts(s.ctx.currentTime,s.nextAudio,part.length/rate)){
+   await new Promise(resolve=>setTimeout(resolve,100));
+   if(signal.aborted||!s.fence.accepts(seq))return false;
+  }
+  if(signal.aborted||!s.fence.accepts(seq))return false;
+  if(!s.ctx||s.ctx.state!=='running')throw Error('Audio suspended; tap the page to resume.');
+  playback(part,seq,rate);
+ }
+ return true;
+}
 async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortController();s.request=ctrl;
  try{const res=await fetch('/api/turn',{method:'POST',headers:{...headers(),'x-sample-rate':String(s.rate),'content-type':'application/octet-stream'},body:bytes,signal:ctrl.signal});
  if(!res.ok)throw Error('HTTP '+res.status);const m=await res.json();if(!s.fence.accepts(seq))return;
@@ -83,7 +100,7 @@ async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortContr
  s.allowSeq=seq;s.done=true;
  const pcm=Uint8Array.from(atob(m.audio_b64),c=>c.charCodeAt(0));
  if(!pcm.length||pcm.length%2)throw Error('Invalid response PCM');
- playback(new Int16Array(pcm.buffer),seq,m.sample_rate);
+ if(!(await scheduleHttpAudio(pcm,seq,m.sample_rate,ctrl.signal)))return;
  if(s.ledger.complete(seq)!==null)noteLatency();
  }catch(e){if(e.name!=='AbortError'&&s.fence.accepts(seq)){s.ledger.cancel(seq);status('error','Request failed: '+e.message)}}
  finally{if(s.request===ctrl)s.request=null}}
