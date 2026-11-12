@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+import sqlite3
 import time
 
 from .math_engine import solve_equations
@@ -142,7 +143,7 @@ class VoiceTools:
                 line="Memory deleted." if count else "No matching memory was found."
             return {"tool":intent,"text":line,"spoken":re.sub(r"\n[-]?",". ",line),
                     "verified":True}
-        except (ValueError, OSError, RuntimeError):
+        except (ValueError, OSError, RuntimeError, sqlite3.DatabaseError):
             line="I couldn't complete that memory request. No success is claimed."
             return {"tool":intent,"text":line,"spoken":line,"verified":False}
 
