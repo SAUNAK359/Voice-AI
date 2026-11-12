@@ -250,7 +250,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             "job_tracking": "available" if work is not None else "disabled",
             "memory": "available" if memory is not None else "disabled",
             "visual_analysis": "configured" if visual is not None and cfg.gemini_api_key else "disabled"},
-            "registry": capabilities(cfg,work is not None,memory_enabled=memory is not None),
+            "registry": capabilities(cfg,work is not None,memory_enabled=memory is not None,visual_enabled=visual is not None),
             "note": "Configured does not prove live Google Search availability or current source freshness"}
 
     if identity is not None:
