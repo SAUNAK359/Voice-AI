@@ -98,7 +98,8 @@ class VoiceTools:
     async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '')->dict|None:
         intent=classify_tool(text,self.store is not None)
         if not intent:return None
-        require_tool(intent, explicit_private_write=intent in ("work_submit","work_cancel"),
+        permission_name = "symbolic_math" if intent == "math" else intent
+        require_tool(permission_name, explicit_private_write=intent in ("work_submit","work_cancel"),
                      allowed=frozenset(VOICE_TOOLS))
         started=time.perf_counter()
         if intent=="web_search" and re.search(r"\b(?:can you|do you|have you|are you able|access to|search tools|web search tools)\\b",text,re.I) and not re.search(r"\b(?:current|latest|today|look up|search for|stock price|share price)\\b",text,re.I):
