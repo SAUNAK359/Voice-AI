@@ -12,7 +12,7 @@ const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf=')
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
   {'x-rizzler-key':s.key,'x-session-id':s.sessionId};
 function status(p,d=''){document.body.className=p;$('phase').textContent=p[0].toUpperCase()+p.slice(1);$('detail').textContent=d}
-function message(role,text,seq){const id=role+seq;let el=s.history.get(id);if(!el){document.querySelector('.empty')?.remove();el=document.createElement('article');el.className='bubble '+role;const label=document.createElement('small');label.textContent=role==='user'?'You':'Rizzler';const body=document.createElement('div');el.append(label,body);$('messages').append(el);s.history.set(id,el)}if(role==='assistant'&&window.RizzlerRich){window.RizzlerRich.render(el.lastChild,text)}else el.lastChild.textContent=text;$('messages').scrollTop=$('messages').scrollHeight}
+function message(role,text,seq,final=false){const id=role+seq;let el=s.history.get(id);if(!el){document.querySelector('.empty')?.remove();el=document.createElement('article');el.className='bubble '+role;const label=document.createElement('small');label.textContent=role==='user'?'You':'Rizzler';const body=document.createElement('div');el.append(label,body);$('messages').append(el);s.history.set(id,el)}if(role==='assistant'&&window.RizzlerRich&&final){window.RizzlerRich.render(el.lastChild,text)}else if(role==='assistant'){el.lastChild.textContent=window.RizzlerRich?window.RizzlerRich.latex(text.replace(/\\\(|\\\)|\$/g,'')):text}else el.lastChild.textContent=text;$('messages').scrollTop=$('messages').scrollHeight}
 function noteLatency(){const q=s.ledger.summary();const extra=q.n?` · Output-start proxy p50 ${q.p50} / p95 ${q.p95} / p99 ${q.p99} ms (n=${q.n})`:'';$('clientmetrics').textContent='Browser pause-to-scheduled-playback (not physically measured speaker audio)'+extra}
 function stopAudio(){s.epoch++;s.fence.cancel();for(const a of s.playing){try{a.onended=null;a.stop()}catch(_){ }try{a.disconnect()}catch(_){}}s.playing.clear();s.nextAudio=0;s.allowSeq=0}
 function interrupt(){const active=s.playing.size||s.request||['thinking','speaking'].includes(document.body.className);
@@ -27,11 +27,11 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'ready':$('connection').textContent='WebSocket live';break;
  case'status':if(!s.recording)status((msg.label||'thinking').toLowerCase());break;
  case'transcript':message('user',msg.text,seq);break;
- case'assistant_text':message('assistant',msg.text,seq);break;
+ case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
  case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();break;
  case'audio_begin':s.allowSeq=seq;s.done=false;break;
  case'metrics':{const m=msg.data||{};
- $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · Gemini first text ${m.llm_first_text_ms??'—'} ms · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
+ $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · ${m.tool?('Tool '+m.tool+' '+(m.tool_ms??'—')+' ms'):('Gemini first text '+(m.llm_first_text_ms??'—')+' ms')} · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
  s.ledger.server(seq,m.post_pause_first_audio_ms);break}
  case'done':s.done=true;if(s.ledger.complete(seq)!==null)noteLatency();if(!s.playing.size&&!s.recording)status('listening','Ask a follow-up.');break;
  case'error':s.ledger.cancel(seq);stopAudio();status('error',msg.message||'Voice turn failed');break;
