@@ -1,0 +1,22 @@
+# GPU demo container for an on-demand RunPod Pod. Build and publish privately.
+# Its process exits at the gateway's absolute 30-minute deadline.
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+ENV DEBIAN_FRONTEND=noninteractive PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv libgomp1 libgl1 fonts-dejavu-core ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+WORKDIR /srv/rizzler
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+COPY deploy/portfolio-entrypoint.sh ./entrypoint.sh
+RUN pip install --no-cache-dir -e '.[voice,work,cuda12]' \
+    && useradd --create-home --uid 10001 rizzler \
+    && mkdir -p /tmp/rizzler-work /home/rizzler/.cache \
+    && chown -R rizzler:rizzler /tmp/rizzler-work /home/rizzler/.cache
+USER rizzler
+ENV RIZZLER_DEPLOYMENT_MODE=demo RIZZLER_HOST=0.0.0.0 RIZZLER_PORT=8000 \
+    RIZZLER_WORK_ROOT=/tmp/rizzler-work RIZZLER_ASR_DEVICE=cuda
+EXPOSE 8000
+CMD ["/bin/bash", "/srv/rizzler/entrypoint.sh"]
