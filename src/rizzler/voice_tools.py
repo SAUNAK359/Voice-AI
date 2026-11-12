@@ -99,6 +99,7 @@ async def grounded_search(query: str, settings) -> dict:
 
 MEMORY_SAVE = re.compile(r"^\s*(?:please\s+)?remember\s+that\s+(.+?)\s*$", re.I | re.S)
 MEMORY_LIST = re.compile(r"^\s*(?:what\s+do\s+you\s+remember(?:\s+about\s+(.+))?|list\s+my\s+memories)\s*[?.!]*\s*$", re.I | re.S)
+MEMORY_CONFIRM = re.compile(r"^\\s*confirm\\s+delete\\s+all\\s+memories\\s*[.!]*\\s*$", re.I)
 MEMORY_CLEAR = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+all\s+my\s+memories\s*[.!]*\s*$", re.I)
 MEMORY_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+memory\s+([A-Za-z0-9_-]{12,32})\s*[.!]*\s*$", re.I)
 
@@ -106,9 +107,11 @@ MEMORY_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+memory\s+([A-
 class VoiceTools:
     def __init__(self,store,settings,memory=None):
         self.store,self.settings,self.memory=store,settings,memory
+        self._pending_memory_clear = {}
 
     def memory_intent(self, text: str) -> str | None:
         if len(text)>8000:return None
+        if MEMORY_CONFIRM.fullmatch(text):return "memory_clear_confirm"
         if MEMORY_CLEAR.fullmatch(text):return "memory_clear"
         if MEMORY_REMOVE.fullmatch(text):return "memory_remove"
         if MEMORY_SAVE.fullmatch(text):return "memory_save"
@@ -118,6 +121,11 @@ class VoiceTools:
     def _memory_command(self, intent: str, text: str, owner: str) -> dict:
         require_tool(intent,explicit_private_write=intent != "memory_list",
                      allowed=frozenset(VOICE_TOOLS))
+        now=time.monotonic()
+        self._pending_memory_clear={
+            who:issued for who,issued in self._pending_memory_clear.items()
+            if 0<=now-issued<=30
+        }
         if self.memory is None:
             line = "Private memory is disabled. An operator must explicitly enable encrypted memory."
             return {"tool":intent,"text":line,"spoken":line,"verified":False}
@@ -135,6 +143,16 @@ class VoiceTools:
                 line=("Your saved memories:\n"+ "\n".join("- "+s for s in facts)
                       if facts else "I have no matching saved memories.")
             elif intent=="memory_clear":
+                if len(self._pending_memory_clear)>=128:
+                    raise ValueError("Too many outstanding confirmations")
+                self._pending_memory_clear[owner]=now
+                line="Nothing has been deleted. Say confirm delete all memories within 30 seconds."
+                return {"tool":intent,"text":line,"spoken":line,"verified":False}
+            elif intent=="memory_clear_confirm":
+                issued=self._pending_memory_clear.pop(owner,None)
+                if issued is None or not 0<=now-issued<=30:
+                    line="No recent memory-deletion request was found. Nothing was deleted."
+                    return {"tool":intent,"text":line,"spoken":line,"verified":False}
                 count=self.memory.delete(owner)
                 line=f"Deleted {count} saved memories for this account."
             else:
