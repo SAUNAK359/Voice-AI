@@ -475,7 +475,7 @@ $('mute').addEventListener('click',()=>{s.muted=!s.muted;$('mute').textContent=s
  if(s.muted){interrupt();s.recording=false;s.gate.reset();status('muted','Microphone muted')}else status('listening','Speak naturally')});
 $('send').addEventListener('click',()=>{if(s.recording){finish();return}if(s.recentBytes<s.rate*2*.35)return;
  start(true);finish()});
-$('reset').addEventListener('click',async()=>{interrupt();s.history.clear();$('messages').replaceChildren();s.ledger.cancel(s.fence.generation);
+$('reset').addEventListener('click',async()=>{interrupt();s.history.clear();s.visualIDs=[];renderVisuals();$('messages').replaceChildren();s.ledger.cancel(s.fence.generation);
  if(!sendWs({type:'new_conversation'}))await fetch('/api/reset',{method:'POST',headers:headers()}).catch(()=>{});
  status('listening','New conversation')});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{})});
