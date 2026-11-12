@@ -54,6 +54,7 @@ def normalize(name: str, data: bytes) -> tuple[str, bytes, dict]:
             raise ValueError("Malformed PDF upload") from None
         return "application/pdf", data, {"pages": pages}
     from PIL import Image, ImageOps, UnidentifiedImageError
+    Image.MAX_IMAGE_PIXELS = 20_000_000
     try:
         with Image.open(BytesIO(data)) as img:
             if img.format not in {"PNG", "JPEG", "WEBP"}:
