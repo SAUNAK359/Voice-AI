@@ -312,3 +312,29 @@ def test_energy_and_empathy_prosody_remain_bounded():
     assert expressive_speech_speed("Did you want me to continue?") < expressive_speech_speed(
         "Great news! Your presentation is completed.")
     assert 1 <= expressive_speech_speed("Warning, something failed!") <= 1.24
+
+
+def test_live_agent_status_and_voice_are_ledger_grounded(tmp_path, monkeypatch):
+    monkeypatch.setenv("RIZZLER_WORK_ROOT", str(tmp_path / "work"))
+    monkeypatch.setenv("RIZZLER_WORK_SIGNING_KEY", SIGNING)
+    with TestClient(create_app(Settings(access_key=KEY))) as client:
+        store = client.app.state.work
+        job = store.submit("owner_1", "Produce a well-structured report.",
+                           ["md"], "live_agent_status_001", [])
+        headers = {"Authorization": "Bearer " + issue_token("owner_1", SIGNING)}
+        queued = client.get(f"/api/work/jobs/{job['id']}/agents", headers=headers).json()
+        assert all(s["target_seconds"] > 0 for s in queued["agents"])
+        assert all(s["elapsed_seconds"] is None for s in queued["agents"])
+        claim = store.claim("worker", 45)
+        store.agent_begin(job["id"], "worker", claim["fence"], "orchestrator", 150)
+        states = client.get(f"/api/work/jobs/{job['id']}/agents", headers=headers).json()
+        running = next(s for s in states["agents"] if s["agent"] == "orchestrator")
+        assert running["elapsed_seconds"] >= 0
+        assert running["target_seconds"] == 150
+        spoken = client.get(f"/api/work/jobs/{job['id']}/voice-status", headers=headers)
+        assert spoken.status_code == 200
+        assert "orchestrator" in spoken.json()["text"]
+        assert "completed" not in spoken.json()["status"]
+        assert client.get(f"/api/work/jobs/{job['id']}/agents",
+                          headers={"Authorization": "Bearer " + issue_token("owner_2", SIGNING)}
+                          ).status_code == 404
