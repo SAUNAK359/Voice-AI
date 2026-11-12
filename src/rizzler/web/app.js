@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- memoryEnabled:false,workEnabled:false,visualEnabled:false,visualIDs:[],visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -225,6 +225,7 @@ async function connectSession(){
 }
 
 function renderVisuals(){
+ s.visualAnalysis=null;$('visual-report-panel').hidden=true;
  const container=$('visual-list');if(!container)return;
  container.replaceChildren();
  for(const selected of s.visualIDs){
@@ -305,9 +306,27 @@ $('visual-form').addEventListener('submit',async e=>{
   if(!response.ok)throw Error('Visual analysis unavailable ('+response.status+')');
   const result=await response.json();
   message('assistant',result.answer,seq,true);
+  s.visualAnalysis=result.analysis_id;
+  $('visual-report-panel').hidden=!s.workEnabled || !s.visualAnalysis;
   $('visual-status').textContent='Response ready. Evidence is user-provided, not independently verified.';
  }catch(err){$('visual-status').textContent=err.message}
  finally{button.disabled=false}
+});
+
+$('visual-report').addEventListener('click',async()=>{
+ if(!s.visualAnalysis||!s.workEnabled){$('visual-status').textContent='Analyze visuals and enable Work first.';return}
+ const b=$('visual-report');b.disabled=true;
+ try{
+  const res=await fetch('/api/visual/report',{method:'POST',
+    headers:{...headers(),'content-type':'application/json'},
+    body:JSON.stringify({analysis_id:s.visualAnalysis,
+        format:$('visual-report-format').value})});
+  if(!res.ok)throw Error('Work report not accepted ('+res.status+')');
+  const item=await res.json();
+  $('visual-status').textContent='Work queued: '+item.job.id.slice(0,10)+'. You can continue speaking.';
+  if(s.workEnabled)refreshWork();
+ }catch(err){$('visual-status').textContent=err.message}
+ finally{b.disabled=false}
 });
 
 document.addEventListener('pointerdown',()=>{
