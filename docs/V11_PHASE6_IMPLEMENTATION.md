@@ -8,8 +8,8 @@ strict artifact QA, and process-local metrics remain in place.
 
 ## Changes implemented by Phase 6 increment
 **Offline backup and atomic restore.** The streaming verified backup includes
-jobs.sqlite3, identity.sqlite3, uploads, artifacts, private_memory, visuals,
-memory, and pdfs under RIZZLER_WORK_ROOT. Every member has SHA-256 and byte
+jobs.sqlite3, identity.sqlite3, ai_reservations.sqlite3, uploads, artifacts,
+private_memory, visuals, memory, and pdfs under RIZZLER_WORK_ROOT. Every member has SHA-256 and byte
 count recorded; source symlinks and nonregular files are rejected. A restore
 extracts into a private temporary staging directory, verifies every byte and
 archive member, and atomically renames into the desired previously absent
@@ -30,7 +30,9 @@ through a secret manager, encrypted PDF/media/memory data cannot be decrypted.
 
 **Bounded PDF admission.** RIZZLER_PDF_MAX_ACTIVE defaults to 2 (allowed 1–8).
 The API will not create unlimited in-memory background tasks: new tasks remain
-persisted queued and are later picked up by the recovery watchdog. Leases in
+persisted queued and are later picked up by the recovery watchdog. Explicit
+resume requests for paused ingestion and research are first committed as
+`queued`, so they cannot be lost when all background slots are occupied. Leases in
 the existing SQLite metadata protect parallel workers and checkpoint tiles.
 No fixed PDF page count or document-byte limit is introduced. Physical memory,
 disk, scanner and cloud resource constraints still apply. Work and voice run
@@ -67,6 +69,11 @@ are included.
   accepted requests; cap persists when a new process instance opens the DB
 - Budget unset => no artificial client spending cap
 - Partial budget configuration and invalid prices => fail closed
+- A blocked PDF scanner does not allocate a second background task when the
+  configured maximum is one; its persistent work stays recoverable
+- Paused ingestion and research resume persist an eligible `queued` state
+- The task planner and live web search stop issuing model calls when the
+  optional global reservation limit is reached
 - Existing voice/Work/PDF integration tests still pass across Python matrix
 
 ## Remaining production qualification
