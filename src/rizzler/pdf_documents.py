@@ -249,6 +249,7 @@ class PDFStore:
 
     def request_finalize(self,owner,uid):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"] in ("uploading","validation_failed"):
                 if not row["chunks"]:
@@ -271,6 +272,7 @@ class PDFStore:
     def begin_validation(self,owner,uid):
         token=secrets.token_hex(20)
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"]=="uploading":
                 if not row["chunks"]:raise ValueError("PDF upload incomplete")
@@ -342,6 +344,7 @@ class PDFStore:
     def claim(self,owner,uid):
         token=secrets.token_hex(20)
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"]=="complete":return None
             if row["status"] not in ("queued","paused","running"):
