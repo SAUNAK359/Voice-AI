@@ -8,8 +8,9 @@ intact. It does not certify superiority to any Claude model.
 
 - Finalized Voice STT and authenticated POST /api/agent/turn use the same
   AgentRuntime implementation and authenticated owner identity.
-- Production identity is OIDC and CSRF; development sessions require the
-  private voice access key and validated X-Session-Id.
+- Production uses one OIDC identity/session (plus CSRF protection for writes).
+  Demo uses the same private Voice key and validated session ID for both APIs;
+  no Work bearer token is accepted.
 - App's Work API and Voice both access the same durable WorkStore; jobs are
   visible by status/plan/agents/events/artifacts across both surfaces.
 - Installed capabilities are described to the planning model at runtime.
@@ -20,15 +21,21 @@ intact. It does not certify superiority to any Claude model.
 - Owner-scoped mutation proposals for Work cancel/revise/retry require a
   separate authenticated user action. Revision/retry creates a new immutable
   job linked to the previous version. Confirmation IDs expire.
-- Existing WorkWorker executes specialist DAG nodes and uses the original QA
-  and artifact publishing checks. Voice interruption does not cancel Work.
+- New V12 Work jobs persist a pending graph. On worker claim, Gemini
+  proposes a capability graph, the trusted validator checks dependencies,
+  output coverage and safe dataflow, and the leased worker atomically commits
+  and executes its ready nodes. No keyword routing, predetermined task ordering,
+  or silent fixed-plan fallback applies to V12 jobs. Legacy submitted V11 jobs
+  retain read-only compatibility with their committed execution plans.
+  Voice interruption does not cancel durable Work.
 
 ## Operation
 
 Configure GEMINI_API_KEY and secure Work storage/signing key.
-Production defaults to the new agent runtime. To opt in on demo, set
-RIZZLER_AGENTIC_ENABLED=1. To roll back semantic orchestration temporarily,
-set RIZZLER_AGENTIC_ENABLED=0; existing V11 VoiceTools remain available.
+Production defaults to the agent runtime and model-created Work graph.
+Demo opt-in is RIZZLER_AGENTIC_ENABLED=1; without the configured model,
+new agentic Work tasks fail closed rather than executing an invented recipe.
+The old V11 planner remains only for migration and explicit rollback.
 
 The main application provides a text control and the same microphone voice
 channel. POST /api/agent/turn expects {"text":"..."}; response includes
@@ -53,11 +60,12 @@ and confirmation.
 ## Outstanding qualification and architectural work
 
 **These are not claimed completed:**
-1. True dynamic Work specialist dependency graphs and task-specific goal grading:
-   the existing fixed V11 Work DAG still executes accepted jobs.
+1. Model-generated DAG selection and dependency execution now exists for new
+   V12 jobs; arbitrary repeated specialist instances and semantic outcome
+   grading beyond current structural/evidence gates remain unqualified.
 2. All available MCP/connectors exposed through a hardened capability gateway.
-3. Robust live provider evaluation, external source/claim checking, and provider
-   fallback for grounding; existing grounded-search caveats remain.
+3. Live provider qualification, independent source/claim checking, and
+   appropriate fallback for grounding remain unverified.
 4. Model-driven long-horizon self-improvement, safe procedural skill updates.
 5. Real device acoustic latency, TTS interruption and mobile browser soak.
 6. Live 2-user OIDC, PostgreSQL and multi-host storage tests.
