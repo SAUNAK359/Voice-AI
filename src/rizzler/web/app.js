@@ -295,14 +295,14 @@ async function uploadPDF(file){
  if(!file||!file.name.toLowerCase().endsWith('.pdf'))throw Error('Only PDF documents supported');
  $('visual-status').textContent='Preparing resumable full PDF upload…';
  await refreshPDFDocs();
- const unfinished=s.pdfDocs.find(d=>d.name===file.name&&d.status==='uploading');
+ const unfinished=s.pdfDocs.find(d=>d.name===file.name&&d.status==='uploading'&&d.expected_bytes===file.size);
  const create=unfinished?null:await fetch('/api/pdf/documents',{method:'POST',
    headers:{...headers(),'content-type':'application/json'},
-   body:JSON.stringify({name:file.name})});
+   body:JSON.stringify({name:file.name,bytes:file.size})});
  if(create&&!create.ok)throw Error('Cannot initialize PDF upload ('+create.status+')');
  const doc=unfinished||await create.json(),size=1024*1024;
  const total=Math.ceil(file.size/size);
- for(let i=doc.uploaded_chunks;i<total;i++){
+ for(let i=0;i<total;i++){
   const part=await file.slice(i*size,Math.min(file.size,(i+1)*size)).arrayBuffer();
   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',part)))
       .map(x=>x.toString(16).padStart(2,'0')).join('');
