@@ -15,16 +15,25 @@ from .work_agents import SPECS
 from .work_store import WorkStore, Conflict, Missing
 from .upload_scan import ScanUnavailable
 
-def router(store: WorkStore, signing_key: str, identity: Identity | None = None) -> APIRouter:
+def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
+           owner_admission=None) -> APIRouter:
     api=APIRouter(prefix="/api/work",tags=["work"])
     def owner(req: Request):
         if identity is not None:
-            return identity.owner(req, mutate=req.method not in ("GET", "HEAD", "OPTIONS"))
-        try:
-            # Bearer tokens cannot be minted via the public voice-key endpoint.
-            return verify_token(req.headers.get("authorization"), signing_key)
-        except PermissionError:
-            raise HTTPException(status_code=401,detail="Invalid work authorization")
+            subject=identity.owner(req, mutate=req.method not in ("GET", "HEAD", "OPTIONS"))
+        else:
+            try:
+                # The voice key cannot mint a Work bearer token.
+                subject=verify_token(req.headers.get("authorization"), signing_key)
+            except PermissionError:
+                raise HTTPException(status_code=401,detail="Invalid work authorization") from None
+        if owner_admission is not None:
+            from .owner_admission import classify, RateExceeded
+            try:owner_admission.admit(subject,classify(req.method,req.url.path))
+            except RateExceeded as exc:
+                raise HTTPException(status_code=429,detail="Request rate exceeded",
+                    headers={"Retry-After":str(exc.retry_after)}) from None
+        return subject
 
     def same_origin(req: Request):
         if identity is not None:
