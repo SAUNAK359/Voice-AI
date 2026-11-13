@@ -152,13 +152,18 @@ class AgentRuntime:
         state=[{"role":"previous","text":str((history or [])[-5:])[:3000]},
                {"role":"current_user","text":text}]
         started=time.perf_counter()
+        deadline=started+max(4,min(32,self.settings.request_timeout-12))
         calls=[]
         seen=set()
         submitted=False
         accepted_job=None
         try:
             for step in range(6):
-                decision=await self.decide(client,state,tools)
+                remaining=deadline-time.perf_counter()
+                if remaining<=0:
+                    raise TimeoutError("Controller budget exhausted")
+                decision=await asyncio.wait_for(
+                    self.decide(client,state,tools),timeout=max(0.2,remaining))
                 if not decision["calls"]:
                     answer=decision["answer"].strip() or "I couldn't verify a reliable answer."
                     return {"tool":"agent","text":answer,
@@ -175,7 +180,8 @@ class AgentRuntime:
                 async def one(call,i):
                     try:
                         result=await asyncio.wait_for(self.execute(call,owner,text,nonce,sequence,
-                            step*4+i,uploads or [],visuals or []),timeout=32)
+                            step*4+i,uploads or [],visuals or []),
+                            timeout=max(0.2,min(32,deadline-time.perf_counter())))
                         return {"name":call["name"],"ok":True,"result":result}
                     except (ValueError,PermissionError,Missing,Conflict,RuntimeError,TimeoutError,OSError):
                         return {"name":call["name"],"ok":False,"error":"Unavailable or unauthorized operation"}
@@ -187,8 +193,12 @@ class AgentRuntime:
                 calls.extend({"name":r["name"],"ok":r["ok"],
                     "verified":bool(r["ok"] and isinstance(r.get("result"),dict)
                         and r["result"].get("verified",False))} for r in results)
-                accepted=[r["result"]["job"] for r in results if r["ok"] and
-                          isinstance(r["result"],dict) and r["name"]=="work.submit"]
+                if accepted_job:
+                    line="Work accepted and queued: "+accepted_job["id"]+". The job is not yet complete."
+                    return {"tool":"agent","verified":True,"accepted":True,"job":accepted_job,
+                            "text":line,"spoken":"Your Work task was accepted. You can keep talking while it runs.",
+                            "actions":calls,
+                            "tool_elapsed_ms":round((time.perf_counter()-started)*1000,2)}
                 approvals=[r["result"]["approval"] for r in results if r["ok"] and
                            isinstance(r["result"],dict) and r["result"].get("confirmation_required")]
                 if approvals:
@@ -202,7 +212,9 @@ class AgentRuntime:
             return {"tool":"agent","verified":False,"actions":calls,
                     "text":"Execution budget exhausted. Inspect the Work dashboard for accepted jobs.",
                     "spoken":"I reached the operation limit. You can check Work for accepted jobs."}
-        except (ValueError,PermissionError,RuntimeError,TimeoutError,TypeError,KeyError):
+        except Exception:
+            # Provider details and tool output can contain secrets or untrusted text.
+            # Do not turn failures into user-visible unverified success claims.
             return {"tool":"agent","verified":False,"actions":calls,
                     "text":"I couldn't safely finish that request. Accepted Work jobs remain available.",
                     "spoken":"I couldn't safely finish. Check Work for any accepted tasks."}
