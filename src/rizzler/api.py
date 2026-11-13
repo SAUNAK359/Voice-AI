@@ -151,6 +151,30 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         task.add_done_callback(finished)
         return task
 
+    async def validate_then_index(owner,uid):
+        token=await asyncio.to_thread(pdf_store.begin_validation,owner,uid)
+        if token is None:
+            state=await asyncio.to_thread(pdf_store.status,owner,uid)
+            if state["status"]=="queued":
+                return await pdf_ingestor.run(owner,uid)
+            return state
+        stop=asyncio.Event()
+        async def heartbeat():
+            while not stop.is_set():
+                try:await asyncio.wait_for(stop.wait(),timeout=30)
+                except asyncio.TimeoutError:
+                    await asyncio.to_thread(pdf_store.touch_validation,owner,uid,token)
+        pulse=asyncio.create_task(heartbeat(),name="pdf-validation-heartbeat")
+        try:
+            state=await asyncio.to_thread(pdf_store.finalize,owner,uid,token)
+        finally:
+            stop.set()
+            pulse.cancel()
+            await asyncio.gather(pulse,return_exceptions=True)
+        if state["status"]=="queued":
+            return await pdf_ingestor.run(owner,uid)
+        return state
+
     engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory, visual))
     @asynccontextmanager
     async def lifespan(app):
@@ -176,6 +200,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             async def recover_pdf_jobs():
                 while True:
                     try:
+                        for owner,uid in await asyncio.to_thread(pdf_store.recoverable_validation):
+                            schedule_pdf(validate_then_index(owner,uid))
                         for owner,uid in await asyncio.to_thread(pdf_store.recoverable):
                             schedule_pdf(pdf_ingestor.run(owner,uid))
                         for owner,uid in await asyncio.to_thread(pdf_research.recoverable):
@@ -542,26 +568,25 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         except OSError:
             raise HTTPException(status_code=507,detail="PDF storage capacity exhausted") from None
 
-    @app.post('/api/pdf/documents/{uid}/complete')
+    @app.post('/api/pdf/documents/{uid}/complete',status_code=202)
     async def pdf_finalize(request: Request,uid: str):
         owner=auth(request,True)
         if pdf_store is None:
             raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
         from .pdf_documents import DocumentNotFound,DocumentConflict
-        from .upload_scan import ScanUnavailable
         try:
-            result=await asyncio.to_thread(pdf_store.finalize,owner,uid)
-            if result["status"]=="queued":
+            result=await asyncio.to_thread(pdf_store.request_finalize,owner,uid)
+            if result["status"]=="validating":
+                schedule_pdf(validate_then_index(owner,uid))
+            elif result["status"]=="queued":
                 schedule_pdf(pdf_ingestor.run(owner,uid))
             return result
         except DocumentNotFound:
             raise HTTPException(status_code=404,detail="PDF document unavailable") from None
         except DocumentConflict:
             raise HTTPException(status_code=409,detail="PDF upload not complete") from None
-        except (ValueError,ScanUnavailable):
-            raise HTTPException(status_code=422,detail="PDF structure or malware validation failed") from None
-        except OSError:
-            raise HTTPException(status_code=507,detail="Insufficient PDF processing space") from None
+        except ValueError:
+            raise HTTPException(status_code=400,detail="PDF upload has no data") from None
 
     @app.get('/api/pdf/documents/{uid}')
     async def pdf_status(request: Request,uid: str):
@@ -581,9 +606,13 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         from .pdf_documents import DocumentNotFound,DocumentConflict
         try:
             status=await asyncio.to_thread(pdf_store.status,owner,uid)
-            if status["status"] not in ("paused","queued"):
+            if status["status"]=="validation_failed":
+                status=await asyncio.to_thread(pdf_store.request_finalize,owner,uid)
+                schedule_pdf(validate_then_index(owner,uid))
+            elif status["status"] in ("paused","queued"):
+                schedule_pdf(pdf_ingestor.run(owner,uid))
+            else:
                 raise DocumentConflict("PDF not ready for resumption")
-            schedule_pdf(pdf_ingestor.run(owner,uid))
             return {"accepted":True,"document":status}
         except DocumentNotFound:
             raise HTTPException(status_code=404,detail="PDF document unavailable") from None
