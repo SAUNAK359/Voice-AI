@@ -166,7 +166,8 @@ def test_complete_document_research_accounts_for_every_page(tmp_path):
     assert "Model synthesis" in result["answer"]
     with pytest.raises(DocumentNotFound):
         engine.status(OTHER,research["id"])
-    assert store.delete(OWNER,uid)
+    deleted=store.delete(OWNER,uid)
+    assert deleted
     with pytest.raises(DocumentNotFound):
         engine.status(OWNER,research["id"])
 
