@@ -180,7 +180,7 @@ class VoiceTools:
     async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None, history: list[dict] | None = None)->dict|None:
         if self.agent is not None:
             # Explicit confirmation is an authorization protocol, not intent routing.
-            match=re.fullmatch(r"\\s*confirm action\\s+([a-f0-9]{32})\\s*[.!]?\\s*",text,re.I)
+            match=re.fullmatch(r"\s*confirm action\s+([a-f0-9]{32})\s*[.!]?\s*",text,re.I)
             if match:
                 if self.store is None:
                     return {"tool":"agent","verified":False,"text":"Work is unavailable.",
