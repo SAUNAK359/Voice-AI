@@ -113,6 +113,7 @@ class PDFResearch:
 
     def _pulse(self,owner,uid,token):
         with self.store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._read(db,owner,uid)
             if row["lease"]!=token:raise DocumentConflict("Analysis lease lost")
             db.execute("UPDATE pdf_answers SET lease_until=?,updated=? WHERE id=?",
@@ -130,6 +131,7 @@ class PDFResearch:
         if not isinstance(value,str) or not value.strip():
             raise ValueError("Empty PDF research step")
         with self.store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._read(db,owner,uid)
             if row["lease"]!=token:raise DocumentConflict("Analysis lease lost")
             exists=db.execute("""SELECT 1 FROM pdf_answer_parts
@@ -144,6 +146,7 @@ class PDFResearch:
 
     def _finish(self,owner,uid,token,answer):
         with self.store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._read(db,owner,uid)
             if row["lease"]!=token:raise DocumentConflict("Analysis lease lost")
             if row["mode"]=="full" and row["covered_pages"]!=row["total_pages"]:
@@ -154,6 +157,7 @@ class PDFResearch:
 
     def _pause(self,owner,uid,token,exc):
         with self.store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._read(db,owner,uid)
             if row["lease"]==token:
                 db.execute("""UPDATE pdf_answers SET status='paused',lease=NULL,
