@@ -665,6 +665,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 status=await asyncio.to_thread(pdf_store.request_finalize,owner,uid)
                 schedule_pdf(validate_then_index(owner,uid),('validate',uid))
             elif status["status"] in ("paused","queued"):
+                status=await asyncio.to_thread(pdf_store.request_resume,owner,uid)
                 schedule_pdf(pdf_ingestor.run(owner,uid),('ingest',uid))
             else:
                 raise DocumentConflict("PDF not ready for resumption")
@@ -721,6 +722,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             status=await asyncio.to_thread(pdf_research.status,owner,run_id)
             if status["status"] not in ("paused","queued"):
                 raise DocumentConflict("Analysis cannot be resumed")
+            status=await asyncio.to_thread(pdf_research.request_resume,owner,run_id)
             schedule_pdf(pdf_research.run(owner,run_id),('research',run_id))
             return {"accepted":True,"research":status}
         except DocumentNotFound:
