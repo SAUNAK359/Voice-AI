@@ -97,9 +97,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     graph = store.job_plan(owner,jid)
     dynamic = graph.get("schema_version")==2
     if dynamic and graph["status"]=="planning":
-        from .config import Settings
-        from .work_dynamic import generate
-        proposed = await generate(payload,Settings.from_env())
+        from .work_dynamic import generate, WorkModelConfig
+        proposed = await generate(payload,WorkModelConfig.from_env())
         graph=store.install_dynamic_graph(owner,jid,worker_id,fence,proposed)
     if dynamic:
         from .work_agents import SPECS
