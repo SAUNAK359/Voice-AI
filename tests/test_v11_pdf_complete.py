@@ -37,7 +37,7 @@ SECRET="pdf-encryption-key-for-integration-tests-0123456789"
 def make_pdf(n):
     pdf=fitz.open()
     for i in range(n):
-        page=pdf.new_page()
+        page=pdf.new_page(width=500,height=650)
         page.insert_text((50,60),f"PAGE {i+1} FACT ledger row {i+1}")
         page.draw_rect(fitz.Rect(45,100,120,160))
     result=pdf.tobytes()
