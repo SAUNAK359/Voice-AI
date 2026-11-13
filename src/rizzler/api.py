@@ -215,8 +215,15 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             return await pdf_ingestor.run(owner,uid)
         return state
 
+    agentic=environ.get("RIZZLER_AGENTIC_ENABLED",
+                       "1" if production else "0").strip().lower() in ("1","true","yes")
+    if agentic:
+        from .agent_runtime import AgentRuntime
+        agent_runtime=AgentRuntime(work,cfg,memory,visual)
+    else:
+        agent_runtime=None
     engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory, visual,
-        pdf_research=pdf_research,pdf_schedule=schedule_pdf))
+        pdf_research=pdf_research,pdf_schedule=schedule_pdf,agent=agent_runtime))
     @asynccontextmanager
     async def lifespan(app):
         # Optional one-time provider prewarm, performed after API starts
@@ -274,6 +281,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app.state.operations = operations
     app.state.owner_admission = owner_admission
     app.state.work, app.state.identity = work, identity
+    app.state.agent_runtime = agent_runtime
     app.state.memory = memory
     app.state.visual = visual
     app.state.pdf_store = pdf_store
@@ -540,6 +548,50 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             session=sessions.get(sid)
             session.uploads[:]=[receipt['id']]
             return {'name':name,'size':receipt.get('size'),'ready':True}
+
+    @app.post('/api/agent/turn')
+    async def agent_text_turn(request: Request):
+        owner=auth(request,True)
+        if agent_runtime is None:
+            raise HTTPException(status_code=503,detail='Agentic runtime disabled')
+        raw=await request.body()
+        if len(raw)>12500:
+            raise HTTPException(status_code=413,detail='Text request too large')
+        try:
+            body=json.loads(raw)
+            if not isinstance(body,dict) or set(body)!={'text'} or not isinstance(body['text'],str):
+                raise ValueError()
+            if not 1<=len(body['text'].strip())<=8000:
+                raise ValueError()
+        except (ValueError,UnicodeDecodeError,TypeError):
+            raise HTTPException(status_code=400,detail='Invalid agent request') from None
+        session=sessions.get(owner)
+        if session.task and not session.task.done():
+            raise HTTPException(status_code=409,detail='Voice turn already active')
+        async with sessions.inference.permit(owner,timeout=2.5):
+            session.generation+=1
+            response=await agent_runtime.run(body['text'],owner,
+                  history=list(session.history),uploads=list(session.uploads),
+                  visuals=list(session.visuals),nonce=session.nonce,
+                  sequence=session.generation)
+            session.history=(session.history + [
+                {'role':'user','content':body['text']},
+                {'role':'assistant','content':response['text']}])[-8:]
+            return response
+
+    @app.post('/api/agent/approvals/{approval_id}/confirm')
+    async def agent_confirm_action(request: Request,approval_id: str):
+        owner=auth(request,True)
+        if agent_runtime is None or work is None:
+            raise HTTPException(status_code=503,detail='Work agent unavailable')
+        from .work_store import Missing, Conflict
+        try:
+            result=await asyncio.to_thread(work.confirm_agent_action,owner,approval_id)
+            return {'confirmed':True,'job':result}
+        except Missing:
+            raise HTTPException(status_code=404,detail='Approval unavailable') from None
+        except (Conflict,ValueError):
+            raise HTTPException(status_code=409,detail='Approval invalid or expired') from None
 
     @app.post('/api/auth')
     def authorize(request: Request):
