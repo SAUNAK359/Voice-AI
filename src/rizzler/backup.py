@@ -56,13 +56,16 @@ def _collect(root: Path):
             continue
         if candidate.is_symlink():
             raise ValueError("Backup source symlink is forbidden")
+        if not candidate.is_file() and not candidate.is_dir():
+            raise ValueError("Nonregular backup root entry")
         items = [candidate] if candidate.is_file() else candidate.rglob("*")
         for path in items:
             if path.is_symlink():
                 raise ValueError("Backup source symlink is forbidden")
-            if not path.is_file():
+            mode=path.lstat().st_mode
+            if stat.S_ISDIR(mode):
                 continue
-            if not stat.S_ISREG(path.stat(follow_symlinks=False).st_mode):
+            if not stat.S_ISREG(mode):
                 raise ValueError("Nonregular backup member")
             relative = path.relative_to(root).as_posix()
             _validate_member_path(relative)
@@ -74,14 +77,20 @@ def _collect(root: Path):
 
 def backup(root: Path, destination: Path):
     root, destination = Path(root).resolve(), Path(destination).resolve()
-    if not root.is_dir() or destination.is_relative_to(root):
-        raise ValueError("Backup destination must be outside existing work root")
-    # Exclusive offline backup: no API/worker may write while the snapshot runs.
-    for db_name in ("jobs.sqlite3", "identity.sqlite3", "ai_reservations.sqlite3"):
-        db_file = root / db_name
-        if db_file.is_file():
-            with sqlite3.connect(db_file, timeout=15) as con:
-                con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    if not root.is_dir() or destination.is_relative_to(root) or destination.exists():
+        raise ValueError("Backup requires an absent destination outside the work root")
+    # Offline requirement is non-negotiable: every nested SQLite database
+    # (including visual, memory, PDF and work) must checkpoint WAL before a
+    # file-level archive. This is not a replacement for stopping all writers.
+    for db_file in sorted(root.rglob("*.sqlite3")):
+        if db_file.is_symlink() or not db_file.is_file():
+            raise ValueError("Unsafe SQLite database file")
+        with sqlite3.connect(f"file:{db_file}?mode=rw", uri=True, timeout=15) as con:
+            response=con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if response and response[0]:
+                raise RuntimeError("SQLite WAL checkpoint incomplete")
+            if con.execute("PRAGMA quick_check(1)").fetchone()[0] != "ok":
+                raise RuntimeError("SQLite integrity validation failed")
     entries = _collect(root)
     if not entries:
         raise ValueError("Nothing to back up")
@@ -114,7 +123,9 @@ def backup(root: Path, destination: Path):
             meta = tarfile.TarInfo("MANIFEST.json")
             meta.size, meta.mode, meta.mtime = len(data), 0o600, 0
             archive.addfile(meta, io.BytesIO(data))
-        os.replace(temporary, destination)
+        # Publishing via a hard link refuses replacement of a prior backup.
+        # tempfile is on the destination filesystem, so this is atomic.
+        os.link(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)
     return manifest
