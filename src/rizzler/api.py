@@ -69,10 +69,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         raise ValueError("Production requires an independent operations secret")
     work_root = environ.get("RIZZLER_WORK_ROOT", "")
     work_signing_key = environ.get("RIZZLER_WORK_SIGNING_KEY", "")
-    if bool(work_root) != bool(work_signing_key):
-        raise ValueError("Configure both RIZZLER_WORK_ROOT and RIZZLER_WORK_SIGNING_KEY")
-    if production and (not work_root or not work_signing_key):
-        raise ValueError("Production requires durable Work Agent storage and signing key")
+    if production and not work_root:
+        raise ValueError("Production requires durable Work Agent storage")
+    # Work has no user-facing bearer token. Voice and Work share the same
+    # authenticated OIDC session in production and demo session in dev.
     identity = None
     if production:
         if not Path(work_root).is_absolute():
@@ -90,8 +90,6 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             from .work_postgres import PostgresWorkStore as WorkStore
         else:
             from .work_store import WorkStore
-        from .work_auth import _secret
-        _secret(work_signing_key)
         if production:
             from .upload_scan import scan_clamd
             scanner_host = environ.get("RIZZLER_CLAMD_HOST", "")
@@ -292,8 +290,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         status_code=429, content={'detail': 'Voice capacity busy; retry later'}))
     if work:
         from .work_api import router
-        app.include_router(router(work, work_signing_key, identity=identity,
-                                  owner_admission=owner_admission))
+        app.include_router(router(work, identity=identity,
+                                  owner_resolver=lambda req: auth(req,True)))
 
         # Keep backward-compatible private Work API; the primary application
         # now shows Work job cards inside the voice conversation.
