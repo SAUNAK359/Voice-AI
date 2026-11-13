@@ -192,7 +192,6 @@ class PDFResearch:
                 # Stage zero is complete for each textual/visual chunk, even
                 # when a page spans thousands of chunks.
                 position=0
-                last_page=None
                 for page,unit in self._inputs(owner,doc,question,mode):
                     if await asyncio.to_thread(self._part,owner,uid,0,position) is None:
                         instruction=("Extract question-relevant facts with explicit "
