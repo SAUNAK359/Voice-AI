@@ -131,6 +131,33 @@ def backup(root: Path, destination: Path):
     return manifest
 
 
+def _publish_directory_noreplace(source: Path, destination: Path):
+    """Atomic no-overwrite commit; fail closed if platform lacks the primitive."""
+    if os.name == "nt":
+        # Windows rename fails if the destination already exists.
+        os.rename(source, destination)
+        return
+    import ctypes
+    import errno
+    import sys
+    if sys.platform != "linux":
+        raise RuntimeError("Atomic no-replace directory restore requires Linux or Windows")
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    if renameat2 is None:
+        raise RuntimeError("Atomic no-overwrite directory rename unavailable")
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p,
+                          ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(-100, os.fsencode(source), -100,
+                       os.fsencode(destination), 1)  # RENAME_NOREPLACE
+    if result:
+        error = ctypes.get_errno()
+        if error in (errno.EEXIST, errno.ENOTEMPTY):
+            raise ValueError("Restore destination appeared during validation")
+        raise OSError(error, os.strerror(error))
+
+
 def restore(source: Path, destination: Path):
     source, destination = Path(source), Path(destination).resolve()
     if not source.is_file() or destination.exists():
@@ -198,7 +225,7 @@ def restore(source: Path, destination: Path):
                 raise ValueError("Undeclared backup member")
         if destination.exists():
             raise ValueError("Restore destination appeared during validation")
-        staged.rename(destination)
+        _publish_directory_noreplace(staged, destination)
     return manifest
 
 
