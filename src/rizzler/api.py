@@ -408,7 +408,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 "encrypted_memory_enabled":memory is not None,
                 "multimodal_enabled":visual is not None,
                 "full_pdf_ingestion":pdf_store is not None,
-                "runtime":"native_v11"}
+                "agentic_enabled":agent_runtime is not None,
+                "runtime":"native_v12" if agent_runtime is not None else "native_v11"}
 
     @app.get('/api/voice/tools')
     def voice_tool_catalog(request: Request):
