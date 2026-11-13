@@ -176,6 +176,8 @@ def main():
     p.add_argument("--once",action="store_true")
     args=p.parse_args()
     if not args.root: p.error("Set --root on a persistent disk")
+    from .production_guard import budget_from_environment
+    budget_from_environment()
     from .work_objects import from_environment
     objects = from_environment()
     if os.environ.get("RIZZLER_DATABASE_URL"):
