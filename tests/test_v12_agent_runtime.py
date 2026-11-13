@@ -1,8 +1,13 @@
 """Offline integration tests for the shared V12 agent control plane."""
 import asyncio
+import unittest
 from types import SimpleNamespace
-import pytest
-from fastapi.testclient import TestClient
+try:
+    import pytest
+    from fastapi.testclient import TestClient
+    from google import genai
+except ImportError:
+    raise unittest.SkipTest("V12 agent integration requires App CI extras")
 
 from rizzler.agent_runtime import AgentRuntime, discover, check_args
 from rizzler.config import Settings
