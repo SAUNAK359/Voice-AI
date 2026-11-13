@@ -30,7 +30,7 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'interim_transcript':if(s.recording)status('listening','Provisional: '+String(msg.text||'').slice(0,100));break;
  case'transcript':message('user',msg.text,seq);break;
  case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
- case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();break;
+ case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();showAgentApprovals(msg.approvals||[]);break;
  case'audio_begin':s.allowSeq=seq;s.done=false;break;
  case'metrics':{const m=msg.data||{};
  $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · ${m.tool?('Tool '+m.tool+' '+(m.tool_ms??'—')+' ms'):('Gemini first text '+(m.llm_first_text_ms??'—')+' ms')} · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
@@ -99,6 +99,7 @@ async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortContr
  server({type:'transcript',text:m.transcript,generation:seq});
  server({type:'assistant_text',text:m.answer,final:true,generation:seq});
  server({type:'metrics',data:m.metrics,generation:seq});
+ server({type:'tool_result',tool:'agent',job:m.job,approvals:m.approvals||[],generation:seq});
  s.allowSeq=seq;s.done=true;
  const pcm=Uint8Array.from(atob(m.audio_b64),c=>c.charCodeAt(0));
  if(!pcm.length||pcm.length%2)throw Error('Invalid response PCM');
@@ -572,31 +573,38 @@ $('agent-chat')?.addEventListener('submit',async e=>{
    feedback.textContent=result.approvals?.length?'Explicit approval required for the proposed change.':
      result.job?'Work accepted; track progress below.':'Agent response ready.';
    if(result.job)refreshWork();
-   for(const item of result.approvals||[]){
-     const summary=document.createElement('p');
-     summary.className='small';
-     summary.textContent='Proposed '+item.action+' for job '+item.job_id.slice(0,8)+
-       (item.objective?' · New objective: '+item.objective:'')+
-       (item.deliverables?' · Formats: '+item.deliverables.join(', '):'');
-     $('messages').append(summary);
-     const b=document.createElement('button');b.type='button';
-     b.textContent='Confirm this specific Work change';
-     b.addEventListener('click',async()=>{
-       b.disabled=true;
-       try{
-         const approval=await fetch('/api/agent/approvals/'+encodeURIComponent(item.id)+'/confirm',
-                     {method:'POST',headers:headers()});
-         if(!approval.ok)throw Error('Confirmation failed ('+approval.status+')');
-         const confirmed=await approval.json();
-         feedback.textContent='Confirmed action. Work state: '+confirmed.job.status;
-         refreshWork();
-       }catch(error){feedback.textContent=error.message;b.disabled=false}
-     });
-     $('messages').append(b);
-   }
+   showAgentApprovals(result.approvals||[]);
  }catch(error){feedback.textContent=error.message}
  finally{send.disabled=false}
 });
+const visibleApprovals=new Set();
+function showAgentApprovals(items){
+ const feedback=$('agent-feedback');
+ for(const item of items||[]){
+   if(!item?.id||visibleApprovals.has(item.id))continue;
+   visibleApprovals.add(item.id);
+   const summary=document.createElement('p');
+   summary.className='small';
+   summary.textContent='Proposed '+item.action+' for job '+item.job_id.slice(0,8)+
+     (item.objective?' · New objective: '+item.objective:'')+
+     (item.deliverables?' · Formats: '+item.deliverables.join(', '):'');
+   $('messages').append(summary);
+   const b=document.createElement('button');b.type='button';
+   b.textContent='Confirm this specific Work change';
+   b.addEventListener('click',async()=>{
+     b.disabled=true;
+     try{
+       const approval=await fetch('/api/agent/approvals/'+encodeURIComponent(item.id)+'/confirm',
+         {method:'POST',headers:headers()});
+       if(!approval.ok)throw Error('Confirmation failed ('+approval.status+')');
+       const confirmed=await approval.json();
+       feedback.textContent='Confirmed action. Work state: '+confirmed.job.status;
+       refreshWork();
+     }catch(error){feedback.textContent=error.message;b.disabled=false}
+   });
+   $('messages').append(b);
+ }
+}
 async function refreshToolCatalog(){
  try{
   const r=await fetch('/api/voice/tools',{headers:headers()});
