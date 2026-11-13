@@ -6,9 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
-from io import BytesIO
 import hashlib
-import sqlite3
 import time
 import unittest
 
@@ -131,7 +129,8 @@ def test_encrypted_chunks_replay_authorization_deletion_and_tamper(tmp_path):
         db.execute("UPDATE chunks SET encrypted=? WHERE doc=?", (b"X"*128,uid))
     with pytest.raises(ValueError,match="authentication"):
         store.finalize(OWNER,uid)
-    assert store.delete(OWNER,uid)
+    removed=store.delete(OWNER,uid)
+    assert removed
 
 
 def test_mismatched_chunk_replay_never_rewrites_bytes(tmp_path):
