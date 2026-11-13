@@ -12,6 +12,7 @@ import threading
 from typing import AsyncIterator
 from .config import Settings
 from .reasoning import route
+from .production_guard import BudgetExceeded
 from .governance import QuotaGate, ModelCircuits, RequestTelemetry, classify_error, QuotaExceeded
 
 
@@ -190,7 +191,7 @@ class GeminiLLM:
                     except QuotaExceeded:
                         last_error = 'local_quota'
                         break
-                    except __import__('rizzler.production_guard',fromlist=['BudgetExceeded']).BudgetExceeded:
+                    except BudgetExceeded:
                         last_error = 'daily_budget'
                         break
                     except asyncio.CancelledError:
