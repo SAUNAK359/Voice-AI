@@ -132,10 +132,22 @@ class WorkStore:
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
-        from .work_agents import plan
-        planned = plan(payload)
-        from .task_planning import execution_graph
-        graph = execution_graph(payload)
+        # New agentic submissions do not select specialists until the worker
+        # obtains an authenticated job lease and requests a model-authored plan.
+        import os
+        agentic=os.environ.get("RIZZLER_AGENTIC_ENABLED",
+            "1" if os.environ.get("RIZZLER_DEPLOYMENT_MODE")=="production" else "0"
+            ).strip().lower() in ("1","true","yes")
+        if agentic:
+            from .work_dynamic import pending
+            planned=[]
+            graph=pending()
+        else:
+            # Historic jobs remain readable/runnable during migration only.
+            from .work_agents import plan
+            planned=plan(payload)
+            from .task_planning import execution_graph
+            graph=execution_graph(payload)
         plan_json = json.dumps(graph, sort_keys=True, separators=(",", ":"))
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
@@ -189,27 +201,66 @@ class WorkStore:
 
     def job_plan(self, owner: str, jid: str) -> dict:
         """Owner-scoped, checksum-protected immutable execution plan."""
-        from .task_planning import execution_graph, validate_graph
         with self._tx() as c:
             row = c.execute("SELECT payload FROM jobs WHERE id=? AND owner=?",
                             (jid, owner)).fetchone()
             if row is None:
                 raise Missing("Job not found")
             payload = json.loads(row["payload"])
-            expected = execution_graph(payload)
             saved = c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
                               (jid,)).fetchone()
             if saved is None:
-                # Backward-compatible read of pre-migration jobs only.
-                return expected
+                raise ValueError("Job has no persisted plan")
             raw = saved["plan_json"]
             if hashlib.sha256(raw.encode()).hexdigest() != saved["sha256"]:
                 raise ValueError("Job execution plan failed integrity verification")
             result = json.loads(raw)
+            if result.get("schema_version") == 2:
+                from .work_dynamic import validate
+                return validate(result,payload)
+            # Old plans are immutable; no dynamic job can silently fall back.
+            from .task_planning import execution_graph, validate_graph
+            expected=execution_graph(payload)
             validate_graph(result, frozenset(x["id"] for x in expected["steps"]))
             if result != expected:
-                raise ValueError("Job execution plan differs from approved workflow")
+                raise ValueError("Legacy graph differs from approved workflow")
             return result
+
+    def install_dynamic_graph(self, owner: str, jid: str, worker: str,
+                              fence: int, proposed: dict) -> dict:
+        """Fenced, atomic publication of a model-generated plan.
+
+        Never replace a committed plan after restart. Existing checkpoints
+        always refer to the same plan checksum.
+        """
+        from .work_dynamic import validate
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            if row["owner"]!=owner:raise Missing("Job owner mismatch")
+            payload=json.loads(row["payload"])
+            validated=validate(proposed,payload)
+            if validated["status"]!="ready":raise ValueError("Model plan not executable")
+            saved=c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
+                            (jid,)).fetchone()
+            if saved is None:raise ValueError("Missing planning placeholder")
+            if hashlib.sha256(saved["plan_json"].encode()).hexdigest()!=saved["sha256"]:
+                raise ValueError("Corrupted plan checkpoint")
+            previous=json.loads(saved["plan_json"])
+            if previous.get("schema_version")!=2:
+                raise ValueError("Legacy plan cannot be overwritten")
+            if previous["status"]=="ready":
+                if previous!=validated:
+                    raise Conflict("A different Work graph was already committed")
+                return previous
+            encoded=json.dumps(validated,sort_keys=True,separators=(",",":"))
+            stamp=time.time()
+            c.execute("UPDATE job_plans SET plan_json=?,sha256=?,created=? WHERE job_id=?",
+                      (encoded,hashlib.sha256(encoded.encode()).hexdigest(),stamp,jid))
+            for node in validated["steps"]:
+                c.execute("""INSERT INTO agent_steps(job_id,agent,status,updated)
+                             VALUES(?,?,'queued',?)""",(jid,node["id"],stamp))
+            self._event(c,jid,"planning","Model-authored execution graph committed")
+            return validated
 
     def specification(self, owner: str, jid: str) -> dict:
         """Return the authenticated owner's original objective and output contract."""
