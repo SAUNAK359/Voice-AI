@@ -192,6 +192,7 @@ class PDFStore:
                 not isinstance(digest,str) or digest!=_digest(data)):
             raise ValueError("Invalid PDF chunk or SHA-256")
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"]!="uploading":
                 raise DocumentConflict("PDF upload already finalized")
@@ -486,6 +487,7 @@ class PDFStore:
     def request_resume(self,owner,uid):
         """Persist resume before admission; watchdog later sees queued work."""
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"] not in ("queued","paused"):
                 raise DocumentConflict("PDF cannot be queued for resumption")
