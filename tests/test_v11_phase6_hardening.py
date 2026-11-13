@@ -52,6 +52,27 @@ class BackupHardeningTests(unittest.TestCase):
             finally:
                 con.close()
 
+    def test_uri_significant_database_path_is_not_mischeckpointed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "work#private?with%chars"
+            root.mkdir()
+            database = root / "jobs.sqlite3"
+            con = sqlite3.connect(database)
+            try:
+                con.execute("PRAGMA journal_mode=WAL")
+                con.execute("CREATE TABLE receipt(id INTEGER PRIMARY KEY, value TEXT)")
+                con.execute("INSERT INTO receipt(value) VALUES('durable WAL record')")
+                con.commit()
+                archive = Path(temp) / "snapshot.tar.gz"
+                backup(root, archive)
+                restored = Path(temp) / "restored"
+                restore(archive, restored)
+                with sqlite3.connect(restored / "jobs.sqlite3") as db:
+                    data = db.execute("SELECT value FROM receipt").fetchone()
+                self.assertEqual(data, ("durable WAL record",))
+            finally:
+                con.close()
+
     def test_backup_does_not_overwrite_an_existing_archive(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "work"
