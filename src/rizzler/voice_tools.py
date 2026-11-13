@@ -72,6 +72,8 @@ async def grounded_search(query: str, settings) -> dict:
     client=genai.Client(api_key=settings.gemini_api_key)
     try:
         async with asyncio.timeout(min(settings.request_timeout,22)):
+            from .production_guard import reserve_provider_call
+            reserve_provider_call("research")
             response=await client.aio.models.generate_content(
                 model=settings.gemini_model,
                 contents=("Search for and answer this question with current source evidence. "
