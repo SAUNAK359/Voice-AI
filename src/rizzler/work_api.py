@@ -14,7 +14,7 @@ from .work_agents import SPECS
 from .work_store import WorkStore, Conflict, Missing
 from .upload_scan import ScanUnavailable
 
-def router(store: WorkStore, signing_key: str = "", identity: Identity | None = None,
+def router(store: WorkStore, identity: Identity | None = None,
            owner_admission=None, owner_resolver=None) -> APIRouter:
     """No separate Work login or bearer credential; request owner is shared."""
     api=APIRouter(prefix="/api/work",tags=["work"])
