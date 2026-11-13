@@ -329,6 +329,22 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             if identity:
                 with identity.sessions._db() as db:
                     db.execute("SELECT 1").fetchone()
+            if memory:
+                with memory._db() as db:
+                    db.execute("SELECT 1").fetchone()
+            if visual:
+                with visual.store._db() as db:
+                    db.execute("SELECT 1").fetchone()
+            if pdf_store:
+                with pdf_store.db() as db:
+                    db.execute("SELECT 1").fetchone()
+            from .production_guard import budget_from_environment
+            ledger=budget_from_environment()
+            if ledger:
+                with ledger._conn() as db:
+                    db.execute("SELECT 1").fetchone()
+            if getattr(app.state, "voice_prewarm", None) == "failed":
+                raise RuntimeError("Speech model warmup failed")
             return {"ready": True, "mode": mode}
         except Exception:
             raise HTTPException(status_code=503, detail="Dependency not ready") from None
