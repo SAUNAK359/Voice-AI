@@ -112,6 +112,8 @@ async def propose_scope(objective: str, formats: list[str], uploads: list[str],
         for attempt in range(2):
             try:
                 async with asyncio.timeout(7):
+                    from .production_guard import reserve_provider_call
+                    reserve_provider_call("work")
                     response = await client.aio.models.generate_content(
                         model=settings.gemini_model,
                         contents=(
