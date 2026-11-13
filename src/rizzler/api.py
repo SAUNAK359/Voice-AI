@@ -666,6 +666,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         if session.task is not None and not session.task.done():
             raise HTTPException(status_code=429,detail="Finish the active turn before uploading")
         name = request.headers.get("x-file-name","")
+        if name.lower().endswith(".pdf"):
+            raise HTTPException(status_code=409,
+                detail="Use /api/pdf/documents for complete, resumable PDF ingestion")
         content = bytearray()
         async for part in request.stream():
             content.extend(part)
