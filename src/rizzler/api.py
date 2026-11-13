@@ -69,10 +69,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         raise ValueError("Production requires an independent operations secret")
     work_root = environ.get("RIZZLER_WORK_ROOT", "")
     work_signing_key = environ.get("RIZZLER_WORK_SIGNING_KEY", "")
-    if bool(work_root) != bool(work_signing_key):
-        raise ValueError("Configure both RIZZLER_WORK_ROOT and RIZZLER_WORK_SIGNING_KEY")
-    if production and (not work_root or not work_signing_key):
-        raise ValueError("Production requires durable Work Agent storage and signing key")
+    if production and not work_root:
+        raise ValueError("Production requires durable Work Agent storage")
+    # Work has no user-facing bearer token. Voice and Work share the same
+    # authenticated OIDC session in production and demo session in dev.
     identity = None
     if production:
         if not Path(work_root).is_absolute():
@@ -90,8 +90,6 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             from .work_postgres import PostgresWorkStore as WorkStore
         else:
             from .work_store import WorkStore
-        from .work_auth import _secret
-        _secret(work_signing_key)
         if production:
             from .upload_scan import scan_clamd
             scanner_host = environ.get("RIZZLER_CLAMD_HOST", "")
@@ -215,8 +213,17 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             return await pdf_ingestor.run(owner,uid)
         return state
 
+    agentic=environ.get("RIZZLER_AGENTIC_ENABLED",
+                       "1" if production else "0").strip().lower() in ("1","true","yes")
+    if production and not agentic:
+        raise ValueError("Production requires the model-driven unified agent runtime")
+    if agentic:
+        from .agent_runtime import AgentRuntime
+        agent_runtime=AgentRuntime(work,cfg,memory,visual)
+    else:
+        agent_runtime=None
     engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory, visual,
-        pdf_research=pdf_research,pdf_schedule=schedule_pdf))
+        pdf_research=pdf_research,pdf_schedule=schedule_pdf,agent=agent_runtime))
     @asynccontextmanager
     async def lifespan(app):
         # Optional one-time provider prewarm, performed after API starts
@@ -274,6 +281,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app.state.operations = operations
     app.state.owner_admission = owner_admission
     app.state.work, app.state.identity = work, identity
+    app.state.agent_runtime = agent_runtime
     app.state.memory = memory
     app.state.visual = visual
     app.state.pdf_store = pdf_store
@@ -284,8 +292,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         status_code=429, content={'detail': 'Voice capacity busy; retry later'}))
     if work:
         from .work_api import router
-        app.include_router(router(work, work_signing_key, identity=identity,
-                                  owner_admission=owner_admission))
+        app.include_router(router(work, identity=identity,
+                                  owner_resolver=lambda req: auth(req,True)))
 
         # Keep backward-compatible private Work API; the primary application
         # now shows Work job cards inside the voice conversation.
@@ -400,7 +408,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 "encrypted_memory_enabled":memory is not None,
                 "multimodal_enabled":visual is not None,
                 "full_pdf_ingestion":pdf_store is not None,
-                "runtime":"native_v11"}
+                "agentic_enabled":agent_runtime is not None,
+                "runtime":"native_v12" if agent_runtime is not None else "native_v11"}
 
     @app.get('/api/voice/tools')
     def voice_tool_catalog(request: Request):
@@ -540,6 +549,50 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             session=sessions.get(sid)
             session.uploads[:]=[receipt['id']]
             return {'name':name,'size':receipt.get('size'),'ready':True}
+
+    @app.post('/api/agent/turn')
+    async def agent_text_turn(request: Request):
+        owner=auth(request,True)
+        if agent_runtime is None:
+            raise HTTPException(status_code=503,detail='Agentic runtime disabled')
+        raw=await request.body()
+        if len(raw)>12500:
+            raise HTTPException(status_code=413,detail='Text request too large')
+        try:
+            body=json.loads(raw)
+            if not isinstance(body,dict) or set(body)!={'text'} or not isinstance(body['text'],str):
+                raise ValueError()
+            if not 1<=len(body['text'].strip())<=8000:
+                raise ValueError()
+        except (ValueError,UnicodeDecodeError,TypeError):
+            raise HTTPException(status_code=400,detail='Invalid agent request') from None
+        session=sessions.get(owner)
+        if session.task and not session.task.done():
+            raise HTTPException(status_code=409,detail='Voice turn already active')
+        async with sessions.inference.permit(owner,timeout=2.5):
+            session.generation+=1
+            response=await agent_runtime.run(body['text'],owner,
+                  history=list(session.history),uploads=list(session.uploads),
+                  visuals=list(session.visuals),nonce=session.nonce,
+                  sequence=session.generation)
+            session.history=(session.history + [
+                {'role':'user','content':body['text']},
+                {'role':'assistant','content':response['text']}])[-8:]
+            return response
+
+    @app.post('/api/agent/approvals/{approval_id}/confirm')
+    async def agent_confirm_action(request: Request,approval_id: str):
+        owner=auth(request,True)
+        if agent_runtime is None or work is None:
+            raise HTTPException(status_code=503,detail='Work agent unavailable')
+        from .work_store import Missing, Conflict
+        try:
+            result=await asyncio.to_thread(work.confirm_agent_action,owner,approval_id)
+            return {'confirmed':True,'job':result}
+        except Missing:
+            raise HTTPException(status_code=404,detail='Approval unavailable') from None
+        except (Conflict,ValueError):
+            raise HTTPException(status_code=409,detail='Approval invalid or expired') from None
 
     @app.post('/api/auth')
     def authorize(request: Request):
@@ -1047,8 +1100,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 transcript = next((e['text'] for e in events if e['type'] == 'transcript'), '')
                 answer = next((e['text'] for e in reversed(events) if e['type'] == 'assistant_text'), '')
                 metrics = next((e['data'] for e in events if e['type'] == 'metrics'), {})
+                tool = next((e for e in reversed(events) if e['type'] == 'tool_result'), {})
                 return JSONResponse({'transcript': transcript, 'answer': answer,
                     'metrics': metrics, 'sample_rate': cfg.sample_rate,
+                    'job':tool.get('job'), 'approvals':tool.get('approvals',[]),
                     'audio_b64': base64.b64encode(samples).decode('ascii')})
         finally:
             if session.task is task:

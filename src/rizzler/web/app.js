@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- memoryEnabled:false,workEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,agentEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -30,7 +30,7 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'interim_transcript':if(s.recording)status('listening','Provisional: '+String(msg.text||'').slice(0,100));break;
  case'transcript':message('user',msg.text,seq);break;
  case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
- case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();break;
+ case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();showAgentApprovals(msg.approvals||[]);break;
  case'audio_begin':s.allowSeq=seq;s.done=false;break;
  case'metrics':{const m=msg.data||{};
  $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · ${m.tool?('Tool '+m.tool+' '+(m.tool_ms??'—')+' ms'):('Gemini first text '+(m.llm_first_text_ms??'—')+' ms')} · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
@@ -99,6 +99,7 @@ async function httpTurn(parts,seq){const bytes=concat(parts),ctrl=new AbortContr
  server({type:'transcript',text:m.transcript,generation:seq});
  server({type:'assistant_text',text:m.answer,final:true,generation:seq});
  server({type:'metrics',data:m.metrics,generation:seq});
+ server({type:'tool_result',tool:'agent',job:m.job,approvals:m.approvals||[],generation:seq});
  s.allowSeq=seq;s.done=true;
  const pcm=Uint8Array.from(atob(m.audio_b64),c=>c.charCodeAt(0));
  if(!pcm.length||pcm.length%2)throw Error('Invalid response PCM');
@@ -223,6 +224,24 @@ async function connectSession(){
  }catch(err){$('error').textContent=err.message;status('error',err.message);
    s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
 }
+
+async function enableTextOnly(){
+ try{
+   if(!s.production){
+     s.key=$('key').value.trim();
+     const response=await fetch('/api/auth',{method:'POST',headers:headers()});
+     if(!response.ok)throw Error('Invalid access key');
+   }
+   if(!s.agentEnabled)throw Error('The V12 agent runtime is not enabled');
+   s.session=true;
+   $('modal').classList.add('hidden');
+   $('connection').textContent='Private text session';
+   status('listening','Text and Work available. Microphone is optional.');
+   refreshToolCatalog();
+   if(s.workEnabled)refreshWork();
+ }catch(error){$('error').textContent=error.message}
+}
+$('text-only')?.addEventListener('click',enableTextOnly);
 
 function renderVisuals(){
  s.visualAnalysis=null;$('visual-report-panel').hidden=true;
@@ -463,7 +482,7 @@ document.addEventListener('pointerdown',()=>{
  if(s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{});
 },{passive:true});
 $('unlock').addEventListener('submit',async e=>{e.preventDefault();s.key=$('key').value;await connectSession()});
-$('connect').addEventListener('click',()=>s.session?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
+$('connect').addEventListener('click',()=>s.session&&s.ctx?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
 $('logout').addEventListener('click',async()=>{
   await disconnect();
   if(!s.production){$('modal').classList.remove('hidden');return}
@@ -475,6 +494,7 @@ $('logout').addEventListener('click',async()=>{
   const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
   const d=await r.json();s.production=d.mode==='production';
   s.workEnabled=!!d.work_enabled;$('work-panel').hidden=!s.workEnabled;
+  s.agentEnabled=!!d.agentic_enabled;$('agent-chat').hidden=!s.agentEnabled;
   s.visualEnabled=!!d.multimodal_enabled;$('visual-panel').hidden=!s.visualEnabled;
   s.memoryEnabled=!!d.encrypted_memory_enabled;$('memory-open').hidden=!s.memoryEnabled;
   $('logout').hidden=!s.production;
@@ -482,7 +502,8 @@ $('logout').addEventListener('click',async()=>{
     const who=await fetch('/auth/session');
     if(!who.ok){location.replace('/auth/login');return}
     $('modal').classList.add('hidden');
-    status('offline','Signed in. Select Connect microphone to start.');
+    status('offline','Signed in. Voice is optional; text and Work are ready.');
+    if(s.agentEnabled)await enableTextOnly();
   }
  }catch(e){status('error','Cannot verify runtime access')}
 })();
@@ -532,6 +553,58 @@ $('memory-clear').addEventListener('click',async()=>{
   if(!res.ok)throw Error('Could not delete saved memories');await refreshMemories();
  }catch(error){$('memory-feedback').textContent=error.message}
 });
+$('agent-chat')?.addEventListener('submit',async e=>{
+ e.preventDefault();
+ const input=$('agent-text'),send=$('agent-send'),feedback=$('agent-feedback');
+ const request=input.value.trim();
+ if(!request)return;
+ if(!s.agentEnabled||!s.session){feedback.textContent='Connect to your private session first.';return}
+ if(s.recording||s.request||s.playing.size){feedback.textContent='Finish the current voice turn first.';return}
+ send.disabled=true;feedback.textContent='Planning and checking available tools…';
+ const seq=++s.visualSeq;message('user',request,seq,true);
+ try{
+   const response=await fetch('/api/agent/turn',{method:'POST',
+     headers:{...headers(),'content-type':'application/json'},
+     body:JSON.stringify({text:request})});
+   if(!response.ok)throw Error('Agent request unavailable ('+response.status+')');
+   const result=await response.json();
+   message('assistant',result.text,seq,true);
+   input.value='';
+   feedback.textContent=result.approvals?.length?'Explicit approval required for the proposed change.':
+     result.job?'Work accepted; track progress below.':'Agent response ready.';
+   if(result.job)refreshWork();
+   showAgentApprovals(result.approvals||[]);
+ }catch(error){feedback.textContent=error.message}
+ finally{send.disabled=false}
+});
+const visibleApprovals=new Set();
+function showAgentApprovals(items){
+ const feedback=$('agent-feedback');
+ for(const item of items||[]){
+   if(!item?.id||visibleApprovals.has(item.id))continue;
+   visibleApprovals.add(item.id);
+   const summary=document.createElement('p');
+   summary.className='small';
+   summary.textContent='Proposed '+item.action+' for job '+item.job_id.slice(0,8)+
+     (item.objective?' · New objective: '+item.objective:'')+
+     (item.deliverables?' · Formats: '+item.deliverables.join(', '):'');
+   $('messages').append(summary);
+   const b=document.createElement('button');b.type='button';
+   b.textContent='Confirm this specific Work change';
+   b.addEventListener('click',async()=>{
+     b.disabled=true;
+     try{
+       const approval=await fetch('/api/agent/approvals/'+encodeURIComponent(item.id)+'/confirm',
+         {method:'POST',headers:headers()});
+       if(!approval.ok)throw Error('Confirmation failed ('+approval.status+')');
+       const confirmed=await approval.json();
+       feedback.textContent='Confirmed action. Work state: '+confirmed.job.status;
+       refreshWork();
+     }catch(error){feedback.textContent=error.message;b.disabled=false}
+   });
+   $('messages').append(b);
+ }
+}
 async function refreshToolCatalog(){
  try{
   const r=await fetch('/api/voice/tools',{headers:headers()});

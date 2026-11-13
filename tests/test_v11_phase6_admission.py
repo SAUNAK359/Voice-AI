@@ -145,14 +145,13 @@ class AdmissionIntegrationTests(unittest.TestCase):
                     self.assertEqual(metrics.status_code,401)
                     self.assertIsNotNone(client.app.state.owner_admission)
 
-    def test_work_bearer_subject_is_throttled_and_voice_key_cannot_bypass(self):
+    def test_voice_and_work_use_same_owner_admission_and_no_second_bearer(self):
         from fastapi.testclient import TestClient
         from rizzler.work_auth import issue_token
         with tempfile.TemporaryDirectory() as tmp:
             env={
                 "RIZZLER_DEPLOYMENT_MODE":"demo",
                 "RIZZLER_WORK_ROOT":str(Path(tmp)/"work"),
-                "RIZZLER_WORK_SIGNING_KEY":"independent-signing-secret-1234567890",
                 "RIZZLER_ADMISSION_ENABLED":"1",
                 "RIZZLER_ADMISSION_SECRET":self.ADMISSION,
                 "RIZZLER_ADMISSION_ROOT":str(Path(tmp)/"work"),
@@ -160,15 +159,16 @@ class AdmissionIntegrationTests(unittest.TestCase):
             }
             with patch.dict(os.environ,env,clear=True):
                 with TestClient(self._app()) as client:
-                    self.assertEqual(client.get("/api/work/skills",
-                        headers={"x-rizzler-key":self.KEY}).status_code,401)
-                    token=issue_token("account_one",env["RIZZLER_WORK_SIGNING_KEY"])
-                    auth={"authorization":"Bearer "+token}
-                    self.assertEqual(client.get("/api/work/skills",headers=auth).status_code,200)
-                    self.assertEqual(client.get("/api/work/skills",headers=auth).status_code,429)
-                    token2=issue_token("account_two",env["RIZZLER_WORK_SIGNING_KEY"])
-                    self.assertEqual(client.get("/api/work/skills",
-                        headers={"authorization":"Bearer "+token2}).status_code,200)
+                    missing={"x-rizzler-key":self.KEY}
+                    self.assertEqual(client.get("/api/work/skills",headers=missing).status_code,400)
+                    owner={"x-rizzler-key":self.KEY,"x-session-id":"account_one"}
+                    self.assertEqual(client.get("/api/work/skills",headers=owner).status_code,200)
+                    self.assertEqual(client.get("/api/voice/jobs",headers=owner).status_code,429)
+                    other={"x-rizzler-key":self.KEY,"x-session-id":"account_two"}
+                    self.assertEqual(client.get("/api/work/skills",headers=other).status_code,200)
+                    legacy=issue_token("account_three","independent-signing-secret-1234567890")
+                    self.assertEqual(client.get("/api/work/skills",headers={
+                        "authorization":"Bearer "+legacy}).status_code,401)
 
     def test_websocket_owner_connect_has_independent_limit(self):
         from fastapi.testclient import TestClient

@@ -94,8 +94,18 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 context["receipts"][receipt.kind] = receipt
         return result
 
-    planned = {spec.name: spec for spec in plan(payload)}
-    graph = store.job_plan(owner, jid)
+    graph = store.job_plan(owner,jid)
+    dynamic = graph.get("schema_version")==2
+    if dynamic and graph["status"]=="planning":
+        from .work_dynamic import generate, WorkModelConfig
+        proposed = await generate(payload,WorkModelConfig.from_env())
+        graph=store.install_dynamic_graph(owner,jid,worker_id,fence,proposed)
+    if dynamic:
+        from .work_agents import SPECS
+        planned={node["id"]:SPECS[node["id"]] for node in graph["steps"]}
+    else:
+        # Historical V11 jobs only: retain their original plan and checkpoints.
+        planned = {spec.name: spec for spec in plan(payload)}
     dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
     finished = set()
 
@@ -119,30 +129,45 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 group.create_task(bounded(spec), name="specialist-" + spec.name)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
-    await stage_group(("research", "sql_analytics"))
-    await stage_group(("orchestrator",))
-    # Include computed evidence in every rendered report, not merely in the
-    # persisted parent job summary after documents have already been saved.
-    if context["summary"]:
-        summary = context["summary"]
-        numeric = list(summary.get("numeric", {}).items())
-        lines = [f"Rows: {summary['rows']}; duplicate rows: {summary['duplicates']}.",
-                 "Numerical field summaries (computed independently):"]
-        for name, stats in numeric[:10]:
-            lines.append(f"{name}: count {stats['count']}, mean {stats['mean']}, "
-                         f"min {stats['min']}, max {stats['max']}.")
-        if len(numeric) > 10:
-            lines.append(f"{len(numeric)-10} additional numeric fields omitted from this briefing.")
-        proof = " ".join(lines)
-        context["text"] = (context["text"] or "# Verified data analysis\n"
-                           "This report contains independently computed dataset statistics.") + (
-                           "\n\n## Verified dataset evidence\n" + proof)
-    context["artifact_ir"] = compile_ir(payload["objective"][:120],
-        context["text"] or "# Dataset analysis\nVerified dataset statistics",
-        context["sources"], context["summary"])
-    await stage_group(("powerpoint", "word", "excel"))
-    await stage_group(("pdf_visual",))
-    await stage_group(("quality",))
+    def prepare_artifact_ir():
+        """Compose the evidence-specific IR once prerequisites are complete."""
+        if context["summary"]:
+            summary=context["summary"]
+            numeric=list(summary.get("numeric",{}).items())
+            proof="\n".join([f"Rows: {summary['rows']}; duplicates: {summary['duplicates']}."]+
+                [f"{name}: count {stats['count']}, mean {stats['mean']}, "
+                 f"min {stats['min']}, max {stats['max']}."
+                 for name,stats in numeric[:10]])
+            context["text"]=(context["text"] or
+                "# Dataset observations\nIndependent numeric analysis") + (
+                "\n\n## Verified dataset evidence\n"+proof)
+        context["artifact_ir"]=compile_ir(payload["objective"][:120],
+            context["text"] or "# Analysis\nVerified dataset statistics",
+            context["sources"],context["summary"])
+
+    if dynamic:
+        # Execute every currently ready node, not a hardcoded stage sequence.
+        # Dependencies are supplied by the model, then independently validated.
+        pending=set(planned)
+        renderers=set(("powerpoint","word","excel","pdf_visual"))
+        while pending:
+            ready=[node["id"] for node in graph["steps"] if
+                   node["id"] in pending and dependencies[node["id"]].issubset(finished)]
+            if not ready:
+                raise ValueError("Dynamic Work graph is stuck")
+            if ((renderers.intersection(ready) or "quality" in ready) and
+                    "artifact_ir" not in context):
+                prepare_artifact_ir()
+            await stage_group(ready)
+            pending.difference_update(ready)
+    else:
+        # Read-only migration path for already accepted V11 DAGs.
+        await stage_group(("research", "sql_analytics"))
+        await stage_group(("orchestrator",))
+        prepare_artifact_ir()
+        await stage_group(("powerpoint", "word", "excel"))
+        await stage_group(("pdf_visual",))
+        await stage_group(("quality",))
 
     text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
     receipts = list(context["receipts"].values())

@@ -18,8 +18,8 @@ from .work_skills import SKILLS, FORMATS, read_dataset, analyze, render_one
 
 async def compose_work(objective: str, data_summary: dict | None, *, max_chars=18000) -> str:
     """Dedicated model request, bounded and without access to filesystem/tools."""
-    from .config import Settings
-    cfg=Settings.from_env()
+    from .work_dynamic import WorkModelConfig
+    cfg=WorkModelConfig.from_env()
     if not cfg.gemini_api_key:
         raise RuntimeError("Gemini work model is not configured")
     from google import genai
@@ -59,10 +59,10 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
     Contradictory evidence is retained, not arbitrarily reconciled. A source
     URL is provider attribution only, never proof of factual correctness.
     """
-    from .config import Settings
+    from .work_dynamic import WorkModelConfig
     from .research_evidence import source_records, evidence_summary
     from .work_agents import read_skill
-    cfg=Settings.from_env()
+    cfg=WorkModelConfig.from_env()
     if not cfg.gemini_api_key:
         raise RuntimeError("Gemini key is required for grounded research")
     from google import genai

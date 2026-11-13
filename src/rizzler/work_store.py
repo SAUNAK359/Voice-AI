@@ -84,6 +84,19 @@ class WorkStore:
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS job_lineage(
+              child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL,
+              operation TEXT NOT NULL, created REAL NOT NULL,
+              FOREIGN KEY(child_id) REFERENCES jobs(id),
+              FOREIGN KEY(parent_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS lineage_parent ON job_lineage(parent_id);
+            CREATE TABLE IF NOT EXISTS agent_approvals(
+              id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              action TEXT NOT NULL, arguments TEXT NOT NULL,
+              status TEXT NOT NULL, created REAL NOT NULL,
+              expires REAL NOT NULL, result TEXT NOT NULL DEFAULT '');
+            CREATE INDEX IF NOT EXISTS agent_approvals_owner
+              ON agent_approvals(owner,status,expires);
             """)
 
     @contextmanager
@@ -119,10 +132,22 @@ class WorkStore:
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
-        from .work_agents import plan
-        planned = plan(payload)
-        from .task_planning import execution_graph
-        graph = execution_graph(payload)
+        # New agentic submissions do not select specialists until the worker
+        # obtains an authenticated job lease and requests a model-authored plan.
+        import os
+        agentic=os.environ.get("RIZZLER_AGENTIC_ENABLED",
+            "1" if os.environ.get("RIZZLER_DEPLOYMENT_MODE")=="production" else "0"
+            ).strip().lower() in ("1","true","yes")
+        if agentic:
+            from .work_dynamic import pending
+            planned=[]
+            graph=pending()
+        else:
+            # Historic jobs remain readable/runnable during migration only.
+            from .work_agents import plan
+            planned=plan(payload)
+            from .task_planning import execution_graph
+            graph=execution_graph(payload)
         plan_json = json.dumps(graph, sort_keys=True, separators=(",", ":"))
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
@@ -176,27 +201,192 @@ class WorkStore:
 
     def job_plan(self, owner: str, jid: str) -> dict:
         """Owner-scoped, checksum-protected immutable execution plan."""
-        from .task_planning import execution_graph, validate_graph
         with self._tx() as c:
             row = c.execute("SELECT payload FROM jobs WHERE id=? AND owner=?",
                             (jid, owner)).fetchone()
             if row is None:
                 raise Missing("Job not found")
             payload = json.loads(row["payload"])
-            expected = execution_graph(payload)
             saved = c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
                               (jid,)).fetchone()
             if saved is None:
-                # Backward-compatible read of pre-migration jobs only.
-                return expected
+                raise ValueError("Job has no persisted plan")
             raw = saved["plan_json"]
             if hashlib.sha256(raw.encode()).hexdigest() != saved["sha256"]:
                 raise ValueError("Job execution plan failed integrity verification")
             result = json.loads(raw)
+            if result.get("schema_version") == 2:
+                from .work_dynamic import validate
+                return validate(result,payload)
+            # Old plans are immutable; no dynamic job can silently fall back.
+            from .task_planning import execution_graph, validate_graph
+            expected=execution_graph(payload)
             validate_graph(result, frozenset(x["id"] for x in expected["steps"]))
             if result != expected:
-                raise ValueError("Job execution plan differs from approved workflow")
+                raise ValueError("Legacy graph differs from approved workflow")
             return result
+
+    def install_dynamic_graph(self, owner: str, jid: str, worker: str,
+                              fence: int, proposed: dict) -> dict:
+        """Fenced, atomic publication of a model-generated plan.
+
+        Never replace a committed plan after restart. Existing checkpoints
+        always refer to the same plan checksum.
+        """
+        from .work_dynamic import validate
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            if row["owner"]!=owner:raise Missing("Job owner mismatch")
+            payload=json.loads(row["payload"])
+            validated=validate(proposed,payload)
+            if validated["status"]!="ready":raise ValueError("Model plan not executable")
+            saved=c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
+                            (jid,)).fetchone()
+            if saved is None:raise ValueError("Missing planning placeholder")
+            if hashlib.sha256(saved["plan_json"].encode()).hexdigest()!=saved["sha256"]:
+                raise ValueError("Corrupted plan checkpoint")
+            previous=json.loads(saved["plan_json"])
+            if previous.get("schema_version")!=2:
+                raise ValueError("Legacy plan cannot be overwritten")
+            if previous["status"]=="ready":
+                if previous!=validated:
+                    raise Conflict("A different Work graph was already committed")
+                return previous
+            encoded=json.dumps(validated,sort_keys=True,separators=(",",":"))
+            stamp=time.time()
+            c.execute("UPDATE job_plans SET plan_json=?,sha256=?,created=? WHERE job_id=?",
+                      (encoded,hashlib.sha256(encoded.encode()).hexdigest(),stamp,jid))
+            for node in validated["steps"]:
+                c.execute("""INSERT INTO agent_steps(job_id,agent,status,updated)
+                             VALUES(?,?,'queued',?)""",(jid,node["id"],stamp))
+            self._event(c,jid,"planning","Model-authored execution graph committed")
+            return validated
+
+    def specification(self, owner: str, jid: str) -> dict:
+        """Return the authenticated owner's original objective and output contract."""
+        with self._tx() as c:
+            row=c.execute("SELECT payload FROM jobs WHERE owner=? AND id=?",
+                          (owner,jid)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            return json.loads(row["payload"])
+
+    def lineage(self, owner: str, jid: str) -> dict:
+        """Owner-scoped original/revision/retry relationships; never reveal other users."""
+        self.get(owner,jid)
+        with self._tx() as c:
+            parents=[dict(r) for r in c.execute(
+                """SELECT l.parent_id,l.operation,l.created FROM job_lineage l
+                   JOIN jobs j ON j.id=l.parent_id
+                   WHERE l.child_id=? AND j.owner=?""",(jid,owner))]
+            children=[dict(r) for r in c.execute(
+                """SELECT l.child_id,l.operation,l.created FROM job_lineage l
+                   JOIN jobs j ON j.id=l.child_id
+                   WHERE l.parent_id=? AND j.owner=?
+                   ORDER BY l.created DESC LIMIT 50""",(jid,owner))]
+        return {"parents":parents,"children":children}
+
+    def derive(self, owner: str, jid: str, objective: str | None,
+               formats: list[str] | None, idem: str, operation: str = "revise") -> dict:
+        """Create a new version, preserving the original job and immutable audit trail.
+
+        A running job is not silently modified. Clients must cancel it separately
+        when genuinely requested. The new version owns independent QA/receipts.
+        """
+        if operation not in ("revise","retry"):
+            raise ValueError("Invalid job revision operation")
+        original=self.get(owner,jid)
+        source=self.specification(owner,jid)
+        if operation == "retry":
+            if original["status"] not in ("failed","cancelled"):
+                raise Conflict("Only terminal unsuccessful jobs may be retried")
+            if objective is not None or formats is not None:
+                raise ValueError("Retry does not accept changed scope")
+            objective,formats=source["objective"],source["deliverables"]
+        else:
+            if not isinstance(objective,str) or not isinstance(formats,list):
+                raise ValueError("Revision requires a new objective and deliverables")
+        new=self.submit(owner,objective,formats,idem,source["uploads"])
+        if new["id"] == jid:
+            raise Conflict("Cannot derive a job from itself")
+        with self._tx() as c:
+            row=c.execute("SELECT parent_id,operation FROM job_lineage WHERE child_id=?",
+                          (new["id"],)).fetchone()
+            if row and (row["parent_id"] != jid or row["operation"] != operation):
+                raise Conflict("Idempotency key belongs to a different derivation")
+            if not row:
+                c.execute("""INSERT INTO job_lineage(child_id,parent_id,operation,created)
+                             VALUES(?,?,?,?)""",(new["id"],jid,operation,time.time()))
+                self._event(c,new["id"],"queued","Created from owned "+operation+" job")
+        return new
+
+    def prepare_agent_action(self, owner: str, action: str, arguments: dict) -> dict:
+        """Prepare but never execute a model-proposed mutation."""
+        if action not in ("work.cancel", "work.revise", "work.retry"):
+            raise PermissionError("Unsupported action")
+        if not isinstance(arguments, dict) or not isinstance(arguments.get("job_id"), str):
+            raise ValueError("Missing owned job")
+        jid=arguments["job_id"]
+        self.get(owner, jid)
+        if action == "work.revise":
+            from .contracts import Handoff
+            Handoff(session_id=owner,objective=arguments.get("objective",""),
+                    deliverables=tuple(arguments.get("deliverables",[]))).validate()
+        if action == "work.retry" and self.get(owner,jid)["status"] not in ("failed","cancelled"):
+            raise Conflict("Only failed or cancelled work can be retried")
+        if action != "work.revise" and set(arguments)!={"job_id"}:
+            raise ValueError("Unexpected mutation arguments")
+        if action == "work.revise" and set(arguments)!={"job_id","objective","deliverables"}:
+            raise ValueError("Invalid revision arguments")
+        now=time.time()
+        key=secrets.token_hex(16)
+        with self._tx() as c:
+            c.execute("DELETE FROM agent_approvals WHERE expires<? AND status='pending'",(now,))
+            count=c.execute("SELECT COUNT(*) FROM agent_approvals WHERE owner=? AND status='pending'",
+                            (owner,)).fetchone()[0]
+            if count>=16:raise Conflict("Too many unconfirmed actions")
+            c.execute("""INSERT INTO agent_approvals(id,owner,action,arguments,status,created,expires)
+                         VALUES(?,?,?,?,'pending',?,?)""",
+                      (key,owner,action,json.dumps(arguments,sort_keys=True),now,now+600))
+        return {"id":key,"action":action,"job_id":jid,
+                "objective":arguments.get("objective"),
+                "deliverables":arguments.get("deliverables"),
+                "expires_at":now+600}
+
+    def confirm_agent_action(self, owner: str, approval_id: str) -> dict:
+        """Separate authenticated confirmation; crash-safe retry via action idempotency."""
+        if not isinstance(approval_id,str) or not re.fullmatch(r"[a-f0-9]{32}",approval_id):
+            raise ValueError("Invalid action identifier")
+        with self._tx() as c:
+            row=c.execute("SELECT * FROM agent_approvals WHERE id=? AND owner=?",
+                          (approval_id,owner)).fetchone()
+            if row is None:raise Missing("Action confirmation not found")
+            if row["status"]=="completed":
+                return json.loads(row["result"])
+            if row["status"]=="pending":
+                if row["expires"]<time.time():
+                    raise Conflict("Action approval expired")
+                c.execute("UPDATE agent_approvals SET status='executing' WHERE id=?",
+                          (approval_id,))
+            elif row["status"]!="executing":
+                raise Conflict("Action unavailable")
+            action,params=row["action"],json.loads(row["arguments"])
+        # On process crash, a repeated explicit confirmation finishes the same
+        # action. Revision and retry reuse the approval ID as idempotency key.
+        if action=="work.cancel":
+            result=self.cancel(owner,params["job_id"])
+        elif action=="work.retry":
+            result=self.derive(owner,params["job_id"],None,None,
+                               "agent_"+approval_id,"retry")
+        elif action=="work.revise":
+            result=self.derive(owner,params["job_id"],params["objective"],
+                               params["deliverables"],"agent_"+approval_id,"revise")
+        else:
+            raise PermissionError("Unknown saved action")
+        with self._tx() as c:
+            c.execute("""UPDATE agent_approvals SET status='completed',result=?
+                         WHERE id=? AND owner=?""",(json.dumps(result),approval_id,owner))
+        return result
 
     def events(self, owner: str, jid: str, after: int = 0):
         self.get(owner, jid)
@@ -641,10 +831,27 @@ class WorkStore:
                 c.execute("""INSERT INTO jobs(id,owner,idem,fingerprint,payload,status,stage,created,updated)
                              VALUES(?,?,?,?,?,'queued','accepted',?,?)""",
                           (jid,row["owner"],key,row["fingerprint"],row["payload"],now,now))
-                from .work_agents import plan
-                for spec in plan(json.loads(row["payload"])):
+                original=c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
+                                   (row["job_id"],)).fetchone()
+                if original is None or hashlib.sha256(original["plan_json"].encode()).hexdigest()!=original["sha256"]:
+                    raise ValueError("Approved job plan missing or corrupted")
+                parent_plan=json.loads(original["plan_json"])
+                if parent_plan.get("schema_version")==2:
+                    # Every scheduled invocation gets a freshly model-authored
+                    # plan; never replay a stale strategy without re-evaluation.
+                    from .work_dynamic import pending
+                    new_plan=pending()
+                else:
+                    # Only historical jobs retain their immutable approved
+                    # template for backward-compatible execution.
+                    new_plan=parent_plan
+                encoded=json.dumps(new_plan,sort_keys=True,separators=(",",":"))
+                c.execute("""INSERT INTO job_plans(job_id,plan_json,sha256,created)
+                             VALUES(?,?,?,?)""",
+                          (jid,encoded,hashlib.sha256(encoded.encode()).hexdigest(),now))
+                for node in new_plan["steps"]:
                     c.execute("""INSERT INTO agent_steps(job_id,agent,status,updated)
-                                 VALUES(?,?,'queued',?)""", (jid,spec.name,now))
+                                 VALUES(?,?,'queued',?)""",(jid,node["id"],now))
                 self._event(c,jid,"queued","Approved schedule enqueued task")
                 new_state="exhausted" if index>=row["max_runs"] else "active"
                 c.execute("""UPDATE proposals SET runs=?,next_run=?,status=? WHERE id=?""",
