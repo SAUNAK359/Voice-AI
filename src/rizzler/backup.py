@@ -23,7 +23,7 @@ import tarfile
 import tempfile
 
 MAX_FILES = 1_000_000
-PATHS = ("jobs.sqlite3", "identity.sqlite3", "uploads", "artifacts",
+PATHS = ("jobs.sqlite3", "identity.sqlite3", "ai_reservations.sqlite3", "uploads", "artifacts",
          "private_memory", "visuals", "memory", "pdfs")
 BLOCK = 1024 * 1024
 
@@ -77,7 +77,7 @@ def backup(root: Path, destination: Path):
     if not root.is_dir() or destination.is_relative_to(root):
         raise ValueError("Backup destination must be outside existing work root")
     # Exclusive offline backup: no API/worker may write while the snapshot runs.
-    for db_name in ("jobs.sqlite3", "identity.sqlite3"):
+    for db_name in ("jobs.sqlite3", "identity.sqlite3", "ai_reservations.sqlite3"):
         db_file = root / db_name
         if db_file.is_file():
             with sqlite3.connect(db_file, timeout=15) as con:
