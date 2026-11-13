@@ -31,6 +31,7 @@ class ProductionHardeningTests(unittest.TestCase):
                 "visuals/visual_v11.sqlite3":b"encrypted images fixture",
                 "visuals/pdfs/pdf_ingestion.sqlite3":b"encrypted document fixture",
                 "visuals/pdfs/payload.bin":b"0"*2_000_000,
+                "ai_reservations.sqlite3":b"cost-ledger-placeholder",
             }
             for name,content in files.items():
                 path=root/name
