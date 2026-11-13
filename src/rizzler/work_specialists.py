@@ -141,7 +141,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                  for name,stats in numeric[:10]])
             context["text"]=(context["text"] or
                 "# Dataset observations\nIndependent numeric analysis") + (
-                "\n\n## Computed dataset evidence\n"+proof)
+                "\n\n## Verified dataset evidence\n"+proof)
         context["artifact_ir"]=compile_ir(payload["objective"][:120],
             context["text"] or "# Analysis\nVerified dataset statistics",
             context["sources"],context["summary"])
