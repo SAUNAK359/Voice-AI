@@ -171,12 +171,25 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                     app.state.voice_prewarm = 'failed'
             app.state.voice_prewarm = 'running'
             prewarm_task = asyncio.create_task(prewarm(),name='voice-model-prewarm')
+        pdf_watchdog = None
         if pdf_store is not None:
-            for owner,uid in pdf_store.recoverable():
-                schedule_pdf(pdf_ingestor.run(owner,uid))
-            for owner,uid in pdf_research.recoverable():
-                schedule_pdf(pdf_research.run(owner,uid))
+            async def recover_pdf_jobs():
+                while True:
+                    try:
+                        for owner,uid in await asyncio.to_thread(pdf_store.recoverable):
+                            schedule_pdf(pdf_ingestor.run(owner,uid))
+                        for owner,uid in await asyncio.to_thread(pdf_research.recoverable):
+                            schedule_pdf(pdf_research.run(owner,uid))
+                    except Exception:
+                        # Failure is visible through paused/queued status.
+                        pass
+                    await asyncio.sleep(30)
+            pdf_watchdog=asyncio.create_task(recover_pdf_jobs(),
+                                           name="rizzler-pdf-recovery")
         yield
+        if pdf_watchdog is not None:
+            pdf_watchdog.cancel()
+            await asyncio.gather(pdf_watchdog,return_exceptions=True)
         for task in tuple(pdf_tasks):
             task.cancel()
         if pdf_tasks:
@@ -579,6 +592,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     @app.post('/api/pdf/documents/{uid}/research',status_code=202)
     async def pdf_submit_research(request: Request,uid: str):
+        from .pdf_documents import DocumentNotFound,DocumentConflict
         owner=auth(request,True)
         if pdf_research is None:
             raise HTTPException(status_code=409,detail="Full PDF research disabled")
