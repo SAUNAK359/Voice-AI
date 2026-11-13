@@ -183,8 +183,20 @@ class AgentRuntime:
                             step*4+i,uploads or [],visuals or []),
                             timeout=max(0.2,min(32,deadline-time.perf_counter())))
                         return {"name":call["name"],"ok":True,"result":result}
-                    except (ValueError,PermissionError,Missing,Conflict,RuntimeError,TimeoutError,OSError):
-                        return {"name":call["name"],"ok":False,"error":"Unavailable or unauthorized operation"}
+                    except Missing:
+                        code,retryable="not_found",False
+                    except Conflict:
+                        code,retryable="conflict",False
+                    except PermissionError:
+                        code,retryable="forbidden",False
+                    except ValueError:
+                        code,retryable="invalid_arguments",False
+                    except TimeoutError:
+                        code,retryable="timeout",True
+                    except Exception:
+                        code,retryable="provider_or_runtime_unavailable",True
+                    return {"name":call["name"],"ok":False,
+                            "error":{"code":code,"retryable":retryable}}
                 results=await asyncio.gather(*(one(c,i) for i,c in enumerate(active)))
                 for result in results:
                     if result["name"]=="work.submit" and result["ok"]:
