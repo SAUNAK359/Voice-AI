@@ -238,35 +238,93 @@ class PDFStore:
             name=Path("/proc/self/fd")/str(output.fileno()) if linux else Path(output.name)
             yield name
 
-    def finalize(self,owner,uid):
-        import fitz
+    def request_finalize(self,owner,uid):
         with self.db() as db:
             row=self._get(db,owner,uid)
-            if row["status"]!="uploading":
-                return self._public(row)
-        with self.materialize(owner,uid) as path:
-            with path.open("rb") as f:
-                if f.read(5)!=b"%PDF-":raise ValueError("Invalid PDF signature")
-            if self.scanner_file is not None:
-                self.scanner_file(path)
-            try:
-                with fitz.open(path,filetype="pdf") as doc:
-                    if doc.needs_pass or doc.page_count<1:
-                        raise ValueError("Encrypted or empty PDF")
-                    if getattr(doc,"get_javascript",lambda:[])():
-                        raise ValueError("PDF JavaScript is not supported")
-                    for page in doc:
-                        if not 36 <= page.rect.width <= 20000 or not 36 <= page.rect.height <= 20000:
-                            raise ValueError("Unsafe PDF page geometry")
-                    pages=doc.page_count
-            except ValueError:raise
-            except Exception:raise ValueError("Unreadable PDF") from None
+            if row["status"] in ("uploading","validation_failed"):
+                if not row["chunks"]:
+                    raise ValueError("PDF upload has no chunks")
+                db.execute("""UPDATE docs SET status='validating',lease=NULL,
+                     lease_until=0,error=NULL,updated=? WHERE id=?""",
+                     (time.time(),uid))
+            elif row["status"] not in ("validating","queued","running","paused","complete"):
+                raise DocumentConflict("Document validation status invalid")
+            return self._public(self._get(db,owner,uid))
+
+    def recoverable_validation(self):
+        with self.db() as db:
+            return [(r["owner"],r["id"]) for r in db.execute(
+                """SELECT owner,id FROM docs WHERE status='validating'
+                   AND lease_until<? ORDER BY created""",(time.time(),))]
+
+    def begin_validation(self,owner,uid):
+        token=secrets.token_hex(20)
         with self.db() as db:
             row=self._get(db,owner,uid)
             if row["status"]=="uploading":
-                db.execute("UPDATE docs SET status='queued',pages=?,updated=? WHERE id=?",
-                           (pages,time.time(),uid))
-            return self._public(self._get(db,owner,uid))
+                if not row["chunks"]:raise ValueError("PDF upload incomplete")
+                db.execute("UPDATE docs SET status='validating' WHERE id=?",(uid,))
+            elif row["status"]!="validating":
+                if row["status"] in ("queued","running","paused","complete"):
+                    return None
+                raise DocumentConflict("PDF is not ready for validation")
+            if row["lease_until"]>time.time():
+                raise DocumentConflict("PDF already validating")
+            db.execute("""UPDATE docs SET lease=?,lease_until=?,updated=?
+                          WHERE id=?""",
+                       (token,time.time()+120,time.time(),uid))
+        return token
+
+    def touch_validation(self,owner,uid,token):
+        with self.db() as db:
+            row=self._get(db,owner,uid)
+            if row["status"]!="validating" or row["lease"]!=token:
+                raise DocumentConflict("PDF validation lease lost")
+            db.execute("UPDATE docs SET lease_until=?,updated=? WHERE id=?",
+                       (time.time()+120,time.time(),uid))
+
+    def finalize(self,owner,uid,token=None):
+        """Complete the expensive scanner/structural validation off the HTTP path."""
+        import fitz
+        if token is None:
+            token=self.begin_validation(owner,uid)
+        if token is None:
+            return self.status(owner,uid)
+        try:
+            with self.materialize(owner,uid) as path:
+                with path.open("rb") as f:
+                    if f.read(5)!=b"%PDF-":raise ValueError("Invalid PDF signature")
+                if self.scanner_file is not None:
+                    self.scanner_file(path)
+                try:
+                    with fitz.open(path,filetype="pdf") as doc:
+                        if doc.needs_pass or doc.page_count<1:
+                            raise ValueError("Encrypted or empty PDF")
+                        if getattr(doc,"get_javascript",lambda:[])():
+                            raise ValueError("PDF JavaScript is not supported")
+                        for page in doc:
+                            if not 36 <= page.rect.width <= 20000 or not 36 <= page.rect.height <= 20000:
+                                raise ValueError("Unsafe PDF page geometry")
+                        pages=doc.page_count
+                except ValueError:raise
+                except Exception:raise ValueError("Unreadable PDF") from None
+            with self.db() as db:
+                row=self._get(db,owner,uid)
+                if row["lease"]!=token or row["status"]!="validating":
+                    raise DocumentConflict("PDF validation lease lost")
+                db.execute("""UPDATE docs SET status='queued',pages=?,lease=NULL,
+                    lease_until=0,updated=?,error=NULL WHERE id=?""",
+                    (pages,time.time(),uid))
+                return self._public(self._get(db,owner,uid))
+        except BaseException as exc:
+            with self.db() as db:
+                row=self._get(db,owner,uid)
+                if row["lease"]==token and row["status"]=="validating":
+                    db.execute("""UPDATE docs SET status='validation_failed',
+                        error=?,lease=NULL,lease_until=0,updated=? WHERE id=?""",
+                        (str(exc)[:240],time.time(),uid))
+            raise
+
 
     def claim(self,owner,uid):
         token=secrets.token_hex(20)
