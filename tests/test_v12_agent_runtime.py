@@ -98,7 +98,8 @@ def test_repeated_modifying_decisions_fail_closed(tmp_path):
     ])
     result=asyncio.run(agent.run("Create a report","owner_one",nonce="run",sequence=9))
     assert len(store.list_jobs("owner_one"))==1
-    assert result["verified"] is False
+    assert result["accepted"] is True
+    assert result["job"]["status"] == "queued"  # Accepted, not completed
 
 
 def test_provider_selected_read_only_tools_can_run_concurrently(tmp_path):
