@@ -190,6 +190,9 @@ class GeminiLLM:
                     except QuotaExceeded:
                         last_error = 'local_quota'
                         break
+                    except __import__('rizzler.production_guard',fromlist=['BudgetExceeded']).BudgetExceeded:
+                        last_error = 'daily_budget'
+                        break
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:
