@@ -161,6 +161,55 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
         except Missing:
             raise HTTPException(status_code=404, detail="Job not found")
 
+    @api.get("/jobs/{jid}/specification")
+    def job_specification(req: Request,jid: str):
+        try:return store.specification(owner(req),jid)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+
+    @api.get("/jobs/{jid}/lineage")
+    def job_lineage(req: Request,jid: str):
+        try:return store.lineage(owner(req),jid)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+
+    @api.post("/jobs/{jid}/revisions",status_code=202)
+    async def propose_revision(req: Request,jid: str):
+        who=owner(req);same_origin(req)
+        raw=await req.body()
+        if len(raw)>11500:
+            raise HTTPException(status_code=413,detail="Revision too large")
+        try:
+            data=json.loads(raw)
+            if not isinstance(data,dict) or set(data)!={"objective","deliverables"}:
+                raise ValueError()
+            return store.prepare_agent_action(who,"work.revise",
+                {"job_id":jid,**data})
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=400,detail="Invalid revision") from None
+        except Conflict:
+            raise HTTPException(status_code=409,detail="Revision unavailable") from None
+
+    @api.post("/jobs/{jid}/retry",status_code=202)
+    def propose_retry(req: Request,jid: str):
+        who=owner(req);same_origin(req)
+        try:return store.prepare_agent_action(who,"work.retry",{"job_id":jid})
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+        except Conflict:
+            raise HTTPException(status_code=409,detail="Retry unavailable") from None
+
+    @api.post("/agent/approvals/{approval_id}/confirm")
+    def approve_agent_action(req: Request,approval_id: str):
+        who=owner(req);same_origin(req)
+        try:return {"confirmed":True,"job":store.confirm_agent_action(who,approval_id)}
+        except Missing:
+            raise HTTPException(status_code=404,detail="Approval unavailable") from None
+        except (Conflict,ValueError):
+            raise HTTPException(status_code=409,detail="Confirmation invalid or expired") from None
+
     @api.get("/jobs/{jid}/events")
     def events(req: Request,jid: str,after: int=0):
         if after<0:raise HTTPException(status_code=400,detail="Invalid sequence")
