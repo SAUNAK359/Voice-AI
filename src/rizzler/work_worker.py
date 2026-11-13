@@ -39,6 +39,10 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=1
               json.dumps(data_summary or {}, ensure_ascii=False)[:9000])
     try:
         async with asyncio.timeout(min(90, cfg.request_timeout)):
+            from .production_guard import reserve_provider_call
+            reserve_provider_call('work')
+            from .production_guard import reserve_provider_call
+            reserve_provider_call('research')
             response=await client.aio.models.generate_content(
                 model=cfg.gemini_model, contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.25,
