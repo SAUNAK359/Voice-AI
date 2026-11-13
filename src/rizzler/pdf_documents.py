@@ -379,6 +379,37 @@ class PDFStore:
                 raise DocumentConflict("PDF page coverage incomplete")
             return results
 
+    def page_numbers(self,owner,uid):
+        with self.db() as db:
+            row=self._get(db,owner,uid)
+            if row["status"]!="complete" or row["processed"]!=row["pages"]:
+                raise DocumentConflict("Complete PDF indexing is required")
+            return list(range(row["pages"]))
+
+    def read_page(self,owner,uid,index):
+        with self.db() as db:
+            row=self._get(db,owner,uid)
+            if row["status"]!="complete":
+                raise DocumentConflict("PDF page indexing not complete")
+            page=db.execute("SELECT * FROM pages WHERE doc=? AND page=? AND state='complete'",
+                            (uid,index)).fetchone()
+            if page is None:raise DocumentConflict("Requested PDF page missing")
+            tiles=list(db.execute(
+                "SELECT * FROM tiles WHERE doc=? AND page=? ORDER BY tile",(uid,index)))
+            if len(tiles)!=page["tiles"]:
+                raise DocumentConflict("Visual tile coverage incomplete")
+            return {"page":index+1,"text":self._open(owner,uid,
+                f"text:{index}",page["text"]).decode(),
+                "visual":[self._open(owner,uid,f"tile:{index}:{t['tile']}",
+                          t["notes"]).decode() for t in tiles]}
+
+    def recoverable(self):
+        now=time.time()
+        with self.db() as db:
+            return [(r["owner"],r["id"]) for r in db.execute(
+                """SELECT owner,id FROM docs WHERE status='queued'
+                OR (status='running' AND lease_until<?) ORDER BY created""",(now,))]
+
     def search_pages(self,owner,uid,question):
         terms={hmac.new(self.token_key,w.lower().encode(),hashlib.sha256).digest()
                for w in TOKEN.findall(question)}
@@ -418,6 +449,16 @@ class PDFIngestor:
         async with self._capacity:
             token=await asyncio.to_thread(self.store.claim,owner,uid)
             if token is None:return self.store.status(owner,uid)
+            stop=asyncio.Event()
+            async def heartbeat():
+                try:
+                    while not stop.is_set():
+                        try:await asyncio.wait_for(stop.wait(),timeout=30)
+                        except asyncio.TimeoutError:
+                            await asyncio.to_thread(self.store.touch,owner,uid,token)
+                except (Exception,asyncio.CancelledError):
+                    return
+            pulse=asyncio.create_task(heartbeat(),name="pdf-lease-heartbeat")
             try:
                 with self.store.materialize(owner,uid) as source:
                     with fitz.open(source) as document:
@@ -461,4 +502,7 @@ class PDFIngestor:
                      "Interrupted or provider error; resume to continue" if isinstance(
                          exc,asyncio.CancelledError) else str(exc))
                 raise
+            finally:
+                stop.set()
+                await asyncio.gather(pulse,return_exceptions=True)
             return self.store.status(owner,uid)
