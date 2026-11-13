@@ -84,6 +84,12 @@ class WorkStore:
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS job_lineage(
+              child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL,
+              operation TEXT NOT NULL, created REAL NOT NULL,
+              FOREIGN KEY(child_id) REFERENCES jobs(id),
+              FOREIGN KEY(parent_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS lineage_parent ON job_lineage(parent_id);
             """)
 
     @contextmanager
@@ -197,6 +203,64 @@ class WorkStore:
             if result != expected:
                 raise ValueError("Job execution plan differs from approved workflow")
             return result
+
+    def specification(self, owner: str, jid: str) -> dict:
+        """Return the authenticated owner's original objective and output contract."""
+        with self._tx() as c:
+            row=c.execute("SELECT payload FROM jobs WHERE owner=? AND id=?",
+                          (owner,jid)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            return json.loads(row["payload"])
+
+    def lineage(self, owner: str, jid: str) -> dict:
+        """Owner-scoped original/revision/retry relationships; never reveal other users."""
+        self.get(owner,jid)
+        with self._tx() as c:
+            parents=[dict(r) for r in c.execute(
+                """SELECT l.parent_id,l.operation,l.created FROM job_lineage l
+                   JOIN jobs j ON j.id=l.parent_id
+                   WHERE l.child_id=? AND j.owner=?""",(jid,owner))]
+            children=[dict(r) for r in c.execute(
+                """SELECT l.child_id,l.operation,l.created FROM job_lineage l
+                   JOIN jobs j ON j.id=l.child_id
+                   WHERE l.parent_id=? AND j.owner=?
+                   ORDER BY l.created DESC LIMIT 50""",(jid,owner))]
+        return {"parents":parents,"children":children}
+
+    def derive(self, owner: str, jid: str, objective: str | None,
+               formats: list[str] | None, idem: str, operation: str = "revise") -> dict:
+        """Create a new version, preserving the original job and immutable audit trail.
+
+        A running job is not silently modified. Clients must cancel it separately
+        when genuinely requested. The new version owns independent QA/receipts.
+        """
+        if operation not in ("revise","retry"):
+            raise ValueError("Invalid job revision operation")
+        original=self.get(owner,jid)
+        source=self.specification(owner,jid)
+        if operation == "retry":
+            if original["status"] not in ("failed","cancelled"):
+                raise Conflict("Only terminal unsuccessful jobs may be retried")
+            if objective is not None or formats is not None:
+                raise ValueError("Retry does not accept changed scope")
+            objective,formats=source["objective"],source["deliverables"]
+        else:
+            if not isinstance(objective,str) or not isinstance(formats,list):
+                raise ValueError("Revision requires a new objective and deliverables")
+        new=self.submit(owner,objective,formats,idem,source["uploads"])
+        if new["id"] == jid:
+            raise Conflict("Cannot derive a job from itself")
+        with self._tx() as c:
+            row=c.execute("SELECT parent_id,operation FROM job_lineage WHERE child_id=?",
+                          (new["id"],)).fetchone()
+            if row and (row["parent_id"] != jid or row["operation"] != operation):
+                raise Conflict("Idempotency key belongs to a different derivation")
+            if not row:
+                c.execute("""INSERT INTO job_lineage(child_id,parent_id,operation,created)
+                             VALUES(?,?,?,?)""",(new["id"],jid,operation,time.time()))
+                self._event(c,new["id"],"queued","Created from owned "+operation+" job")
+        return new
 
     def events(self, owner: str, jid: str, after: int = 0):
         self.get(owner, jid)
