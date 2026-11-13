@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- memoryEnabled:false,workEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,agentEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -475,6 +475,7 @@ $('logout').addEventListener('click',async()=>{
   const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
   const d=await r.json();s.production=d.mode==='production';
   s.workEnabled=!!d.work_enabled;$('work-panel').hidden=!s.workEnabled;
+  s.agentEnabled=!!d.agentic_enabled;$('agent-chat').hidden=!s.agentEnabled;
   s.visualEnabled=!!d.multimodal_enabled;$('visual-panel').hidden=!s.visualEnabled;
   s.memoryEnabled=!!d.encrypted_memory_enabled;$('memory-open').hidden=!s.memoryEnabled;
   $('logout').hidden=!s.production;
@@ -531,6 +532,45 @@ $('memory-clear').addEventListener('click',async()=>{
   const res=await fetch('/api/voice/memories',{method:'DELETE',headers:headers()});
   if(!res.ok)throw Error('Could not delete saved memories');await refreshMemories();
  }catch(error){$('memory-feedback').textContent=error.message}
+});
+$('agent-chat')?.addEventListener('submit',async e=>{
+ e.preventDefault();
+ const input=$('agent-text'),send=$('agent-send'),feedback=$('agent-feedback');
+ const request=input.value.trim();
+ if(!request)return;
+ if(!s.agentEnabled||!s.session){feedback.textContent='Connect to your private session first.';return}
+ if(s.recording||s.request||s.playing.size){feedback.textContent='Finish the current voice turn first.';return}
+ send.disabled=true;feedback.textContent='Planning and checking available tools…';
+ const seq=++s.visualSeq;message('user',request,seq,true);
+ try{
+   const response=await fetch('/api/agent/turn',{method:'POST',
+     headers:{...headers(),'content-type':'application/json'},
+     body:JSON.stringify({text:request})});
+   if(!response.ok)throw Error('Agent request unavailable ('+response.status+')');
+   const result=await response.json();
+   message('assistant',result.text,seq,true);
+   input.value='';
+   feedback.textContent=result.approvals?.length?'Explicit approval required for the proposed change.':
+     result.job?'Work accepted; track progress below.':'Agent response ready.';
+   if(result.job)refreshWork();
+   for(const item of result.approvals||[]){
+     const b=document.createElement('button');b.type='button';
+     b.textContent='Confirm '+item.action+' for job '+item.job_id.slice(0,8);
+     b.addEventListener('click',async()=>{
+       b.disabled=true;
+       try{
+         const approval=await fetch('/api/agent/approvals/'+encodeURIComponent(item.id)+'/confirm',
+                     {method:'POST',headers:headers()});
+         if(!approval.ok)throw Error('Confirmation failed ('+approval.status+')');
+         const confirmed=await approval.json();
+         feedback.textContent='Confirmed action. Work state: '+confirmed.job.status;
+         refreshWork();
+       }catch(error){feedback.textContent=error.message;b.disabled=false}
+     });
+     $('messages').append(b);
+   }
+ }catch(error){feedback.textContent=error.message}
+ finally{send.disabled=false}
 });
 async function refreshToolCatalog(){
  try{
