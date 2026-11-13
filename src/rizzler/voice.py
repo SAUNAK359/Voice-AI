@@ -130,7 +130,8 @@ class VoiceEngine:
                                 'tool':tool_result['tool'],
                                 'verified':tool_result.get('verified',False),
                                 'elapsed_ms':tool_result.get('tool_elapsed_ms'),
-                                'job':tool_result.get('job')})
+                                'job':tool_result.get('job'),
+                                'approvals':tool_result.get('approvals',[])})
                     answer = ''
                     pending = ''
                     last_ui_ms, last_ui_len = 0.0, 0
