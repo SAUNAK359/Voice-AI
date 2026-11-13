@@ -183,7 +183,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             return await pdf_ingestor.run(owner,uid)
         return state
 
-    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory, visual))
+    engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory, visual,
+        pdf_research=pdf_research,pdf_schedule=schedule_pdf))
     @asynccontextmanager
     async def lifespan(app):
         # Optional one-time provider prewarm, performed after API starts
@@ -526,6 +527,36 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     # Entire PDFs use resumable encrypted chunks; legacy visual attachments
     # remain intentionally small-image/preview compatibility only.
+    @app.post('/api/pdf/selection')
+    async def pdf_select(request: Request):
+        from .pdf_documents import DocumentNotFound, DocumentConflict
+        owner=auth(request,True)
+        if pdf_store is None:
+            raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
+        raw=bytearray()
+        async for part in request.stream():
+            raw.extend(part)
+            if len(raw)>256:
+                raise HTTPException(status_code=413,detail="PDF selection too large")
+        try:
+            data=json.loads(raw)
+            if not isinstance(data,dict) or set(data)!={"document_id"}:
+                raise ValueError("Invalid selection payload")
+            uid=data["document_id"]
+            if uid is not None:
+                status=await asyncio.to_thread(pdf_store.status,owner,uid)
+                if status["status"]!="complete":
+                    raise DocumentConflict("PDF must be fully indexed")
+            session=sessions.get(owner)
+            session.pdf_document=uid
+            return {"selected":uid}
+        except (ValueError,TypeError,UnicodeError):
+            raise HTTPException(status_code=400,detail="Invalid PDF selection") from None
+        except DocumentNotFound:
+            raise HTTPException(status_code=404,detail="PDF unavailable") from None
+        except DocumentConflict:
+            raise HTTPException(status_code=409,detail="PDF indexing incomplete") from None
+
     @app.post('/api/pdf/documents',status_code=201)
     async def pdf_create(request: Request):
         owner=auth(request,True)
@@ -690,6 +721,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         from .pdf_documents import DocumentConflict,DocumentNotFound
         try:
             deleted=await asyncio.to_thread(pdf_store.delete,owner,uid)
+            session=sessions.sessions.get(owner)
+            if session is not None and session.pdf_document==uid:
+                session.pdf_document=None
             return {"deleted":deleted}
         except (DocumentNotFound,ValueError):
             raise HTTPException(status_code=404,detail="PDF document unavailable") from None
@@ -865,6 +899,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         await session.cancel()
         session.history.clear()
         session.visuals.clear()
+        session.pdf_document=None
         session.visual_analysis = None
         session.visual_generation += 1
         session.generation += 1
@@ -916,7 +951,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 async for event in engine.events(bytes(raw), rate, list(session.history),
                                                 owner=sid, sequence=generation,
                                                 uploads=list(session.uploads), nonce=session.nonce,
-                                                visuals=list(session.visuals)):
+                                                visuals=list(session.visuals),
+                                                pdf_document=session.pdf_document):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -1027,7 +1063,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                                                          owner=sid, sequence=seq,
                                                          uploads=list(session.uploads),
                                                          nonce=session.nonce,
-                                                         visuals=list(session.visuals)):
+                                                         visuals=list(session.visuals),
+                                                         pdf_document=session.pdf_document):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
@@ -1144,6 +1181,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                         await session.cancel()
                         session.history.clear()
                         session.visuals.clear()
+                        session.pdf_document=None
                         session.visual_analysis = None
                         session.visual_generation += 1
                         pcm.clear()
