@@ -11,6 +11,7 @@ from .math_engine import solve_equations
 from .research_evidence import source_records, evidence_summary
 from .task_planning import propose_scope
 from .tool_registry import require_tool, VOICE_TOOLS
+from .work_store import Missing, Conflict
 
 SEARCH_INTENT = re.compile(r"\b(?:search(?: the)? web|web search|look (?:up|online)|browse|research online|current (?:stock price|share price|news|exchange rate)|latest (?:news|price|updates)|(?:stock|share) price (?:of|for)|today['’]?s? (?:news|price|weather))\b", re.I)
 WORK_INTENT = re.compile(r"\b(?:make|create|prepare|generate|build|produce|draft|analy[sz]e)\b", re.I)
@@ -114,8 +115,9 @@ MEMORY_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+memory\s+([A-
 
 class VoiceTools:
     def __init__(self,store,settings,memory=None,visual=None,
-                 pdf_research=None,pdf_schedule=None):
+                 pdf_research=None,pdf_schedule=None,agent=None):
         self.store,self.settings,self.memory,self.visual=store,settings,memory,visual
+        self.agent=agent
         self.pdf_research,self.pdf_schedule=pdf_research,pdf_schedule
         self._pending_memory_clear = {}
 
@@ -175,7 +177,26 @@ class VoiceTools:
             line="I couldn't complete that memory request. No success is claimed."
             return {"tool":intent,"text":line,"spoken":line,"verified":False}
 
-    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None)->dict|None:
+    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None, history: list[dict] | None = None)->dict|None:
+        if self.agent is not None:
+            # Explicit confirmation is an authorization protocol, not intent routing.
+            match=re.fullmatch(r"\\s*confirm action\\s+([a-f0-9]{32})\\s*[.!]?\\s*",text,re.I)
+            if match:
+                if self.store is None:
+                    return {"tool":"agent","verified":False,"text":"Work is unavailable.",
+                            "spoken":"Work is unavailable."}
+                try:
+                    result=await asyncio.to_thread(self.store.confirm_agent_action,
+                                                   owner,match.group(1).lower())
+                    line="Work action confirmed. Current result: "+str(result.get("status","accepted"))+"."
+                    return {"tool":"agent","verified":True,"text":line,"spoken":line,
+                            "job":result}
+                except (Missing,Conflict,ValueError,PermissionError):
+                    return {"tool":"agent","verified":False,
+                            "text":"The confirmation was invalid, expired or unauthorized.",
+                            "spoken":"That action could not be confirmed."}
+            return await self.agent.run(text,owner,history=history,uploads=uploads,
+                                        visuals=visuals,nonce=nonce,sequence=sequence)
         memory_intent=self.memory_intent(text)
         if memory_intent is not None:
             return self._memory_command(memory_intent,text,owner)
