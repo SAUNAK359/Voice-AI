@@ -114,7 +114,8 @@ class VoiceEngine:
                     tool_result = None
                     if self.tools is not None and owner is not None:
                         from .voice_tools import classify_tool
-                        intent = classify_tool(transcript, self.tools.store is not None)
+                        intent = (None if getattr(self.tools, "agent", None) is not None else
+                                  classify_tool(transcript, self.tools.store is not None))
                         if intent == 'web_search':
                             await output.put({'type':'status','label':'Searching verified sources'})
                             await speech_queue.put('I will check current sources.')
@@ -123,7 +124,7 @@ class VoiceEngine:
                         if intent == 'work_submit':
                             await output.put({'type':'status','label':'Planning requested work'})
                             await speech_queue.put('I will organize the work into verified steps.')
-                        tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads, nonce=nonce, visuals=visuals,pdf_document=pdf_document)
+                        tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads, nonce=nonce, visuals=visuals,pdf_document=pdf_document,history=history)
                         if tool_result is not None:
                             await output.put({'type':'tool_result',
                                 'tool':tool_result['tool'],
