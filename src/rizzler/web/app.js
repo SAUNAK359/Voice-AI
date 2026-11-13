@@ -294,11 +294,13 @@ async function uploadPDF(file){
  if(!s.visualEnabled||!s.session)throw Error('Connect the private session first');
  if(!file||!file.name.toLowerCase().endsWith('.pdf'))throw Error('Only PDF documents supported');
  $('visual-status').textContent='Preparing resumable full PDF upload…';
- const create=await fetch('/api/pdf/documents',{method:'POST',
+ await refreshPDFDocs();
+ const unfinished=s.pdfDocs.find(d=>d.name===file.name&&d.status==='uploading');
+ const create=unfinished?null:await fetch('/api/pdf/documents',{method:'POST',
    headers:{...headers(),'content-type':'application/json'},
    body:JSON.stringify({name:file.name})});
- if(!create.ok)throw Error('Cannot initialize PDF upload ('+create.status+')');
- const doc=await create.json(),size=1024*1024;
+ if(create&&!create.ok)throw Error('Cannot initialize PDF upload ('+create.status+')');
+ const doc=unfinished||await create.json(),size=1024*1024;
  const total=Math.ceil(file.size/size);
  for(let i=doc.uploaded_chunks;i<total;i++){
   const part=await file.slice(i*size,Math.min(file.size,(i+1)*size)).arrayBuffer();
