@@ -152,12 +152,12 @@ def test_specialist_status_endpoint_scoped_to_owner(tmp_path,monkeypatch):
         job=store.submit("owner_1","Produce a complete research report.",
                          ["md"],"status_visible_001",[])
         a=client.get("/api/work/jobs/"+job["id"]+"/agents",
-                     headers={"Authorization":"Bearer "+issue_token("owner_1",SIGNING)})
+                     headers={"x-rizzler-key":KEY,"x-session-id":"owner_1"})
         assert a.status_code == 200
         assert {x["agent"] for x in a.json()["agents"]} == {"orchestrator", "pdf_visual", "quality"}
         assert all(x["status"] == "queued" for x in a.json()["agents"])
         b=client.get("/api/work/jobs/"+job["id"]+"/agents",
-                     headers={"Authorization":"Bearer "+issue_token("owner_2",SIGNING)})
+                     headers={"x-rizzler-key":KEY,"x-session-id":"owner_2"})
         assert b.status_code==404
 
 
@@ -321,7 +321,7 @@ def test_live_agent_status_and_voice_are_ledger_grounded(tmp_path, monkeypatch):
         store = client.app.state.work
         job = store.submit("owner_1", "Produce a well-structured report.",
                            ["md"], "live_agent_status_001", [])
-        headers = {"Authorization": "Bearer " + issue_token("owner_1", SIGNING)}
+        headers = {"x-rizzler-key":KEY,"x-session-id":"owner_1"}
         queued = client.get(f"/api/work/jobs/{job['id']}/agents", headers=headers).json()
         assert all(s["target_seconds"] > 0 for s in queued["agents"])
         assert all(s["elapsed_seconds"] is None for s in queued["agents"])
@@ -336,5 +336,5 @@ def test_live_agent_status_and_voice_are_ledger_grounded(tmp_path, monkeypatch):
         assert "orchestrator" in spoken.json()["text"]
         assert "completed" not in spoken.json()["status"]
         assert client.get(f"/api/work/jobs/{job['id']}/agents",
-                          headers={"Authorization": "Bearer " + issue_token("owner_2", SIGNING)}
+                          headers={"x-rizzler-key":KEY,"x-session-id":"owner_2"}
                           ).status_code == 404
