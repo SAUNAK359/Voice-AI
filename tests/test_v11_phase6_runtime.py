@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import json
 import os
 from pathlib import Path
 import threading
@@ -140,10 +139,7 @@ class Phase6RuntimeTests(unittest.TestCase):
         from rizzler.task_planning import propose_scope
         from rizzler.voice_tools import grounded_search
         from rizzler.production_guard import budget_from_environment
-        try:
-            from google import genai
-        except ImportError:
-            self.skipTest("Google model stubs require work extras")
+        from google import genai
         class Models:
             def __init__(self):
                 self.calls=0
