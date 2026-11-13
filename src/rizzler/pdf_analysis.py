@@ -79,6 +79,7 @@ class PDFResearch:
     def request_resume(self,owner,uid):
         """Persist research resumption even if all background slots are busy."""
         with self.store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._read(db,owner,uid)
             if row["status"] not in ("queued","paused"):
                 raise DocumentConflict("PDF research cannot be resumed")
