@@ -261,7 +261,7 @@ async function refreshPDFDocs(){
    choose.disabled=doc.status!=='complete';
    choose.onclick=()=>{s.pdfSelected=doc.id;renderVisuals();refreshPDFDocs();};
    line.append(choose);
-   if(doc.status==='paused'){
+   if(doc.status==='paused'||doc.status==='validation_failed'){
     const resume=document.createElement('button');resume.type='button';
     resume.textContent='Resume indexing';
     resume.onclick=async()=>{
@@ -286,7 +286,7 @@ async function refreshPDFDocs(){
    line.append(remove);panel.append(line);
   }
   clearTimeout(s.pdfPoll);
-  if(s.pdfDocs.some(x=>x.status==='queued'||x.status==='running')&&s.session)
+  if(s.pdfDocs.some(x=>['queued','running','validating'].includes(x.status))&&s.session)
    s.pdfPoll=setTimeout(refreshPDFDocs,4000);
  }catch(err){$('visual-status').textContent=err.message}
 }
