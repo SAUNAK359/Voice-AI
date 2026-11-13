@@ -210,12 +210,20 @@ class PDFStore:
 
     @contextmanager
     def materialize(self,owner,uid):
-        """Disk streaming, never loads the whole unbounded PDF into RAM."""
+        """Reconstruct into an unlinked temporary file, not process RAM.
+
+        On Linux the /proc/self/fd alias lets MuPDF and ClamAV open the
+        anonymous file without a persistent plaintext pathname. Other
+        platforms use delete-on-close named temporary storage; deployments
+        there must use an encrypted scratch filesystem.
+        """
         with self.db() as db:row=self._get(db,owner,uid)
-        with tempfile.TemporaryDirectory(prefix="rizzler-pdf-",dir=str(self.root)) as temp:
-            path=Path(temp)/"source.pdf"
+        linux=os.name=="posix" and Path("/proc/self/fd").is_dir()
+        temp=tempfile.TemporaryFile(dir=str(self.root)) if linux else (
+            tempfile.NamedTemporaryFile(dir=str(self.root),suffix=".pdf"))
+        with temp as output:
             total=0
-            with path.open("wb") as output, self.db() as db:
+            with self.db() as db:
                 chunks=db.execute("SELECT * FROM chunks WHERE doc=? ORDER BY seq",(uid,))
                 for expect,item in enumerate(chunks):
                     if item["seq"]!=expect:raise ValueError("Upload sequence gap")
@@ -226,11 +234,10 @@ class PDFStore:
                     total+=len(plain)
             if total!=row["received"] or not total:
                 raise ValueError("PDF upload incomplete")
-            os.chmod(path,0o600)
-            try:
-                yield path
-            finally:
-                path.unlink(missing_ok=True)
+            output.flush()
+            output.seek(0)
+            name=Path("/proc/self/fd")/str(output.fileno()) if linux else Path(output.name)
+            yield name
 
     def finalize(self,owner,uid):
         import fitz
@@ -244,7 +251,7 @@ class PDFStore:
             if self.scanner_file is not None:
                 self.scanner_file(path)
             try:
-                with fitz.open(path) as doc:
+                with fitz.open(path,filetype="pdf") as doc:
                     if doc.needs_pass or doc.page_count<1:
                         raise ValueError("Encrypted or empty PDF")
                     if getattr(doc,"get_javascript",lambda:[])():
@@ -467,7 +474,7 @@ class PDFIngestor:
             pulse=asyncio.create_task(heartbeat(),name="pdf-lease-heartbeat")
             try:
                 with self.store.materialize(owner,uid) as source:
-                    with fitz.open(source) as document:
+                    with fitz.open(source,filetype="pdf") as document:
                         for index in range(document.page_count):
                             page=document[index]
                             boxes=list(rectangles(page.rect))
