@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- memoryEnabled:false,workEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -201,7 +201,7 @@ async function openMic(){
    navigator.mediaDevices.addEventListener('devicechange',s.deviceListener);
  }
 }
-async function disconnect(){s.visualIDs=[];renderVisuals();s.session=false;s.recording=false;clearTimeout(s.reconnectTimer);s.reconnecting=false;
+async function disconnect(){clearTimeout(s.pdfPoll);s.pdfSelected=null;s.pdfDocs=[];s.visualIDs=[];renderVisuals();s.session=false;s.recording=false;clearTimeout(s.reconnectTimer);s.reconnecting=false;
  stopAudio();s.ledger.cancel(s.fence.generation);s.request?.abort();s.ws?.close();s.media?.getTracks().forEach(t=>t.stop());
  if(s.deviceListener){navigator.mediaDevices?.removeEventListener?.('devicechange',s.deviceListener);s.deviceListener=null;}
  await s.ctx?.close();s.ctx=null;s.mode='offline';$('connection').textContent='Disconnected';status('offline','Session ended');
@@ -218,7 +218,7 @@ async function connectSession(){
    s.session=true;$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
    for(const id of ['mute','send','reset'])$(id).disabled=false;
    status('listening','Ready. Speak naturally.');noteLatency();
-   refreshToolCatalog();if(s.workEnabled)refreshWork();
+   refreshToolCatalog();if(s.workEnabled)refreshWork();if(s.visualEnabled)refreshPDFDocs();
    if(s.mode==='http')scheduleReconnect();
  }catch(err){$('error').textContent=err.message;status('error',err.message);
    s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
@@ -241,9 +241,124 @@ function renderVisuals(){
   container.append(button);
  }
 }
+
+async function refreshPDFDocs(){
+ if(!s.session||!s.visualEnabled)return;
+ try{
+  const r=await fetch('/api/pdf/documents',{headers:headers()});
+  if(!r.ok)throw Error('PDF status unavailable ('+r.status+')');
+  s.pdfDocs=(await r.json()).documents;
+  const panel=$('pdf-documents');panel.replaceChildren();
+  for(const doc of s.pdfDocs){
+   const line=document.createElement('div');line.className='pdf-document';
+   const label=document.createElement('span');
+   label.textContent=doc.name+' — '+doc.status+
+       (doc.pages===null?' · '+doc.uploaded_chunks+' uploaded chunks':
+        ' · '+doc.processed_pages+'/'+doc.pages+' pages indexed');
+   line.append(label);
+   const choose=document.createElement('button');
+   choose.type='button';choose.textContent=s.pdfSelected===doc.id?'Selected':'Use document';
+   choose.disabled=doc.status!=='complete';
+   choose.onclick=()=>{s.pdfSelected=doc.id;renderVisuals();refreshPDFDocs();};
+   line.append(choose);
+   if(doc.status==='paused'){
+    const resume=document.createElement('button');resume.type='button';
+    resume.textContent='Resume indexing';
+    resume.onclick=async()=>{
+     const r=await fetch('/api/pdf/documents/'+encodeURIComponent(doc.id)+'/resume',
+      {method:'POST',headers:headers()});
+     $('visual-status').textContent=r.ok?'Resuming from saved page checkpoints.':'Cannot resume ('+r.status+')';
+     await refreshPDFDocs();
+    };line.append(resume);
+   }
+   if(doc.error){
+    const err=document.createElement('small');err.textContent=' · '+doc.error;line.append(err);
+   }
+   const remove=document.createElement('button');remove.type='button';remove.textContent='Delete';
+   remove.disabled=doc.status==='running';
+   remove.onclick=async()=>{
+    const r=await fetch('/api/pdf/documents/'+encodeURIComponent(doc.id),
+      {method:'DELETE',headers:headers()});
+    if(!r.ok){$('visual-status').textContent='PDF cannot be deleted ('+r.status+')';return}
+    if(s.pdfSelected===doc.id)s.pdfSelected=null;
+    await refreshPDFDocs();
+   };
+   line.append(remove);panel.append(line);
+  }
+  clearTimeout(s.pdfPoll);
+  if(s.pdfDocs.some(x=>x.status==='queued'||x.status==='running')&&s.session)
+   s.pdfPoll=setTimeout(refreshPDFDocs,4000);
+ }catch(err){$('visual-status').textContent=err.message}
+}
+async function uploadPDF(file){
+ if(!s.visualEnabled||!s.session)throw Error('Connect the private session first');
+ if(!file||!file.name.toLowerCase().endsWith('.pdf'))throw Error('Only PDF documents supported');
+ $('visual-status').textContent='Preparing resumable full PDF upload…';
+ const create=await fetch('/api/pdf/documents',{method:'POST',
+   headers:{...headers(),'content-type':'application/json'},
+   body:JSON.stringify({name:file.name})});
+ if(!create.ok)throw Error('Cannot initialize PDF upload ('+create.status+')');
+ const doc=await create.json(),size=1024*1024;
+ const total=Math.ceil(file.size/size);
+ for(let i=doc.uploaded_chunks;i<total;i++){
+  const part=await file.slice(i*size,Math.min(file.size,(i+1)*size)).arrayBuffer();
+  const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',part)))
+      .map(x=>x.toString(16).padStart(2,'0')).join('');
+  let success=false;
+  for(let attempt=0;attempt<3;attempt++){
+   const response=await fetch('/api/pdf/documents/'+encodeURIComponent(doc.id)+
+    '/chunks/'+i,{method:'PUT',
+      headers:{...headers(),'x-chunk-sha256':digest},
+      body:part});
+   if(response.ok){success=true;break}
+   if(response.status>=400&&response.status<500&&response.status!==429)
+     throw Error('PDF chunk rejected ('+response.status+')');
+   await new Promise(resolve=>setTimeout(resolve,(attempt+1)*1000));
+  }
+  if(!success)throw Error('PDF upload paused. Reattach the source to resume later.');
+  $('visual-status').textContent='Uploaded '+(i+1)+'/'+total+
+      ' encrypted chunks; every page will be indexed.';
+ }
+ const finish=await fetch('/api/pdf/documents/'+encodeURIComponent(doc.id)+'/complete',
+   {method:'POST',headers:headers()});
+ if(!finish.ok)throw Error('PDF validation failed ('+finish.status+')');
+ $('visual-status').textContent='PDF accepted. Every page is now queued for text and visual indexing.';
+ await refreshPDFDocs();
+}
+async function askCompletePDF(question,seq){
+ const doc=s.pdfDocs.find(x=>x.id===s.pdfSelected);
+ if(!doc||doc.status!=='complete')
+   throw Error('Select a fully indexed PDF. Processing is not yet complete.');
+ const create=await fetch('/api/pdf/documents/'+encodeURIComponent(doc.id)+'/research',
+  {method:'POST',headers:{...headers(),'content-type':'application/json'},
+   body:JSON.stringify({question,mode:'full'})});
+ if(!create.ok)throw Error('Full-document research was not accepted ('+create.status+')');
+ const job=await create.json();
+ $('visual-status').textContent='Full-document analysis started; every page is included.';
+ while(s.session){
+  await new Promise(resolve=>setTimeout(resolve,3500));
+  const r=await fetch('/api/pdf/research/'+encodeURIComponent(job.id),{headers:headers()});
+  if(!r.ok)throw Error('PDF analysis status unavailable ('+r.status+')');
+  const result=await r.json();
+  $('visual-status').textContent='Full PDF: '+result.covered_pages+'/'+result.total_pages+
+       ' pages covered; '+result.completed_units+' analysis steps; '+result.status;
+  if(result.status==='complete'){
+   message('assistant',result.answer,seq,true);
+   $('visual-status').textContent='Entire PDF analyzed, with page-based evidence. Review citations and model accuracy.';
+   return;
+  }
+  if(result.status==='paused'){
+   $('visual-status').textContent='PDF analysis paused: '+(result.error||'provider unavailable')+
+     '. Resume using the analysis ID '+job.id;
+   return;
+  }
+ }
+}
+
 async function uploadVisual(file){
  if(!s.visualEnabled||!s.session)throw Error('Connect your private session first');
- if(!file||file.size>8000000||file.size<32)throw Error('Visual file must be 32 bytes to 8 MB');
+ if(file?.name?.toLowerCase().endsWith('.pdf'))return uploadPDF(file);
+ if(!file||file.size>8000000||file.size<32)throw Error('Image file must be 32 bytes to 8 MB');
  const response=await fetch('/api/visual/attachments',{
   method:'POST',headers:{...headers(),'x-file-name':file.name,
     'content-type':'application/octet-stream'},body:file});
@@ -291,7 +406,7 @@ $('visual-clear').addEventListener('click',async()=>{
 $('visual-form').addEventListener('submit',async e=>{
  e.preventDefault();
  if(!s.session){$('visual-status').textContent='Connect first.';return}
- if(!s.visualIDs.length){$('visual-status').textContent='Attach an image or PDF first.';return}
+ if(!s.visualIDs.length&&!s.pdfSelected){$('visual-status').textContent='Attach an image or select an indexed PDF first.';return}
  if(s.recording||s.request||s.playing.size){$('visual-status').textContent='Finish the active voice turn first.';return}
  const question=$('visual-question').value.trim();
  if(!question)return;
@@ -300,6 +415,10 @@ $('visual-form').addEventListener('submit',async e=>{
  $('visual-status').textContent='Analyzing shared visual evidence…';
  message('user',question,seq,true);
  try{
+  if(s.pdfSelected){
+   if(s.visualIDs.length)throw Error('Analyze selected PDF and images separately to preserve evidence.');
+   await askCompletePDF(question,seq);return;
+  }
   const response=await fetch('/api/visual/ask',{method:'POST',headers:{
    ...headers(),'content-type':'application/json'},body:JSON.stringify({
     question,attachment_ids:ids})});
