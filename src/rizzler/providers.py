@@ -12,6 +12,7 @@ import threading
 from typing import AsyncIterator
 from .config import Settings
 from .reasoning import route
+from .production_guard import BudgetExceeded
 from .governance import QuotaGate, ModelCircuits, RequestTelemetry, classify_error, QuotaExceeded
 
 
@@ -160,6 +161,8 @@ class GeminiLLM:
                         await self.gate.reserve(estimate, self.settings.gemini_quota_wait_seconds)
                         attempt += 1
                         saw_text = False
+                        from .production_guard import reserve_provider_call
+                        reserve_provider_call('voice')
                         async for chunk in self._chunks(model, contents, plan):
                             metadata = getattr(chunk, 'usage_metadata', None)
                             if metadata is not None:
@@ -187,6 +190,9 @@ class GeminiLLM:
                         return
                     except QuotaExceeded:
                         last_error = 'local_quota'
+                        break
+                    except BudgetExceeded:
+                        last_error = 'daily_budget'
                         break
                     except asyncio.CancelledError:
                         raise

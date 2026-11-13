@@ -76,6 +76,18 @@ class PDFResearch:
     def status(self,owner,uid):
         with self.store.db() as db:return self._public(self._read(db,owner,uid))
 
+    def request_resume(self,owner,uid):
+        """Persist research resumption even if all background slots are busy."""
+        with self.store.db() as db:
+            row=self._read(db,owner,uid)
+            if row["status"] not in ("queued","paused"):
+                raise DocumentConflict("PDF research cannot be resumed")
+            if row["status"]=="paused":
+                db.execute("""UPDATE pdf_answers SET status='queued',
+                    lease=NULL,lease_until=0,error=NULL,updated=? WHERE id=?""",
+                    (time.time(),uid))
+            return self._public(self._read(db,owner,uid))
+
     def recoverable(self):
         with self.store.db() as db:
             return [(r["owner"],r["id"]) for r in db.execute(
@@ -156,6 +168,9 @@ class PDFResearch:
                     raise ValueError("Empty PDF research response")
                 return output
             except (Exception,asyncio.TimeoutError) as exc:
+                from .production_guard import BudgetExceeded
+                if isinstance(exc,BudgetExceeded):
+                    raise RuntimeError('AI reservation budget reached; resume after reset') from None
                 last=exc
                 if attempt==4:
                     raise RuntimeError("PDF research provider unavailable; resume later") from None

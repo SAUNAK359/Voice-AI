@@ -39,6 +39,8 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=1
               json.dumps(data_summary or {}, ensure_ascii=False)[:9000])
     try:
         async with asyncio.timeout(min(90, cfg.request_timeout)):
+            from .production_guard import reserve_provider_call
+            reserve_provider_call('work')
             response=await client.aio.models.generate_content(
                 model=cfg.gemini_model, contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.25,
@@ -76,6 +78,8 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
 
     async def investigate(label, instruction):
         async with asyncio.timeout(min(60,cfg.request_timeout)):
+            from .production_guard import reserve_provider_call
+            reserve_provider_call('research')
             response=await client.aio.models.generate_content(
                 model=cfg.gemini_model,
                 contents=instruction+objective[:5000]+
@@ -172,6 +176,8 @@ def main():
     p.add_argument("--once",action="store_true")
     args=p.parse_args()
     if not args.root: p.error("Set --root on a persistent disk")
+    from .production_guard import budget_from_environment
+    budget_from_environment()
     from .work_objects import from_environment
     objects = from_environment()
     if os.environ.get("RIZZLER_DATABASE_URL"):

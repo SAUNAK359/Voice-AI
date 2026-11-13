@@ -480,6 +480,18 @@ class PDFStore:
                 "visual":[self._open(owner,uid,f"tile:{index}:{t['tile']}",
                           t["notes"]).decode() for t in tiles]}
 
+    def request_resume(self,owner,uid):
+        """Persist resume before admission; watchdog later sees queued work."""
+        with self.db() as db:
+            row=self._get(db,owner,uid)
+            if row["status"] not in ("queued","paused"):
+                raise DocumentConflict("PDF cannot be queued for resumption")
+            if row["status"]=="paused":
+                db.execute("""UPDATE docs SET status='queued',lease=NULL,
+                    lease_until=0,error=NULL,updated=? WHERE id=?""",
+                    (time.time(),uid))
+            return self._public(self._get(db,owner,uid))
+
     def recoverable(self):
         now=time.time()
         with self.db() as db:
@@ -582,7 +594,10 @@ class PDFIngestor:
                                         if not isinstance(note,str) or not note.strip():
                                             raise ValueError("Empty visual observation")
                                         break
-                                    except (Exception,asyncio.TimeoutError):
+                                    except (Exception,asyncio.TimeoutError) as exc:
+                                        from .production_guard import BudgetExceeded
+                                        if isinstance(exc,BudgetExceeded):
+                                            raise RuntimeError('AI reservation budget reached; resume after reset') from None
                                         if attempt==4:raise RuntimeError(
                                             "Vision provider retries exhausted; resumable") from None
                                         await asyncio.sleep(min(2**attempt,20))

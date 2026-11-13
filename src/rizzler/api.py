@@ -37,6 +37,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
     sessions = Sessions()
     operations = Operations()
+    from .production_guard import budget_from_environment
+    # Reject incomplete daily budget configuration on startup, not midway through a paid job.
+    budget_from_environment()
     ops_token = environ.get("RIZZLER_OPERATIONS_TOKEN", "")
     if production and (len(ops_token) < 32 or ops_token == environ.get("RIZZLER_SESSION_SIGNING_KEY", "")):
         raise ValueError("Production requires an independent operations secret")
@@ -127,6 +130,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     pdf_store = pdf_ingestor = pdf_research = None
     pdf_tasks: set[asyncio.Task] = set()
     pdf_active: set[tuple[str,str]] = set()
+    max_pdf_tasks=int(environ.get("RIZZLER_PDF_MAX_ACTIVE","2"))
+    if not 1 <= max_pdf_tasks <= 8:
+        raise ValueError("RIZZLER_PDF_MAX_ACTIVE must be 1..8")
     if visual is not None:
         from .pdf_documents import PDFStore, PDFIngestor
         from .pdf_analysis import PDFResearch
@@ -142,7 +148,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         pdf_research=PDFResearch(pdf_store,visual.provider)
 
     def schedule_pdf(coro,key):
-        if key in pdf_active:
+        if key in pdf_active or len(pdf_active)>=max_pdf_tasks:
+            # Leave the durable queued/expired task to the recovery watchdog;
+            # do not allocate an unbounded in-memory waiting coroutine.
             coro.close()
             return None
         pdf_active.add(key)
@@ -301,7 +309,14 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         expected = "Bearer " + ops_token
         if not ops_token or not secrets.compare_digest(presented, expected):
             raise HTTPException(status_code=401, detail="Unauthorized") from None
-        return operations.snapshot()
+        data=operations.snapshot()
+        data["pdf_scheduler"]={"active":len(pdf_active),"limit":max_pdf_tasks,
+                              "scope":"process-local; persistent leases enforce cross-process exclusion"}
+        from .production_guard import budget_from_environment
+        ledger=budget_from_environment()
+        data["ai_admission"]=ledger.snapshot() if ledger else {
+            "enabled":False,"warning":"No daily AI spending reservation configured; Google billing applies"}
+        return data
 
     @app.get('/ready')
     def ready():
@@ -650,6 +665,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 status=await asyncio.to_thread(pdf_store.request_finalize,owner,uid)
                 schedule_pdf(validate_then_index(owner,uid),('validate',uid))
             elif status["status"] in ("paused","queued"):
+                status=await asyncio.to_thread(pdf_store.request_resume,owner,uid)
                 schedule_pdf(pdf_ingestor.run(owner,uid),('ingest',uid))
             else:
                 raise DocumentConflict("PDF not ready for resumption")
@@ -706,6 +722,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             status=await asyncio.to_thread(pdf_research.status,owner,run_id)
             if status["status"] not in ("paused","queued"):
                 raise DocumentConflict("Analysis cannot be resumed")
+            status=await asyncio.to_thread(pdf_research.request_resume,owner,run_id)
             schedule_pdf(pdf_research.run(owner,run_id),('research',run_id))
             return {"accepted":True,"research":status}
         except DocumentNotFound:

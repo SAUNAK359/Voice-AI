@@ -81,6 +81,8 @@ class GeminiVision:
             inputs.extend(types.Part.from_bytes(data=part,mime_type="image/jpeg")
                           for part in images)
             async with asyncio.timeout(min(35.0, self.settings.request_timeout)):
+                from .production_guard import reserve_provider_call
+                reserve_provider_call('vision')
                 response = await client.aio.models.generate_content(
                     model=self.settings.gemini_model, contents=inputs,
                     config=types.GenerateContentConfig(
