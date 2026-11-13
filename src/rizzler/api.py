@@ -619,6 +619,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     @app.get('/api/pdf/research/{run_id}')
     async def pdf_research_status(request: Request,run_id: str):
+        from .pdf_documents import DocumentNotFound
         owner=auth(request,True)
         if pdf_research is None:
             raise HTTPException(status_code=409,detail="Full PDF research disabled")
