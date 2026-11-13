@@ -101,6 +101,8 @@ class BackupHardeningTests(unittest.TestCase):
                 backup(root, Path(temp) / "snapshot.tar.gz")
 
 
+@unittest.skipUnless(importlib.util.find_spec("cryptography") is not None,
+                     "Encrypted PDF lease tests require the app/test extras")
 class PDFLeaseHardeningTests(unittest.TestCase):
     def test_same_chunk_concurrent_retries_are_idempotent(self):
         with tempfile.TemporaryDirectory() as temp:
