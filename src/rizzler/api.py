@@ -37,6 +37,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
     sessions = Sessions()
     operations = Operations()
+    from .production_guard import budget_from_environment
+    # Reject incomplete daily budget configuration on startup, not midway through a paid job.
+    budget_from_environment()
     ops_token = environ.get("RIZZLER_OPERATIONS_TOKEN", "")
     if production and (len(ops_token) < 32 or ops_token == environ.get("RIZZLER_SESSION_SIGNING_KEY", "")):
         raise ValueError("Production requires an independent operations secret")
