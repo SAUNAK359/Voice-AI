@@ -6,16 +6,16 @@ code presence or proposed architecture does not establish production fitness.
 
 | Feature | Code state | Qualification state |
 | --- | --- | --- |
-| Model-selected tool planning | V12 AgentRuntime | Offline mocked tests; real Gemini pending |
+| Model-selected tool planning | V12 AgentRuntime and WorkDynamic graph planner | Offline mocked tests; real Gemini pending |
 | Multi-step tools and concurrent reads | Bounded controller | Offline mocked tests; live latency pending |
-| Voice / chat shared Work owner | API + VoiceEngine | Offline TestClient; live OIDC pending |
-| Work acceptance and persistent worker | V11 WorkStore reused | Existing V11 tests; restart soak pending |
+| Voice / chat shared Work owner | Unified authenticated session across Work and Voice; removed Work bearer path | Offline TestClient; live OIDC pending |
+| Work acceptance and persistent worker | V12 model-generated, persisted DAG with V11 fenced store | Offline tests; live planning and restart soak pending |
 | Cancel / revise / retry | Durable approval, immutable lineage | Offline tests; live UI/microphone pending |
 | Work plans, status, events, artifacts | Existing private APIs + agent adapters | Owner isolation tested; live sync pending |
 | Text and microphone access | Main app with text-only option | JS syntax tests; real device pending |
 | Work deliverable quality | V11 strict structural/render QA | Objective-quality and market-data truth gaps |
 | Real external source verification | Provider-grounded metadata | Independent source/claim audit pending |
-| Long-running dynamic DAG | V11 fixed specialist graph | NOT IMPLEMENTED |
+| Long-running dynamic DAG | Model-authored bounded graph, dependency-based scheduler | Offline fixture tests; real Gemini and crash-recovery qualification pending |
 | Arbitrary MCP and browser actions | Explicitly untrusted/unavailable | NOT IMPLEMENTED |
 | Persistent cognitive execution state | Durable Work jobs only | Full agent-turn checkpointing NOT IMPLEMENTED |
 | Self-improving procedural memory | Existing opt-in memory, no autonomous writes | NOT IMPLEMENTED |
