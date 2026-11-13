@@ -433,6 +433,12 @@ class PDFStore:
             row=self._get(db,owner,uid)
             if row["lease_until"]>time.time():
                 raise DocumentConflict("PDF processing active")
+            exists=db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pdf_answers'").fetchone()
+            if exists:
+                runs=[item[0] for item in db.execute("SELECT id FROM pdf_answers WHERE doc=?",(uid,))]
+                for run in runs:
+                    db.execute("DELETE FROM pdf_answer_parts WHERE run=?",(run,))
+                db.execute("DELETE FROM pdf_answers WHERE doc=?",(uid,))
             for table in ("terms","tiles","pages","chunks"):
                 db.execute(f"DELETE FROM {table} WHERE doc=?",(uid,))
             db.execute("DELETE FROM docs WHERE id=? AND owner=?",(uid,owner))
