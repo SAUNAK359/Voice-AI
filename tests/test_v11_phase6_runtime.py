@@ -133,6 +133,56 @@ class Phase6RuntimeTests(unittest.TestCase):
             self.assertEqual(record["status"],"queued")
             self.assertIn((owner,run),research.recoverable())
 
+    def test_planning_correction_and_live_search_obey_shared_budget(self):
+        import asyncio
+        from types import SimpleNamespace
+        from rizzler.config import Settings
+        from rizzler.task_planning import propose_scope
+        from rizzler.voice_tools import grounded_search
+        from rizzler.production_guard import budget_from_environment
+        try:
+            from google import genai
+        except ImportError:
+            self.skipTest("Google model stubs require work extras")
+        class Models:
+            def __init__(self):
+                self.calls=0
+            async def generate_content(self,**kwargs):
+                self.calls+=1
+                return SimpleNamespace(text='{"research":true,"analysis":false}')
+        class AIO:
+            def __init__(self,models):self.models=models
+            async def aclose(self):pass
+        with __import__("tempfile").TemporaryDirectory() as tmp:
+            env={
+                "RIZZLER_AI_DAILY_BUDGET_USD":"0.10",
+                "RIZZLER_AI_RESERVATION_PER_CALL_USD":"0.10",
+                "RIZZLER_AI_BUDGET_ROOT":tmp,
+            }
+            with patch.dict(os.environ,env,clear=True):
+                budget_from_environment.cache_clear()
+                models=Models()
+                client=SimpleNamespace(aio=AIO(models))
+                cfg=Settings(access_key="private-phase6-budget-client-access-key",
+                             gemini_api_key="mock-key")
+                good=asyncio.run(propose_scope(
+                    "Research up-to-date sources for a report",
+                    ["pdf","md"],[],cfg,client=client))
+                self.assertEqual(good["source"],"model_validated")
+                self.assertEqual(models.calls,1)
+                denied=asyncio.run(propose_scope(
+                    "Research up-to-date sources for a report",
+                    ["pdf","md"],[],cfg,client=client))
+                self.assertEqual(denied["source"],"deterministic_fallback")
+                self.assertEqual(models.calls,1)
+                with patch.object(genai,"Client",return_value=client):
+                    search=asyncio.run(grounded_search("Search web for current news",cfg))
+                self.assertFalse(search["verified"])
+                self.assertEqual(models.calls,1)
+                self.assertEqual(
+                    sum(budget_from_environment().snapshot()["requests"].values()),1)
+                budget_from_environment.cache_clear()
+
     def test_invalid_pdf_parallel_limit_is_rejected_on_startup(self):
         from rizzler.api import create_app
         from rizzler.config import Settings
