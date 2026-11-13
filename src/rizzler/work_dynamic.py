@@ -77,7 +77,7 @@ def validate(graph: dict, payload: dict) -> dict:
     for name in PRODUCERS.keys() & by_name.keys():
         if not (CONTENT | EVIDENCE).intersection(by_name[name]):
             raise ValueError("Renderer has no evidence or content predecessor")
-        required = (CONTENT | EVIDENCE).intersection(by_name.keys())
+        required = set((CONTENT | EVIDENCE).intersection(by_name.keys()))
         if "orchestrator" in required:
             required -= {"research","sql_analytics"}
             required.add("orchestrator")
