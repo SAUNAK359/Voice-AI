@@ -192,6 +192,7 @@ class PDFStore:
                 not isinstance(digest,str) or digest!=_digest(data)):
             raise ValueError("Invalid PDF chunk or SHA-256")
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"]!="uploading":
                 raise DocumentConflict("PDF upload already finalized")
@@ -249,6 +250,7 @@ class PDFStore:
 
     def request_finalize(self,owner,uid):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"] in ("uploading","validation_failed"):
                 if not row["chunks"]:
@@ -271,6 +273,7 @@ class PDFStore:
     def begin_validation(self,owner,uid):
         token=secrets.token_hex(20)
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"]=="uploading":
                 if not row["chunks"]:raise ValueError("PDF upload incomplete")
@@ -290,6 +293,7 @@ class PDFStore:
 
     def touch_validation(self,owner,uid,token):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"]!="validating" or row["lease"]!=token:
                 raise DocumentConflict("PDF validation lease lost")
@@ -342,6 +346,7 @@ class PDFStore:
     def claim(self,owner,uid):
         token=secrets.token_hex(20)
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"]=="complete":return None
             if row["status"] not in ("queued","paused","running"):
@@ -355,6 +360,7 @@ class PDFStore:
 
     def touch(self,owner,uid,token):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["lease"]!=token or row["status"]!="running":
                 raise DocumentConflict("PDF worker lease lost")
@@ -365,6 +371,7 @@ class PDFStore:
         if not isinstance(text,str) or type(tiles) is not int or tiles<1:
             raise ValueError("Invalid PDF page record")
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["lease"]!=token:raise DocumentConflict("PDF worker lease lost")
             previous=db.execute("SELECT * FROM pages WHERE doc=? AND page=?",
@@ -391,6 +398,7 @@ class PDFStore:
         if not isinstance(note,str) or not note.strip():
             raise ValueError("Empty visual observation")
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["lease"]!=token:raise DocumentConflict("PDF worker lease lost")
             db.execute("INSERT OR IGNORE INTO tiles VALUES(?,?,?,?)",
@@ -399,6 +407,7 @@ class PDFStore:
 
     def complete_page(self,owner,uid,token,index):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["lease"]!=token:raise DocumentConflict("PDF worker lease lost")
             page=db.execute("SELECT * FROM pages WHERE doc=? AND page=?",
@@ -416,6 +425,7 @@ class PDFStore:
 
     def finish(self,owner,uid,token):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["lease"]!=token:raise DocumentConflict("PDF worker lease lost")
             done=db.execute("SELECT count(*) FROM pages WHERE doc=? AND state='complete'",
@@ -428,6 +438,7 @@ class PDFStore:
 
     def pause(self,owner,uid,token,reason):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["lease"]==token:
                 db.execute("""UPDATE docs SET status='paused',lease=NULL,
@@ -483,6 +494,7 @@ class PDFStore:
     def request_resume(self,owner,uid):
         """Persist resume before admission; watchdog later sees queued work."""
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["status"] not in ("queued","paused"):
                 raise DocumentConflict("PDF cannot be queued for resumption")
@@ -519,6 +531,7 @@ class PDFStore:
 
     def delete(self,owner,uid):
         with self.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._get(db,owner,uid)
             if row["lease_until"]>time.time():
                 raise DocumentConflict("PDF processing active")

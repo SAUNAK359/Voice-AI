@@ -56,14 +56,21 @@ def _collect(root: Path):
             continue
         if candidate.is_symlink():
             raise ValueError("Backup source symlink is forbidden")
+        if not candidate.is_file() and not candidate.is_dir():
+            raise ValueError("Nonregular backup root entry")
         items = [candidate] if candidate.is_file() else candidate.rglob("*")
         for path in items:
             if path.is_symlink():
                 raise ValueError("Backup source symlink is forbidden")
-            if not path.is_file():
+            mode=path.lstat().st_mode
+            if stat.S_ISDIR(mode):
                 continue
-            if not stat.S_ISREG(path.stat(follow_symlinks=False).st_mode):
+            if not stat.S_ISREG(mode):
                 raise ValueError("Nonregular backup member")
+            # All SQLite WAL contents were checkpointed. Never archive
+            # transient WAL/SHM sidecars as independent private-state files.
+            if path.name.endswith((".sqlite3-wal", ".sqlite3-shm")):
+                continue
             relative = path.relative_to(root).as_posix()
             _validate_member_path(relative)
             results.append((relative, path))
@@ -74,14 +81,20 @@ def _collect(root: Path):
 
 def backup(root: Path, destination: Path):
     root, destination = Path(root).resolve(), Path(destination).resolve()
-    if not root.is_dir() or destination.is_relative_to(root):
-        raise ValueError("Backup destination must be outside existing work root")
-    # Exclusive offline backup: no API/worker may write while the snapshot runs.
-    for db_name in ("jobs.sqlite3", "identity.sqlite3", "ai_reservations.sqlite3"):
-        db_file = root / db_name
-        if db_file.is_file():
-            with sqlite3.connect(db_file, timeout=15) as con:
-                con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    if not root.is_dir() or destination.is_relative_to(root) or destination.exists():
+        raise ValueError("Backup requires an absent destination outside the work root")
+    # Offline requirement is non-negotiable: every nested SQLite database
+    # (including visual, memory, PDF and work) must checkpoint WAL before a
+    # file-level archive. This is not a replacement for stopping all writers.
+    for db_file in sorted(root.rglob("*.sqlite3")):
+        if db_file.is_symlink() or not db_file.is_file():
+            raise ValueError("Unsafe SQLite database file")
+        with sqlite3.connect(db_file.as_uri() + "?mode=rw", uri=True, timeout=15) as con:
+            response=con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if response and response[0]:
+                raise RuntimeError("SQLite WAL checkpoint incomplete")
+            if con.execute("PRAGMA quick_check(1)").fetchone()[0] != "ok":
+                raise RuntimeError("SQLite integrity validation failed")
     entries = _collect(root)
     if not entries:
         raise ValueError("Nothing to back up")
@@ -114,10 +127,39 @@ def backup(root: Path, destination: Path):
             meta = tarfile.TarInfo("MANIFEST.json")
             meta.size, meta.mode, meta.mtime = len(data), 0o600, 0
             archive.addfile(meta, io.BytesIO(data))
-        os.replace(temporary, destination)
+        # Publishing via a hard link refuses replacement of a prior backup.
+        # tempfile is on the destination filesystem, so this is atomic.
+        os.link(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)
     return manifest
+
+
+def _publish_directory_noreplace(source: Path, destination: Path):
+    """Atomic no-overwrite commit; fail closed if platform lacks the primitive."""
+    if os.name == "nt":
+        # Windows rename fails if the destination already exists.
+        os.rename(source, destination)
+        return
+    import ctypes
+    import errno
+    import sys
+    if sys.platform != "linux":
+        raise RuntimeError("Atomic no-replace directory restore requires Linux or Windows")
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    if renameat2 is None:
+        raise RuntimeError("Atomic no-overwrite directory rename unavailable")
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p,
+                          ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(-100, os.fsencode(source), -100,
+                       os.fsencode(destination), 1)  # RENAME_NOREPLACE
+    if result:
+        error = ctypes.get_errno()
+        if error in (errno.EEXIST, errno.ENOTEMPTY):
+            raise ValueError("Restore destination appeared during validation")
+        raise OSError(error, os.strerror(error))
 
 
 def restore(source: Path, destination: Path):
@@ -187,7 +229,7 @@ def restore(source: Path, destination: Path):
                 raise ValueError("Undeclared backup member")
         if destination.exists():
             raise ValueError("Restore destination appeared during validation")
-        staged.rename(destination)
+        _publish_directory_noreplace(staged, destination)
     return manifest
 
 

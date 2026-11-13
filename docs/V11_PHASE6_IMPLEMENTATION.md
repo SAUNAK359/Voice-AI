@@ -87,3 +87,46 @@ production/staging environment with load generators, fault injection, cloud
 billing controls, and measured deployment recovery. Do NOT label Phase 6
 production-qualified until those gates pass. The PR's scope is verifiable
 single-host operational hardening, not a complete security certification.
+
+## Phase 6 follow-up: backup, lease and readiness hardening
+
+The following changes extend the original implementation (PR #25).
+No PDF page count or total file byte limit is imposed.
+
+### Offline backup and restore
+- Checkpoint all nested SQLite databases before archive creation, including
+  PDF metadata, visual media and encrypted private memory databases.
+  Corrupt databases or incomplete checkpoints abort the archive.
+- Exclude checkpointed SQLite WAL/SHM sidecars and reject nonregular
+  filesystem objects, including named pipes. All backed-up content is
+  streamed with SHA-256 evidence and no unconditional archive overwrite.
+- Restore publishes a verified staged directory only through an atomic
+  no-overwrite rename (Linux renameat2 with RENAME_NOREPLACE or native
+  Windows non-overwrite behavior). If the platform lacks this guarantee,
+  restore refuses to publish rather than overwrite an unrelated directory.
+- Backup and restore are OFFLINE operations requiring stopped writers.
+  Archives contain sensitive private state and require encrypted external
+  storage. PostgreSQL/S3 and key-manager snapshots are still separate.
+
+### Worker and operation safety
+- PDF chunk appends, validation, ingestion and research claims, plus queued
+  resumption, use SQLite BEGIN IMMEDIATE before checking lease/sequence
+  preconditions, preventing a cross-process read-before-write race.
+- Worker fencing continues to protect checkpoints from obsolete tokens.
+- /ready now verifies expected data tables in enabled stores; a successful
+  connection alone is not readiness. The public error is sanitized HTTP 503.
+
+### Automated evidence
+The Python application CI matrix includes tests/test_v11_phase6_hardening.py:
+32 competing claims for a single ingestion/research/validation lease,
+idempotent concurrent chunk retries, rejection of stale worker writes,
+nested SQLite WAL checkpoint and restoration, corrupt backup refusal,
+archive collision and restore race protection, and a corrupted private
+database readiness failure.
+
+### Outstanding deployed qualifications
+The implementation is not evidence of real multi-node scale, accurate
+Google AI Studio billing, production WAF or pen testing, long-running T4
+latency, key rotation, external PostgreSQL/S3 snapshots, backup RTO/RPO,
+or physical mobile device tests. Qualify these separately in a staging
+and production-like environment before asserting release readiness.
