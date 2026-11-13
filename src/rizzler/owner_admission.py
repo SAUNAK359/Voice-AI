@@ -48,7 +48,7 @@ def classify(method:str,path:str)->str:
 
 
 class OwnerRateLedger:
-    """Atomic rolling 60-second buckets; cross-process when filesystem shared."""
+    """Atomic 60-second fixed-window buckets; cross-process when filesystem shared."""
 
     def __init__(self,path:str|Path,key:str,limits:dict[str,int]|None=None):
         path=Path(path)
