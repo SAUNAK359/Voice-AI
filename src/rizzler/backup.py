@@ -43,7 +43,7 @@ def _validate_member_path(value: str) -> tuple[str, ...]:
     if (path.is_absolute() or path.as_posix() != value or ".." in path.parts
             or "." in path.parts or path.parts[0] not in PATHS
             or (len(path.parts) == 1 and path.parts[0] not in (
-                "jobs.sqlite3", "identity.sqlite3"))):
+                "jobs.sqlite3", "identity.sqlite3", "ai_reservations.sqlite3"))):
         raise ValueError("Unsafe backup member path")
     return path.parts
 
