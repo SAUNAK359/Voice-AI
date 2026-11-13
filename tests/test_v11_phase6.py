@@ -31,12 +31,15 @@ class ProductionHardeningTests(unittest.TestCase):
                 "visuals/visual_v11.sqlite3":b"encrypted images fixture",
                 "visuals/pdfs/pdf_ingestion.sqlite3":b"encrypted document fixture",
                 "visuals/pdfs/payload.bin":b"0"*2_000_000,
-                "ai_reservations.sqlite3":b"cost-ledger-placeholder",
             }
             for name,content in files.items():
                 path=root/name
                 path.parent.mkdir(parents=True,exist_ok=True)
                 path.write_bytes(content)
+            with sqlite3.connect(root/"ai_reservations.sqlite3") as db:
+                db.execute("CREATE TABLE demo(id INTEGER PRIMARY KEY,usd INTEGER)")
+                db.execute("INSERT INTO demo(usd) VALUES(10)")
+            files["ai_reservations.sqlite3"]=(root/"ai_reservations.sqlite3").read_bytes()
             archive=Path(d)/"snapshot.tar.gz"
             with patch.object(Path,"read_bytes",side_effect=AssertionError(
                     "Backup must stream instead of loading complete PDF")):
