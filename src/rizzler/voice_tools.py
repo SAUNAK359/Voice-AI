@@ -111,8 +111,10 @@ MEMORY_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:forget|delete)\s+memory\s+([A-
 
 
 class VoiceTools:
-    def __init__(self,store,settings,memory=None,visual=None):
+    def __init__(self,store,settings,memory=None,visual=None,
+                 pdf_research=None,pdf_schedule=None):
         self.store,self.settings,self.memory,self.visual=store,settings,memory,visual
+        self.pdf_research,self.pdf_schedule=pdf_research,pdf_schedule
         self._pending_memory_clear = {}
 
     def memory_intent(self, text: str) -> str | None:
@@ -171,11 +173,44 @@ class VoiceTools:
             line="I couldn't complete that memory request. No success is claimed."
             return {"tool":intent,"text":line,"spoken":line,"verified":False}
 
-    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None)->dict|None:
+    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None)->dict|None:
         memory_intent=self.memory_intent(text)
         if memory_intent is not None:
             return self._memory_command(memory_intent,text,owner)
         intent=classify_tool(text,self.store is not None)
+        # A selected, completely indexed PDF may be queried by *finalized*
+        # speech. Provisional ASR, PDF text and model output cannot authorize
+        # a Work write or override an explicit memory/cancel/status command.
+        pdf_question=bool(re.search(
+            r"\b(?:pdf|manual|document|the file|this file|all pages|every page)\b",
+            text,re.I))
+        explicit_artifact=bool(re.search(
+            r"\b(?:create|make|generate|build|export)\b.{0,65}"
+            r"\b(?:report|slides|powerpoint|presentation|word|excel)\b",
+            text,re.I))
+        if (pdf_question and pdf_document and self.pdf_research is not None and
+            self.pdf_schedule is not None and
+            intent not in ("work_status","work_cancel","web_search","math") and
+            not explicit_artifact):
+            require_tool("pdf_research",explicit_private_write=False,
+                         allowed=frozenset(VOICE_TOOLS))
+            started=time.perf_counter()
+            try:
+                job=await asyncio.to_thread(self.pdf_research.submit,
+                    owner,pdf_document,text,"full")
+                self.pdf_schedule(
+                    self.pdf_research.run(owner,job["id"]),("research",job["id"]))
+                line=("Complete PDF analysis queued for all "+
+                      str(job["total_pages"])+
+                      " indexed pages. Track job "+job["id"]+
+                      " in Visual Context. I will not claim a result before it finishes.")
+                return {"tool":"pdf_research","text":line,
+                        "spoken":"I started full-document analysis. You can view progress in Visual Context.",
+                        "verified":False,
+                        "tool_elapsed_ms":round((time.perf_counter()-started)*1000,2)}
+            except Exception:
+                line="I couldn't start complete PDF research. The document and any existing work remain unchanged."
+                return {"tool":"pdf_research","text":line,"spoken":line,"verified":False}
         if intent == "work_submit" and visuals:
             line=("I can analyze the selected image first. To create a report "
                   "from its findings, use the explicit Submit report action.")
