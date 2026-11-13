@@ -11,7 +11,6 @@ import asyncio
 from contextlib import contextmanager
 import hashlib
 import hmac
-import json
 import math
 import os
 from pathlib import Path
