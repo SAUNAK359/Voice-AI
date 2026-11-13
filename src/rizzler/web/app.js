@@ -224,6 +224,24 @@ async function connectSession(){
    s.media?.getTracks().forEach(t=>t.stop());await s.ctx?.close();s.ctx=null}
 }
 
+async function enableTextOnly(){
+ try{
+   if(!s.production){
+     s.key=$('key').value.trim();
+     const response=await fetch('/api/auth',{method:'POST',headers:headers()});
+     if(!response.ok)throw Error('Invalid access key');
+   }
+   if(!s.agentEnabled)throw Error('The V12 agent runtime is not enabled');
+   s.session=true;
+   $('modal').classList.add('hidden');
+   $('connection').textContent='Private text session';
+   status('listening','Text and Work available. Microphone is optional.');
+   refreshToolCatalog();
+   if(s.workEnabled)refreshWork();
+ }catch(error){$('error').textContent=error.message}
+}
+$('text-only')?.addEventListener('click',enableTextOnly);
+
 function renderVisuals(){
  s.visualAnalysis=null;$('visual-report-panel').hidden=true;
  const container=$('visual-list');if(!container)return;
@@ -463,7 +481,7 @@ document.addEventListener('pointerdown',()=>{
  if(s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{});
 },{passive:true});
 $('unlock').addEventListener('submit',async e=>{e.preventDefault();s.key=$('key').value;await connectSession()});
-$('connect').addEventListener('click',()=>s.session?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
+$('connect').addEventListener('click',()=>s.session&&s.ctx?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
 $('logout').addEventListener('click',async()=>{
   await disconnect();
   if(!s.production){$('modal').classList.remove('hidden');return}
@@ -483,7 +501,8 @@ $('logout').addEventListener('click',async()=>{
     const who=await fetch('/auth/session');
     if(!who.ok){location.replace('/auth/login');return}
     $('modal').classList.add('hidden');
-    status('offline','Signed in. Select Connect microphone to start.');
+    status('offline','Signed in. Voice is optional; text and Work are ready.');
+    if(s.agentEnabled)await enableTextOnly();
   }
  }catch(e){status('error','Cannot verify runtime access')}
 })();
