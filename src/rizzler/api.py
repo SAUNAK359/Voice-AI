@@ -37,6 +37,30 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
     sessions = Sessions()
     operations = Operations()
+    owner_admission = None
+    if environ.get("RIZZLER_ADMISSION_ENABLED","").strip().lower() in ("1","true","yes"):
+        from .owner_admission import OwnerRateLedger
+        secret=environ.get("RIZZLER_ADMISSION_SECRET","")
+        if (secret in ("",cfg.access_key,environ.get("RIZZLER_WORK_SIGNING_KEY",""),
+                      environ.get("RIZZLER_SESSION_SIGNING_KEY",""),
+                      environ.get("RIZZLER_VISUAL_KEY",""))):
+            raise ValueError("Admission requires an independent 32-byte secret")
+        root=environ.get("RIZZLER_ADMISSION_ROOT") or environ.get("RIZZLER_WORK_ROOT","")
+        if not root:
+            raise ValueError("Admission needs a shared persistent root")
+        limits={}
+        for kind in ("standard","expensive","upload","work","connect"):
+            name="RIZZLER_RATE_"+kind.upper()+"_PER_MIN"
+            value=environ.get(name,"")
+            if value:
+                try:limits[kind]=int(value)
+                except ValueError:raise ValueError("Invalid admission rate") from None
+        from .owner_admission import CLASSES
+        defaults={"standard":1200,"expensive":90,"upload":3600,
+                  "work":60,"connect":90}
+        defaults.update(limits)
+        owner_admission=OwnerRateLedger(
+            Path(root)/"owner_admission.sqlite3",secret,defaults)
     from .production_guard import budget_from_environment
     # Reject incomplete daily budget configuration on startup, not midway through a paid job.
     budget_from_environment()
@@ -248,6 +272,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                   docs_url=None, redoc_url=None)
     app.state.settings, app.state.sessions = cfg, sessions
     app.state.operations = operations
+    app.state.owner_admission = owner_admission
     app.state.work, app.state.identity = work, identity
     app.state.memory = memory
     app.state.visual = visual
@@ -259,7 +284,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         status_code=429, content={'detail': 'Voice capacity busy; retry later'}))
     if work:
         from .work_api import router
-        app.include_router(router(work, work_signing_key, identity=identity))
+        app.include_router(router(work, work_signing_key, identity=identity,
+                                  owner_admission=owner_admission))
 
         # Keep backward-compatible private Work API; the primary application
         # now shows Work job cards inside the voice conversation.
@@ -292,13 +318,27 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     def auth(request: Request, session_required: bool = False) -> str | None:
         if identity is not None:
-            return identity.owner(request, mutate=request.method not in ("GET", "HEAD", "OPTIONS"))
+            owner=identity.owner(request, mutate=request.method not in ("GET", "HEAD", "OPTIONS"))
+            if owner_admission is not None:
+                from .owner_admission import classify, RateExceeded
+                try:owner_admission.admit(owner,classify(request.method,request.url.path))
+                except RateExceeded as exc:
+                    raise HTTPException(status_code=429,detail="Request rate exceeded",
+                         headers={"Retry-After":str(exc.retry_after)}) from None
+            return owner
         token = request.headers.get('x-rizzler-key', '')
         if not secrets.compare_digest(token, cfg.access_key):
             raise HTTPException(status_code=401, detail='Invalid access key')
         if session_required:
             try:
-                return validate_session_id(request.headers.get('x-session-id', ''))
+                owner=validate_session_id(request.headers.get('x-session-id', ''))
+                if owner_admission is not None:
+                    from .owner_admission import classify, RateExceeded
+                    try:owner_admission.admit(owner,classify(request.method,request.url.path))
+                    except RateExceeded as exc:
+                        raise HTTPException(status_code=429,detail="Request rate exceeded",
+                             headers={"Retry-After":str(exc.retry_after)}) from None
+                return owner
             except ValueError:
                 raise HTTPException(status_code=400, detail='Invalid session identifier')
         return None
@@ -310,6 +350,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         if not ops_token or not secrets.compare_digest(presented, expected):
             raise HTTPException(status_code=401, detail="Unauthorized") from None
         data=operations.snapshot()
+        data["owner_admission"]=(owner_admission.snapshot() if owner_admission is not None
+            else {"enabled":False,"note":"Owner API rate admission not configured"})
         data["pdf_scheduler"]={"active":len(pdf_active),"limit":max_pdf_tasks,
                               "scope":"process-local; persistent leases enforce cross-process exclusion"}
         from .production_guard import budget_from_environment
@@ -343,6 +385,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             if ledger:
                 with ledger._conn() as db:
                     db.execute("SELECT 1 FROM reservations LIMIT 1").fetchone()
+            if owner_admission:
+                with owner_admission._db() as db:
+                    db.execute("SELECT 1 FROM rates LIMIT 1").fetchone()
             if getattr(app.state, "voice_prewarm", None) == "failed":
                 raise RuntimeError("Speech model warmup failed")
             return {"ready": True, "mode": mode}
@@ -1046,6 +1091,12 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                         await ws.close(code=1008)
                         return
                     sid = validate_session_id(first.get('client_id', ''))
+                if owner_admission is not None:
+                    from .owner_admission import RateExceeded
+                    try:owner_admission.admit(sid,"connect")
+                    except RateExceeded:
+                        await ws.close(code=1013)
+                        return
                 protocol = first.get('protocol', 1)
                 if type(protocol) is not int or protocol not in (1, VERSION):
                     await ws.close(code=1003)
