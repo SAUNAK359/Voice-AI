@@ -154,6 +154,8 @@ class AgentRuntime:
         started=time.perf_counter()
         calls=[]
         seen=set()
+        submitted=False
+        accepted_job=None
         try:
             for step in range(6):
                 decision=await self.decide(client,state,tools)
@@ -162,8 +164,10 @@ class AgentRuntime:
                     return {"tool":"agent","text":answer,
                             "spoken":re.sub(r"\[[^]]+\]\([^)]*\)|https?://\S+|\*","",answer)[:1000],
                             "verified":bool(calls and all(c["verified"] for c in calls)),
-                            "actions":calls,"tool_elapsed_ms":round((time.perf_counter()-started)*1000,2)}
+                            "actions":calls,"job":accepted_job,"tool_elapsed_ms":round((time.perf_counter()-started)*1000,2)}
                 active=decision["calls"]
+                if submitted and any(tools[x["name"]].effect!="read" for x in active):
+                    raise PermissionError("Only one modifying action is allowed per turn")
                 for call in active:
                     key=json.dumps(call,sort_keys=True)
                     if key in seen:raise ValueError("Repeated tool action without new state")
@@ -176,9 +180,15 @@ class AgentRuntime:
                     except (ValueError,PermissionError,Missing,Conflict,RuntimeError,TimeoutError,OSError):
                         return {"name":call["name"],"ok":False,"error":"Unavailable or unauthorized operation"}
                 results=await asyncio.gather(*(one(c,i) for i,c in enumerate(active)))
+                for result in results:
+                    if result["name"]=="work.submit" and result["ok"]:
+                        submitted=True
+                        accepted_job=result["result"]["job"]
                 calls.extend({"name":r["name"],"ok":r["ok"],
                     "verified":bool(r["ok"] and isinstance(r.get("result"),dict)
                         and r["result"].get("verified",False))} for r in results)
+                accepted=[r["result"]["job"] for r in results if r["ok"] and
+                          isinstance(r["result"],dict) and r["name"]=="work.submit"]
                 approvals=[r["result"]["approval"] for r in results if r["ok"] and
                            isinstance(r["result"],dict) and r["result"].get("confirmation_required")]
                 if approvals:
@@ -186,8 +196,9 @@ class AgentRuntime:
                         p["id"] for p in approvals)
                     return {"tool":"agent","text":answer,"spoken":answer,
                         "verified":False,"approvals":approvals,"actions":calls}
-                state.append({"role":"tool_result","data":json.loads(
-                    json.dumps(results,default=str)[:12000])})
+                # Tool outputs are untrusted evidence; bounded text is not parsed as JSON.
+                state.append({"role":"tool_result","data":
+                    json.dumps(results,default=str,ensure_ascii=False)[:12000]})
             return {"tool":"agent","verified":False,"actions":calls,
                     "text":"Execution budget exhausted. Inspect the Work dashboard for accepted jobs.",
                     "spoken":"I reached the operation limit. You can check Work for accepted jobs."}
