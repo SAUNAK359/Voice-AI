@@ -180,6 +180,13 @@ class VoiceTools:
         if memory_intent is not None:
             return self._memory_command(memory_intent,text,owner)
         intent=classify_tool(text,self.store is not None)
+        if intent is None:
+            # Semantic advice can select a tool, but cannot authorize it.
+            from .cognitive_router import semantic_route
+            decision=await semantic_route(text,self.settings,
+                have_work=self.store is not None,
+                formats=requested_formats(text))
+            intent=decision.intent
         # A selected, completely indexed PDF may be queried by *finalized*
         # speech. Provisional ASR, PDF text and model output cannot authorize
         # a Work write or override an explicit memory/cancel/status command.
