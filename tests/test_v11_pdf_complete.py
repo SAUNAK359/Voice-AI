@@ -197,7 +197,7 @@ def test_api_complete_upload_status_and_full_question(tmp_path,monkeypatch):
     raw=make_pdf(27)
     with TestClient(app) as client:
         doc=client.post("/api/pdf/documents",headers=hdr,json={
-            "name":"any_length.pdf"})
+            "name":"any_length.pdf","bytes":len(raw)})
         assert doc.status_code==201,doc.text
         uid=doc.json()["id"]
         assert client.get("/api/pdf/documents/"+uid,headers={
