@@ -11,6 +11,26 @@ from .contracts import FILE_FORMATS
 from .production_guard import reserve_provider_call
 from .work_agents import SPECS
 
+from dataclasses import dataclass
+from os import environ
+import re
+
+@dataclass(frozen=True)
+class WorkModelConfig:
+    """Work's provider configuration is not a second user authentication."""
+    gemini_api_key: str
+    gemini_model: str
+    request_timeout: float
+
+    @classmethod
+    def from_env(cls):
+        from .config import Settings
+        model=environ.get("RIZZLER_GEMINI_MODEL",Settings.__dataclass_fields__["gemini_model"].default)
+        timeout=float(environ.get("RIZZLER_WORK_MODEL_TIMEOUT","45"))
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,99}",model) or not 10<=timeout<=180:
+            raise ValueError("Invalid Work model configuration")
+        return cls(environ.get("GEMINI_API_KEY",""),model,timeout)
+
 VERSION=2
 PRODUCERS={name: set(spec.formats) for name,spec in SPECS.items() if spec.formats}
 CONTENT=frozenset(("research","orchestrator"))
