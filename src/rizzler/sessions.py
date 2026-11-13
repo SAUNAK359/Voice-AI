@@ -74,6 +74,7 @@ class Session:
     visuals: list[str] = field(default_factory=list)
     visual_analysis: dict | None = None
     visual_generation: int = 0
+    pdf_document: str | None = None
     generation: int = 0
     task: asyncio.Task | None = None
     websocket: object | None = None
