@@ -582,7 +582,10 @@ class PDFIngestor:
                                         if not isinstance(note,str) or not note.strip():
                                             raise ValueError("Empty visual observation")
                                         break
-                                    except (Exception,asyncio.TimeoutError):
+                                    except (Exception,asyncio.TimeoutError) as exc:
+                                        from .production_guard import BudgetExceeded
+                                        if isinstance(exc,BudgetExceeded):
+                                            raise RuntimeError('AI reservation budget reached; resume after reset') from None
                                         if attempt==4:raise RuntimeError(
                                             "Vision provider retries exhausted; resumable") from None
                                         await asyncio.sleep(min(2**attempt,20))
