@@ -831,10 +831,27 @@ class WorkStore:
                 c.execute("""INSERT INTO jobs(id,owner,idem,fingerprint,payload,status,stage,created,updated)
                              VALUES(?,?,?,?,?,'queued','accepted',?,?)""",
                           (jid,row["owner"],key,row["fingerprint"],row["payload"],now,now))
-                from .work_agents import plan
-                for spec in plan(json.loads(row["payload"])):
+                original=c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
+                                   (row["job_id"],)).fetchone()
+                if original is None or hashlib.sha256(original["plan_json"].encode()).hexdigest()!=original["sha256"]:
+                    raise ValueError("Approved job plan missing or corrupted")
+                parent_plan=json.loads(original["plan_json"])
+                if parent_plan.get("schema_version")==2:
+                    # Every scheduled invocation gets a freshly model-authored
+                    # plan; never replay a stale strategy without re-evaluation.
+                    from .work_dynamic import pending
+                    new_plan=pending()
+                else:
+                    # Only historical jobs retain their immutable approved
+                    # template for backward-compatible execution.
+                    new_plan=parent_plan
+                encoded=json.dumps(new_plan,sort_keys=True,separators=(",",":"))
+                c.execute("""INSERT INTO job_plans(job_id,plan_json,sha256,created)
+                             VALUES(?,?,?,?)""",
+                          (jid,encoded,hashlib.sha256(encoded.encode()).hexdigest(),now))
+                for node in new_plan["steps"]:
                     c.execute("""INSERT INTO agent_steps(job_id,agent,status,updated)
-                                 VALUES(?,?,'queued',?)""", (jid,spec.name,now))
+                                 VALUES(?,?,'queued',?)""",(jid,node["id"],now))
                 self._event(c,jid,"queued","Approved schedule enqueued task")
                 new_state="exhausted" if index>=row["max_runs"] else "active"
                 c.execute("""UPDATE proposals SET runs=?,next_run=?,status=? WHERE id=?""",
