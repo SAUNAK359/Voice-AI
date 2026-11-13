@@ -89,7 +89,7 @@ def backup(root: Path, destination: Path):
     for db_file in sorted(root.rglob("*.sqlite3")):
         if db_file.is_symlink() or not db_file.is_file():
             raise ValueError("Unsafe SQLite database file")
-        with sqlite3.connect(f"file:{db_file}?mode=rw", uri=True, timeout=15) as con:
+        with sqlite3.connect(db_file.as_uri() + "?mode=rw", uri=True, timeout=15) as con:
             response=con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
             if response and response[0]:
                 raise RuntimeError("SQLite WAL checkpoint incomplete")
