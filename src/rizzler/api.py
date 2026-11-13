@@ -153,7 +153,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             pdf_active.discard(key)
             if not done.cancelled():
                 try:done.exception()
-                except Exception:pass
+                except Exception:
+                    # Worker failures have already been persisted as paused states.
+                    return
         task.add_done_callback(finished)
         return task
 
