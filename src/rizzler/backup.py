@@ -67,6 +67,10 @@ def _collect(root: Path):
                 continue
             if not stat.S_ISREG(mode):
                 raise ValueError("Nonregular backup member")
+            # All SQLite WAL contents were checkpointed. Never archive
+            # transient WAL/SHM sidecars as independent private-state files.
+            if path.name.endswith((".sqlite3-wal", ".sqlite3-shm")):
+                continue
             relative = path.relative_to(root).as_posix()
             _validate_member_path(relative)
             results.append((relative, path))
