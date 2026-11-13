@@ -100,7 +100,7 @@ class PDFStore:
             db.executescript("""CREATE TABLE IF NOT EXISTS docs(
                id TEXT PRIMARY KEY,owner TEXT NOT NULL,name TEXT NOT NULL,
                status TEXT NOT NULL,received INTEGER NOT NULL DEFAULT 0,
-               chunks INTEGER NOT NULL DEFAULT 0,pages INTEGER,
+               expected INTEGER,chunks INTEGER NOT NULL DEFAULT 0,pages INTEGER,
                processed INTEGER NOT NULL DEFAULT 0,
                created REAL NOT NULL,updated REAL NOT NULL,error TEXT,
                lease TEXT,lease_until REAL NOT NULL DEFAULT 0);
@@ -121,6 +121,8 @@ class PDFStore:
                doc TEXT NOT NULL,page INTEGER NOT NULL,term BLOB NOT NULL,
                PRIMARY KEY(doc,page,term));
              CREATE INDEX IF NOT EXISTS terms_search ON terms(doc,term,page);""")
+            if "expected" not in {r[1] for r in db.execute("PRAGMA table_info(docs)")}:
+                db.execute("ALTER TABLE docs ADD COLUMN expected INTEGER")
 
     @contextmanager
     def db(self):
@@ -154,20 +156,25 @@ class PDFStore:
     @staticmethod
     def _public(row):
         return {"id":row["id"],"name":row["name"],"status":row["status"],
-                "received_bytes":row["received"],"uploaded_chunks":row["chunks"],
+                "received_bytes":row["received"],"expected_bytes":row["expected"],
+                "uploaded_chunks":row["chunks"],
                 "pages":row["pages"],"processed_pages":row["processed"],
                 "error":row["error"],"updated":row["updated"]}
 
-    def create(self,owner,name):
+    def create(self,owner,name,expected_bytes=None):
         owner=_owner(owner)
+        if expected_bytes is not None and (type(expected_bytes) is not int or
+                expected_bytes<32 or expected_bytes>2**63-1):
+            raise ValueError("Invalid source byte length")
         if not isinstance(name,str) or not PDF_NAME.fullmatch(name) or ".." in name:
             raise ValueError("Unsafe PDF filename")
         uid=secrets.token_urlsafe(24)
         now=time.time()
         with self.db() as db:
             db.execute("""INSERT INTO docs
-                (id,owner,name,status,created,updated) VALUES(?,?,?,?,?,?)""",
-                (uid,owner,name,"uploading",now,now))
+                (id,owner,name,status,expected,created,updated)
+                VALUES(?,?,?,?,?,?,?)""",
+                (uid,owner,name,"uploading",expected_bytes,now,now))
             return self._public(self._get(db,owner,uid))
 
     def list(self,owner):
@@ -196,6 +203,8 @@ class PDFStore:
                 return self._public(row)
             if seq!=row["chunks"]:
                 raise DocumentConflict("Upload must use ordered chunks; resume at next sequence")
+            if row["expected"] is not None and row["received"]+len(data)>row["expected"]:
+                raise ValueError("Upload exceeds declared source size")
             # Per-chunk space check; document size and page count are not capped.
             import shutil
             if shutil.disk_usage(self.root).free < max(4*CHUNK_BYTES,len(data)*3):
@@ -244,6 +253,8 @@ class PDFStore:
             if row["status"] in ("uploading","validation_failed"):
                 if not row["chunks"]:
                     raise ValueError("PDF upload has no chunks")
+                if row["expected"] is not None and row["received"]!=row["expected"]:
+                    raise DocumentConflict("PDF is not fully uploaded")
                 db.execute("""UPDATE docs SET status='validating',lease=NULL,
                      lease_until=0,error=NULL,updated=? WHERE id=?""",
                      (time.time(),uid))
@@ -263,6 +274,8 @@ class PDFStore:
             row=self._get(db,owner,uid)
             if row["status"]=="uploading":
                 if not row["chunks"]:raise ValueError("PDF upload incomplete")
+                if row["expected"] is not None and row["received"]!=row["expected"]:
+                    raise DocumentConflict("PDF is not fully uploaded")
                 db.execute("UPDATE docs SET status='validating' WHERE id=?",(uid,))
             elif row["status"]!="validating":
                 if row["status"] in ("queued","running","paused","complete"):
