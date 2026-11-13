@@ -573,8 +573,14 @@ $('agent-chat')?.addEventListener('submit',async e=>{
      result.job?'Work accepted; track progress below.':'Agent response ready.';
    if(result.job)refreshWork();
    for(const item of result.approvals||[]){
+     const summary=document.createElement('p');
+     summary.className='small';
+     summary.textContent='Proposed '+item.action+' for job '+item.job_id.slice(0,8)+
+       (item.objective?' · New objective: '+item.objective:'')+
+       (item.deliverables?' · Formats: '+item.deliverables.join(', '):'');
+     $('messages').append(summary);
      const b=document.createElement('button');b.type='button';
-     b.textContent='Confirm '+item.action+' for job '+item.job_id.slice(0,8);
+     b.textContent='Confirm this specific Work change';
      b.addEventListener('click',async()=>{
        b.disabled=true;
        try{
