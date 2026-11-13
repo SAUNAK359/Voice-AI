@@ -39,6 +39,14 @@ class ProductionHardeningTests(unittest.TestCase):
             with sqlite3.connect(root/"ai_reservations.sqlite3") as db:
                 db.execute("CREATE TABLE demo(id INTEGER PRIMARY KEY,usd INTEGER)")
                 db.execute("INSERT INTO demo(usd) VALUES(10)")
+            # Test fixtures must be valid, checkpointable SQLite databases.
+            for db_name in ("private_memory/memory.sqlite3",
+                            "visuals/visual_v11.sqlite3",
+                            "visuals/pdfs/pdf_ingestion.sqlite3"):
+                with sqlite3.connect(root/db_name) as db:
+                    db.execute("CREATE TABLE IF NOT EXISTS fixture(id INTEGER PRIMARY KEY, body TEXT)")
+                    db.execute("INSERT INTO fixture(body) VALUES(?)",("encrypted fixture",))
+                files[db_name]=(root/db_name).read_bytes()
             files["ai_reservations.sqlite3"]=(root/"ai_reservations.sqlite3").read_bytes()
             archive=Path(d)/"snapshot.tar.gz"
             with patch.object(Path,"read_bytes",side_effect=AssertionError(
