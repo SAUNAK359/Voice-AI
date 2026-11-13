@@ -536,9 +536,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 raise HTTPException(status_code=413,detail="PDF metadata too large")
         try:
             meta=json.loads(body)
-            if not isinstance(meta,dict) or set(meta)!={"name"}:
-                raise ValueError("Invalid document metadata")
-            return await asyncio.to_thread(pdf_store.create,owner,meta["name"])
+            if not isinstance(meta,dict) or set(meta)!={"name","bytes"}:
+                raise ValueError("PDF name and exact source bytes required")
+            return await asyncio.to_thread(pdf_store.create,owner,
+                                           meta["name"],meta["bytes"])
         except (ValueError,TypeError):
             raise HTTPException(status_code=400,detail="Invalid PDF filename") from None
 
