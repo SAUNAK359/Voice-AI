@@ -105,6 +105,34 @@ class Phase6RuntimeTests(unittest.TestCase):
                         resume.set()
                 budget_from_environment.cache_clear()
 
+    def test_paused_pdf_and_research_resume_are_persistently_queued(self):
+        import tempfile
+        import secrets
+        from rizzler.pdf_documents import PDFStore
+        from rizzler.pdf_analysis import PDFResearch
+        with tempfile.TemporaryDirectory() as tmp:
+            owner="phase6_owner"
+            store=PDFStore(Path(tmp)/"pdfs",
+                           "phase6-independent-doc-encryption-secret-123456")
+            doc=store.create(owner,"manual.pdf")
+            with store.db() as db:
+                db.execute("UPDATE docs SET status='paused' WHERE id=?",(doc["id"],))
+            resumed=store.request_resume(owner,doc["id"])
+            self.assertEqual(resumed["status"],"queued")
+            self.assertIn((owner,doc["id"]),store.recoverable())
+            class Vision:pass
+            research=PDFResearch(store,Vision())
+            run=secrets.token_urlsafe(24)
+            now=time.time()
+            with store.db() as db:
+                db.execute("""INSERT INTO pdf_answers
+                  (id,owner,doc,question,mode,status,total_pages,created,updated)
+                  VALUES(?,?,?,?,?,?,?,?,?)""",
+                   (run,owner,doc["id"],"Summarize all","full","paused",2,now,now))
+            record=research.request_resume(owner,run)
+            self.assertEqual(record["status"],"queued")
+            self.assertIn((owner,run),research.recoverable())
+
     def test_invalid_pdf_parallel_limit_is_rejected_on_startup(self):
         from rizzler.api import create_app
         from rizzler.config import Settings
