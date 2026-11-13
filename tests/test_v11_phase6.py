@@ -43,6 +43,7 @@ class ProductionHardeningTests(unittest.TestCase):
             for db_name in ("private_memory/memory.sqlite3",
                             "visuals/visual_v11.sqlite3",
                             "visuals/pdfs/pdf_ingestion.sqlite3"):
+                (root/db_name).unlink()  # Replace old inert fixture bytes.
                 with sqlite3.connect(root/db_name) as db:
                     db.execute("CREATE TABLE IF NOT EXISTS fixture(id INTEGER PRIMARY KEY, body TEXT)")
                     db.execute("INSERT INTO fixture(body) VALUES(?)",("encrypted fixture",))
