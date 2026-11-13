@@ -1,4 +1,4 @@
-"""Authenticated Work Agent endpoints; bearer identity is separate from voice key."""
+"""Work endpoints share the single authenticated Voice/Work owner session."""
 from __future__ import annotations
 import json
 import asyncio
@@ -8,25 +8,22 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from .work_auth import verify_token
 from .identity import Identity
 from .work_skills import SKILLS
 from .work_agents import SPECS
 from .work_store import WorkStore, Conflict, Missing
 from .upload_scan import ScanUnavailable
 
-def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
-           owner_admission=None) -> APIRouter:
+def router(store: WorkStore, signing_key: str = "", identity: Identity | None = None,
+           owner_admission=None, owner_resolver=None) -> APIRouter:
+    """No separate Work login or bearer credential; request owner is shared."""
     api=APIRouter(prefix="/api/work",tags=["work"])
     def owner(req: Request):
-        if identity is not None:
-            subject=identity.owner(req, mutate=req.method not in ("GET", "HEAD", "OPTIONS"))
-        else:
-            try:
-                # The voice key cannot mint a Work bearer token.
-                subject=verify_token(req.headers.get("authorization"), signing_key)
-            except PermissionError:
-                raise HTTPException(status_code=401,detail="Invalid work authorization") from None
+        if owner_resolver is not None:
+            return owner_resolver(req)
+        if identity is None:
+            raise HTTPException(status_code=503,detail="Shared authentication not configured")
+        subject=identity.owner(req,mutate=req.method not in ("GET","HEAD","OPTIONS"))
         if owner_admission is not None:
             from .owner_admission import classify, RateExceeded
             try:owner_admission.admit(subject,classify(req.method,req.url.path))
