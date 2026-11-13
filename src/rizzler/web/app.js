@@ -259,7 +259,7 @@ async function refreshPDFDocs(){
    const choose=document.createElement('button');
    choose.type='button';choose.textContent=s.pdfSelected===doc.id?'Selected':'Use document';
    choose.disabled=doc.status!=='complete';
-   choose.onclick=()=>{s.pdfSelected=doc.id;renderVisuals();refreshPDFDocs();};
+   choose.onclick=()=>{s.pdfSelected=s.pdfSelected===doc.id?null:doc.id;renderVisuals();refreshPDFDocs();};
    line.append(choose);
    if(doc.status==='paused'||doc.status==='validation_failed'){
     const resume=document.createElement('button');resume.type='button';
@@ -400,7 +400,7 @@ $('visual-screen').addEventListener('click',async()=>{
  finally{capture?.getTracks().forEach(x=>x.stop())}
 });
 $('visual-clear').addEventListener('click',async()=>{
- const snapshot=[...s.visualIDs];s.visualIDs=[];renderVisuals();
+ const snapshot=[...s.visualIDs];s.visualIDs=[];s.pdfSelected=null;renderVisuals();
  await Promise.allSettled(snapshot.map(x=>fetch('/api/visual/attachments/'+encodeURIComponent(x.id),
      {method:'DELETE',headers:headers()})));
  $('visual-status').textContent='Visual selection cleared.';
