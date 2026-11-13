@@ -9,7 +9,7 @@ try:
     from rizzler.api import create_app
     from rizzler.config import Settings
     from rizzler.work_dynamic import validate, pending
-    from rizzler.work_store import WorkStore, Missing
+    from rizzler.work_store import WorkStore, Missing, Conflict
     from rizzler.work_specialists import execute_specialists
 except ImportError:
     raise unittest.SkipTest("V12 Work integration requires App test extras")
@@ -56,7 +56,7 @@ def test_new_agentic_job_persists_placeholder_and_fenced_model_graph(tmp_path,mo
     assert store.install_dynamic_graph(OWNER,job["id"],"worker-A",claim["fence"],selected)==selected
     assert store.job_plan(OWNER,job["id"])==selected
     assert len(store.agent_steps(OWNER,job["id"]))==3
-    with pytest.raises(ValueError):
+    with pytest.raises(Conflict):
         store.install_dynamic_graph(OWNER,job["id"],"worker-A",claim["fence"],
             graph(("research",[]),("pdf_visual",["research"]),("quality",["research","pdf_visual"])))
     with pytest.raises(Missing):
