@@ -384,7 +384,7 @@ class PDFStore:
             row=self._get(db,owner,uid)
             if row["status"]!="complete" or row["processed"]!=row["pages"]:
                 raise DocumentConflict("Complete PDF indexing is required")
-            return list(range(row["pages"]))
+            return range(row["pages"])
 
     def read_page(self,owner,uid,index):
         with self.db() as db:
