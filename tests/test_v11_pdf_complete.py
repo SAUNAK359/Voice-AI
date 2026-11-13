@@ -234,3 +234,80 @@ def test_api_complete_upload_status_and_full_question(tmp_path,monkeypatch):
         deleted=client.delete("/api/pdf/documents/"+uid,headers=hdr)
         assert deleted.status_code==200,deleted.text
         assert client.get("/api/pdf/documents/"+uid,headers=hdr).status_code==404
+
+
+
+def test_declared_total_length_blocks_partial_finalize_and_changed_replays(tmp_path):
+    store=PDFStore(tmp_path/"pdfs",SECRET)
+    raw=make_pdf(3)
+    uid=store.create(OWNER,"identified.pdf",len(raw))["id"]
+    head,tail=raw[:200],raw[200:]
+    store.append(OWNER,uid,0,head,hashlib.sha256(head).hexdigest())
+    with pytest.raises(DocumentConflict,match="fully uploaded"):
+        store.request_finalize(OWNER,uid)
+    with pytest.raises(DocumentConflict):
+        store.append(OWNER,uid,0,head+b"changed",
+                     hashlib.sha256(head+b"changed").hexdigest())
+    store.append(OWNER,uid,1,tail,hashlib.sha256(tail).hexdigest())
+    frozen=store.request_finalize(OWNER,uid)
+    assert frozen["status"]=="validating"
+    assert frozen["expected_bytes"]==len(raw)
+    with pytest.raises(DocumentConflict):
+        store.append(OWNER,uid,2,b"appended",
+                     hashlib.sha256(b"appended").hexdigest())
+    assert store.finalize(OWNER,uid)["pages"]==3
+
+
+def test_full_document_malware_scanner_failure_stays_resumable(tmp_path):
+    def failed_scan(path):
+        raise RuntimeError("Scanner provider unavailable")
+    store=PDFStore(tmp_path/"pdfs",SECRET,scanner_file=failed_scan)
+    uid=_upload(store,make_pdf(2))
+    store.request_finalize(OWNER,uid)
+    with pytest.raises(RuntimeError,match="Scanner provider"):
+        store.finalize(OWNER,uid)
+    status=store.status(OWNER,uid)
+    assert status["status"]=="validation_failed"
+    assert status["pages"] is None
+    store.scanner_file=lambda path:None
+    assert store.request_finalize(OWNER,uid)["status"]=="validating"
+    assert store.finalize(OWNER,uid)["pages"]==2
+
+
+def test_large_pdf_scan_occurs_off_http_event_loop(tmp_path,monkeypatch):
+    import threading
+    entered=threading.Event()
+    release=threading.Event()
+    monkeypatch.setenv("RIZZLER_DEPLOYMENT_MODE","demo")
+    monkeypatch.setenv("RIZZLER_VISUAL_ENABLED","1")
+    monkeypatch.setenv("RIZZLER_VISUAL_ROOT",str(tmp_path/"visual"))
+    monkeypatch.setenv("RIZZLER_VISUAL_KEY",SECRET)
+    monkeypatch.delenv("RIZZLER_WORK_ROOT",raising=False)
+    monkeypatch.delenv("RIZZLER_WORK_SIGNING_KEY",raising=False)
+    app=create_app(Settings(access_key=ACCESS_KEY),
+                   ProviderSet(ASR(),LLM(),TTS()))
+    app.state.pdf_ingestor.provider=MockVision()
+    def slow_scanner(path):
+        entered.set()
+        if not release.wait(timeout=5):
+            raise RuntimeError("Scanner test timeout")
+    app.state.pdf_store.scanner_file=slow_scanner
+    raw=make_pdf(1)
+    hdr={"x-rizzler-key":ACCESS_KEY,"x-session-id":OWNER}
+    with TestClient(app) as client:
+        doc=client.post("/api/pdf/documents",headers=hdr,
+            json={"name":"background.pdf","bytes":len(raw)})
+        assert doc.status_code==201,doc.text
+        uid=doc.json()["id"]
+        chunk=client.put(f"/api/pdf/documents/{uid}/chunks/0",headers={
+            **hdr,"x-chunk-sha256":hashlib.sha256(raw).hexdigest()},content=raw)
+        assert chunk.status_code==200,chunk.text
+        try:
+            accepted=client.post(f"/api/pdf/documents/{uid}/complete",headers=hdr)
+            assert accepted.status_code==202,accepted.text
+            assert entered.wait(4)
+            snapshot=client.get(f"/api/pdf/documents/{uid}",headers=hdr)
+            assert snapshot.status_code==200
+            assert snapshot.json()["status"]=="validating"
+        finally:
+            release.set()
