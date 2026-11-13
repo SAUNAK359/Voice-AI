@@ -156,6 +156,9 @@ class PDFResearch:
                     raise ValueError("Empty PDF research response")
                 return output
             except (Exception,asyncio.TimeoutError) as exc:
+                from .production_guard import BudgetExceeded
+                if isinstance(exc,BudgetExceeded):
+                    raise RuntimeError('AI reservation budget reached; resume after reset') from None
                 last=exc
                 if attempt==4:
                     raise RuntimeError("PDF research provider unavailable; resume later") from None
