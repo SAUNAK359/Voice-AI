@@ -297,7 +297,10 @@ class WorkStore:
             c.execute("""INSERT INTO agent_approvals(id,owner,action,arguments,status,created,expires)
                          VALUES(?,?,?,?,'pending',?,?)""",
                       (key,owner,action,json.dumps(arguments,sort_keys=True),now,now+600))
-        return {"id":key,"action":action,"job_id":jid,"expires_at":now+600}
+        return {"id":key,"action":action,"job_id":jid,
+                "objective":arguments.get("objective"),
+                "deliverables":arguments.get("deliverables"),
+                "expires_at":now+600}
 
     def confirm_agent_action(self, owner: str, approval_id: str) -> dict:
         """Separate authenticated confirmation; crash-safe retry via action idempotency."""
