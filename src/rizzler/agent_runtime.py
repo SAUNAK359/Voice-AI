@@ -204,7 +204,8 @@ class AgentRuntime:
                 if approvals:
                     answer="Action prepared; no changes made. Confirm approval ID: "+", ".join(
                         p["id"] for p in approvals)
-                    return {"tool":"agent","text":answer,"spoken":answer,
+                    return {"tool":"agent","text":answer,
+                        "spoken":"I prepared that Work change. Please review the proposed action before confirming.",
                         "verified":False,"approvals":approvals,"actions":calls}
                 # Tool outputs are untrusted evidence; bounded text is not parsed as JSON.
                 state.append({"role":"tool_result","data":
