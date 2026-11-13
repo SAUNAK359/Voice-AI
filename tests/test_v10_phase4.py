@@ -43,7 +43,8 @@ def client(tmp_path, monkeypatch):
 
 
 def h(who):
-    return {"Authorization":"Bearer "+issue_token(who,SIGNING)}
+    """Voice and Work use the exact same authenticated demo session."""
+    return {"x-rizzler-key":KEY,"x-session-id":who}
 
 
 def basic(store, who="owner_1", idem="task_0001", formats=None, uploads=None):
@@ -75,9 +76,10 @@ def test_token_scope_expiry_and_tamper(monkeypatch):
         verify_token("Bearer "+issued,SIGNING)
 
 
-def test_voice_key_is_not_work_credential(client):
-    assert client.get("/api/work/jobs",headers={"x-rizzler-key":KEY}).status_code==401
+def test_voice_and_work_share_the_same_authenticated_session(client):
+    assert client.get("/api/work/jobs",headers={"x-rizzler-key":KEY}).status_code==400
     assert client.get("/api/work/jobs",headers=h("owner_1")).status_code==200
+    assert client.get("/api/work/jobs",headers={"authorization":"Bearer "+issue_token("owner_1",SIGNING)}).status_code==401
     assert client.get("/work").status_code==200
     assert client.get("/static/work.js").status_code==200
     x=client.get("/api/work/skills",headers=h("owner_1"))
