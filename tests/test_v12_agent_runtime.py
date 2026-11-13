@@ -62,7 +62,7 @@ def test_model_directed_work_is_queued_and_shared(tmp_path):
 
 def test_confirmation_gate_owner_isolation_and_revision_lineage(tmp_path):
     store=WorkStore(tmp_path/"work")
-    source=store.submit("owner_one","Create a PDF on robotics",["pdf"],"source_job_001")
+    source=store.submit("owner_one","Create a PDF on robotics",["pdf"],"source_job_001",[])
     agent=DirectedRuntime(store,[call("work.revise",job_id=source["id"],
               objective="Create an updated robotics presentation",deliverables=["pptx"])])
     result=asyncio.run(agent.run("Revise my existing robotics report to use slides",
@@ -82,7 +82,7 @@ def test_confirmation_gate_owner_isolation_and_revision_lineage(tmp_path):
 
 def test_cancellation_is_not_executed_by_model(tmp_path):
     store=WorkStore(tmp_path/"work")
-    job=store.submit("owner_one","Make a useful report",["pdf"],"cancel_job_001")
+    job=store.submit("owner_one","Make a useful report",["pdf"],"cancel_job_001",[])
     agent=DirectedRuntime(store,[call("work.cancel",job_id=job["id"])])
     result=asyncio.run(agent.run("Cancel that report","owner_one"))
     assert store.get("owner_one",job["id"])["status"]=="queued"
@@ -103,7 +103,7 @@ def test_repeated_modifying_decisions_fail_closed(tmp_path):
 
 def test_provider_selected_read_only_tools_can_run_concurrently(tmp_path):
     store=WorkStore(tmp_path/"work")
-    job=store.submit("owner_one","Make a report",["pdf"],"read_job_001")
+    job=store.submit("owner_one","Make a report",["pdf"],"read_job_001",[])
     agent=DirectedRuntime(store,[{"calls":[
         {"name":"work.status","arguments":{"job_id":job["id"]}},
         {"name":"work.plan","arguments":{"job_id":job["id"]}},
