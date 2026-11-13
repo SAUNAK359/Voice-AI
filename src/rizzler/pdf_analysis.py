@@ -98,6 +98,7 @@ class PDFResearch:
     def _claim(self,owner,uid):
         token=secrets.token_hex(16)
         with self.store.db() as db:
+            db.execute("BEGIN IMMEDIATE")
             row=self._read(db,owner,uid)
             if row["status"]=="complete":return None
             if row["status"] not in ("queued","running","paused"):
