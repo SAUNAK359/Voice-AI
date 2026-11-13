@@ -1100,8 +1100,10 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 transcript = next((e['text'] for e in events if e['type'] == 'transcript'), '')
                 answer = next((e['text'] for e in reversed(events) if e['type'] == 'assistant_text'), '')
                 metrics = next((e['data'] for e in events if e['type'] == 'metrics'), {})
+                tool = next((e for e in reversed(events) if e['type'] == 'tool_result'), {})
                 return JSONResponse({'transcript': transcript, 'answer': answer,
                     'metrics': metrics, 'sample_rate': cfg.sample_rate,
+                    'job':tool.get('job'), 'approvals':tool.get('approvals',[]),
                     'audio_b64': base64.b64encode(samples).decode('ascii')})
         finally:
             if session.task is task:
