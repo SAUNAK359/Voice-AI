@@ -215,6 +215,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
 
     agentic=environ.get("RIZZLER_AGENTIC_ENABLED",
                        "1" if production else "0").strip().lower() in ("1","true","yes")
+    if production and not agentic:
+        raise ValueError("Production requires the model-driven unified agent runtime")
     if agentic:
         from .agent_runtime import AgentRuntime
         agent_runtime=AgentRuntime(work,cfg,memory,visual)
