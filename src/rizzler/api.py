@@ -124,6 +124,33 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             visual_scanner = None
         visual = VisualService(MediaStore(media_root,media_key,scanner=visual_scanner),
                                GeminiVision(cfg))
+    pdf_store = pdf_ingestor = pdf_research = None
+    pdf_tasks: set[asyncio.Task] = set()
+    if visual is not None:
+        from .pdf_documents import PDFStore, PDFIngestor
+        from .pdf_analysis import PDFResearch
+        scanner_file=None
+        if production:
+            from .upload_scan import scan_clamd_file
+            scanner_host=environ.get("RIZZLER_CLAMD_HOST","")
+            scanner_port=int(environ.get("RIZZLER_CLAMD_PORT","3310"))
+            scanner_file=lambda path: scan_clamd_file(path,scanner_host,scanner_port)
+        pdf_root=Path(environ.get("RIZZLER_PDF_ROOT") or (str(Path(media_root)/"pdfs")))
+        pdf_store=PDFStore(pdf_root,media_key,scanner_file=scanner_file)
+        pdf_ingestor=PDFIngestor(pdf_store,visual.provider)
+        pdf_research=PDFResearch(pdf_store,visual.provider)
+
+    def schedule_pdf(coro):
+        task=asyncio.create_task(coro,name="rizzler-full-pdf")
+        pdf_tasks.add(task)
+        def finished(done):
+            pdf_tasks.discard(done)
+            if not done.cancelled():
+                try:done.exception()
+                except Exception:pass
+        task.add_done_callback(finished)
+        return task
+
     engine = VoiceEngine(cfg, models, VoiceTools(work, cfg, memory, visual))
     @asynccontextmanager
     async def lifespan(app):
@@ -144,7 +171,16 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                     app.state.voice_prewarm = 'failed'
             app.state.voice_prewarm = 'running'
             prewarm_task = asyncio.create_task(prewarm(),name='voice-model-prewarm')
+        if pdf_store is not None:
+            for owner,uid in pdf_store.recoverable():
+                schedule_pdf(pdf_ingestor.run(owner,uid))
+            for owner,uid in pdf_research.recoverable():
+                schedule_pdf(pdf_research.run(owner,uid))
         yield
+        for task in tuple(pdf_tasks):
+            task.cancel()
+        if pdf_tasks:
+            await asyncio.gather(*tuple(pdf_tasks),return_exceptions=True)
         if prewarm_task and not prewarm_task.done():
             prewarm_task.cancel()
         if prewarm_task:
@@ -159,6 +195,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     app.state.work, app.state.identity = work, identity
     app.state.memory = memory
     app.state.visual = visual
+    app.state.pdf_store = pdf_store
+    app.state.pdf_ingestor = pdf_ingestor
+    app.state.pdf_research = pdf_research
     app.state.production = production
     app.add_exception_handler(AdmissionBusy, lambda request, exc: JSONResponse(
         status_code=429, content={'detail': 'Voice capacity busy; retry later'}))
@@ -236,6 +275,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         return {"mode":mode,"work_enabled":work is not None,
                 "encrypted_memory_enabled":memory is not None,
                 "multimodal_enabled":visual is not None,
+                "full_pdf_ingestion":pdf_store is not None,
                 "runtime":"native_v11"}
 
     @app.get('/api/voice/tools')
@@ -435,6 +475,173 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         except (OSError,RuntimeError,sqlite3.DatabaseError):
             raise HTTPException(status_code=503,detail="Private memory unavailable") from None
 
+
+
+    # Entire PDFs use resumable encrypted chunks; legacy visual attachments
+    # remain intentionally small-image/preview compatibility only.
+    @app.post('/api/pdf/documents',status_code=201)
+    async def pdf_create(request: Request):
+        owner=auth(request,True)
+        if pdf_store is None:
+            raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
+        body=bytearray()
+        async for part in request.stream():
+            body.extend(part)
+            if len(body)>1024:
+                raise HTTPException(status_code=413,detail="PDF metadata too large")
+        try:
+            meta=json.loads(body)
+            if not isinstance(meta,dict) or set(meta)!={"name"}:
+                raise ValueError("Invalid document metadata")
+            return await asyncio.to_thread(pdf_store.create,owner,meta["name"])
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=400,detail="Invalid PDF filename") from None
+
+    @app.get('/api/pdf/documents')
+    async def pdf_list(request: Request):
+        owner=auth(request,True)
+        return {"documents":await asyncio.to_thread(pdf_store.list,owner)
+                if pdf_store else []}
+
+    @app.put('/api/pdf/documents/{uid}/chunks/{seq}')
+    async def pdf_upload_chunk(request: Request,uid: str,seq: int):
+        owner=auth(request,True)
+        if pdf_store is None:
+            raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
+        from .pdf_documents import CHUNK_BYTES, DocumentNotFound,DocumentConflict
+        digest=request.headers.get("x-chunk-sha256","")
+        if len(digest)!=64:
+            raise HTTPException(status_code=400,detail="Chunk SHA-256 required")
+        content=bytearray()
+        async for part in request.stream():
+            content.extend(part)
+            if len(content)>CHUNK_BYTES:
+                raise HTTPException(status_code=413,detail="PDF upload chunk too large")
+        try:
+            return await asyncio.to_thread(pdf_store.append,
+                owner,uid,seq,bytes(content),digest)
+        except DocumentNotFound:
+            raise HTTPException(status_code=404,detail="PDF document unavailable") from None
+        except DocumentConflict:
+            raise HTTPException(status_code=409,detail="PDF chunk sequence conflict") from None
+        except ValueError:
+            raise HTTPException(status_code=400,detail="Invalid chunk or checksum") from None
+        except OSError:
+            raise HTTPException(status_code=507,detail="PDF storage capacity exhausted") from None
+
+    @app.post('/api/pdf/documents/{uid}/complete')
+    async def pdf_finalize(request: Request,uid: str):
+        owner=auth(request,True)
+        if pdf_store is None:
+            raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
+        from .pdf_documents import DocumentNotFound,DocumentConflict
+        from .upload_scan import ScanUnavailable
+        try:
+            result=await asyncio.to_thread(pdf_store.finalize,owner,uid)
+            if result["status"]=="queued":
+                schedule_pdf(pdf_ingestor.run(owner,uid))
+            return result
+        except DocumentNotFound:
+            raise HTTPException(status_code=404,detail="PDF document unavailable") from None
+        except DocumentConflict:
+            raise HTTPException(status_code=409,detail="PDF upload not complete") from None
+        except (ValueError,ScanUnavailable):
+            raise HTTPException(status_code=422,detail="PDF structure or malware validation failed") from None
+        except OSError:
+            raise HTTPException(status_code=507,detail="Insufficient PDF processing space") from None
+
+    @app.get('/api/pdf/documents/{uid}')
+    async def pdf_status(request: Request,uid: str):
+        owner=auth(request,True)
+        if pdf_store is None:
+            raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
+        from .pdf_documents import DocumentNotFound
+        try:return await asyncio.to_thread(pdf_store.status,owner,uid)
+        except (DocumentNotFound,ValueError):
+            raise HTTPException(status_code=404,detail="PDF document unavailable") from None
+
+    @app.post('/api/pdf/documents/{uid}/resume')
+    async def pdf_resume(request: Request,uid: str):
+        owner=auth(request,True)
+        if pdf_store is None:
+            raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
+        from .pdf_documents import DocumentNotFound,DocumentConflict
+        try:
+            status=await asyncio.to_thread(pdf_store.status,owner,uid)
+            if status["status"] not in ("paused","queued"):
+                raise DocumentConflict("PDF not ready for resumption")
+            schedule_pdf(pdf_ingestor.run(owner,uid))
+            return {"accepted":True,"document":status}
+        except DocumentNotFound:
+            raise HTTPException(status_code=404,detail="PDF document unavailable") from None
+        except (DocumentConflict,ValueError):
+            raise HTTPException(status_code=409,detail="PDF cannot be resumed yet") from None
+
+    @app.post('/api/pdf/documents/{uid}/research',status_code=202)
+    async def pdf_submit_research(request: Request,uid: str):
+        owner=auth(request,True)
+        if pdf_research is None:
+            raise HTTPException(status_code=409,detail="Full PDF research disabled")
+        body=bytearray()
+        async for part in request.stream():
+            body.extend(part)
+            if len(body)>6500:
+                raise HTTPException(status_code=413,detail="Research request too large")
+        try:
+            query=json.loads(body)
+            if (not isinstance(query,dict) or
+                set(query) not in ({"question"},{"question","mode"})):
+                raise ValueError("Invalid PDF question")
+            result=await asyncio.to_thread(pdf_research.submit,
+                owner,uid,query["question"],query.get("mode","full"))
+            schedule_pdf(pdf_research.run(owner,result["id"]))
+            return result
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=400,detail="Invalid PDF question") from None
+        except DocumentConflict:
+            raise HTTPException(status_code=409,detail="Complete PDF indexing required") from None
+        except DocumentNotFound:
+            raise HTTPException(status_code=404,detail="PDF document unavailable") from None
+
+    @app.get('/api/pdf/research/{run_id}')
+    async def pdf_research_status(request: Request,run_id: str):
+        owner=auth(request,True)
+        if pdf_research is None:
+            raise HTTPException(status_code=409,detail="Full PDF research disabled")
+        try:return await asyncio.to_thread(pdf_research.status,owner,run_id)
+        except (DocumentNotFound,ValueError):
+            raise HTTPException(status_code=404,detail="PDF research unavailable") from None
+
+    @app.post('/api/pdf/research/{run_id}/resume')
+    async def pdf_resume_research(request: Request,run_id: str):
+        owner=auth(request,True)
+        if pdf_research is None:
+            raise HTTPException(status_code=409,detail="Full PDF research disabled")
+        from .pdf_documents import DocumentConflict,DocumentNotFound
+        try:
+            status=await asyncio.to_thread(pdf_research.status,owner,run_id)
+            if status["status"] not in ("paused","queued"):
+                raise DocumentConflict("Analysis cannot be resumed")
+            schedule_pdf(pdf_research.run(owner,run_id))
+            return {"accepted":True,"research":status}
+        except DocumentNotFound:
+            raise HTTPException(status_code=404,detail="PDF research unavailable") from None
+        except (DocumentConflict,ValueError):
+            raise HTTPException(status_code=409,detail="PDF research cannot be resumed yet") from None
+
+    @app.delete('/api/pdf/documents/{uid}')
+    async def pdf_delete(request: Request,uid: str):
+        owner=auth(request,True)
+        if pdf_store is None:
+            raise HTTPException(status_code=409,detail="Full PDF ingestion disabled")
+        from .pdf_documents import DocumentConflict,DocumentNotFound
+        try:
+            deleted=await asyncio.to_thread(pdf_store.delete,owner,uid)
+            return {"deleted":deleted}
+        except (DocumentNotFound,ValueError):
+            raise HTTPException(status_code=404,detail="PDF document unavailable") from None
+        except DocumentConflict:
+            raise HTTPException(status_code=409,detail="PDF still being processed") from None
 
     @app.post('/api/visual/attachments', status_code=201)
     async def visual_upload(request: Request):
