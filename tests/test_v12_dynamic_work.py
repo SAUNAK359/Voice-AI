@@ -121,3 +121,29 @@ def test_demo_voice_and_work_api_require_identical_session(tmp_path,monkeypatch)
         assert client.get("/api/voice/jobs/"+jid,headers=owner).status_code==200
         assert client.get("/api/work/jobs/"+jid,headers=other).status_code==404
         assert client.get("/api/work/jobs/"+jid+"/plan",headers=owner).json()==pending()
+
+
+def test_agentic_schedule_replans_instead_of_replaying_stale_graph(tmp_path,monkeypatch):
+    import time
+    monkeypatch.setenv("RIZZLER_AGENTIC_ENABLED","1")
+    store=WorkStore(tmp_path/"work")
+    job=store.submit(OWNER,"Produce an approved daily briefing",
+                     ["answer","automation_plan"],"dynamic_schedule_001",[])
+    claim=store.claim("scheduler-worker")
+    selected=graph(("orchestrator",[]),("quality",["orchestrator"]))
+    store.install_dynamic_graph(OWNER,job["id"],"scheduler-worker",claim["fence"],selected)
+    async def composer(objective,summary):
+        return "# Daily briefing\n\nThis content is deliberately long enough to satisfy the independent content gate."
+    async def researcher(_):
+        raise AssertionError("Never run unplanned research")
+    asyncio.run(execute_specialists(store,claim,"scheduler-worker",composer,researcher))
+    assert store.get(OWNER,job["id"])["status"]=="completed"
+    proposal=store.list_proposals(OWNER)[0]
+    store.approve_proposal(OWNER,proposal["id"])
+    with store._tx() as db:
+        db.execute("UPDATE proposals SET next_run=? WHERE id=?",
+                   (time.time()-1,proposal["id"]))
+    created=store.schedule_due()
+    assert len(created)==1
+    assert store.job_plan(OWNER,created[0])==pending()
+    assert store.agent_steps(OWNER,created[0])==[]
