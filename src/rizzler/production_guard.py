@@ -9,7 +9,8 @@ cap is imposed.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from contextlib import contextmanager
 from functools import lru_cache
 import math
 import os
@@ -43,10 +44,15 @@ class BudgetLedger:
                 service TEXT NOT NULL, micro_usd INTEGER NOT NULL)""")
             conn.execute("CREATE INDEX IF NOT EXISTS reservations_day ON reservations(day)")
 
+    @contextmanager
     def _conn(self):
         conn=sqlite3.connect(self.path,timeout=15)
-        conn.execute("PRAGMA busy_timeout=15000")
-        return conn
+        try:
+            conn.execute("PRAGMA busy_timeout=15000")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     @staticmethod
     def day():
@@ -67,8 +73,7 @@ class BudgetLedger:
                          (date,service,self.request_cents))
             # Keep a small rolling retention; all rows are estimates.
             conn.execute("DELETE FROM reservations WHERE day<?",
-                         ((datetime.now(timezone.utc).date()
-                           - __import__("datetime").timedelta(days=35)).isoformat(),))
+                         ((datetime.now(timezone.utc).date() - timedelta(days=35)).isoformat(),))
 
     def snapshot(self):
         date=self.day()
