@@ -126,6 +126,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                                GeminiVision(cfg))
     pdf_store = pdf_ingestor = pdf_research = None
     pdf_tasks: set[asyncio.Task] = set()
+    pdf_active: set[tuple[str,str]] = set()
     if visual is not None:
         from .pdf_documents import PDFStore, PDFIngestor
         from .pdf_analysis import PDFResearch
@@ -140,11 +141,16 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         pdf_ingestor=PDFIngestor(pdf_store,visual.provider)
         pdf_research=PDFResearch(pdf_store,visual.provider)
 
-    def schedule_pdf(coro):
+    def schedule_pdf(coro,key):
+        if key in pdf_active:
+            coro.close()
+            return None
+        pdf_active.add(key)
         task=asyncio.create_task(coro,name="rizzler-full-pdf")
         pdf_tasks.add(task)
         def finished(done):
             pdf_tasks.discard(done)
+            pdf_active.discard(key)
             if not done.cancelled():
                 try:done.exception()
                 except Exception:pass
@@ -201,11 +207,11 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 while True:
                     try:
                         for owner,uid in await asyncio.to_thread(pdf_store.recoverable_validation):
-                            schedule_pdf(validate_then_index(owner,uid))
+                            schedule_pdf(validate_then_index(owner,uid),('validate',uid))
                         for owner,uid in await asyncio.to_thread(pdf_store.recoverable):
-                            schedule_pdf(pdf_ingestor.run(owner,uid))
+                            schedule_pdf(pdf_ingestor.run(owner,uid),('ingest',uid))
                         for owner,uid in await asyncio.to_thread(pdf_research.recoverable):
-                            schedule_pdf(pdf_research.run(owner,uid))
+                            schedule_pdf(pdf_research.run(owner,uid),('research',uid))
                     except Exception:
                         # Failure is visible through paused/queued status.
                         pass
@@ -577,9 +583,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         try:
             result=await asyncio.to_thread(pdf_store.request_finalize,owner,uid)
             if result["status"]=="validating":
-                schedule_pdf(validate_then_index(owner,uid))
+                schedule_pdf(validate_then_index(owner,uid),('validate',uid))
             elif result["status"]=="queued":
-                schedule_pdf(pdf_ingestor.run(owner,uid))
+                schedule_pdf(pdf_ingestor.run(owner,uid),('ingest',uid))
             return result
         except DocumentNotFound:
             raise HTTPException(status_code=404,detail="PDF document unavailable") from None
@@ -608,9 +614,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             status=await asyncio.to_thread(pdf_store.status,owner,uid)
             if status["status"]=="validation_failed":
                 status=await asyncio.to_thread(pdf_store.request_finalize,owner,uid)
-                schedule_pdf(validate_then_index(owner,uid))
+                schedule_pdf(validate_then_index(owner,uid),('validate',uid))
             elif status["status"] in ("paused","queued"):
-                schedule_pdf(pdf_ingestor.run(owner,uid))
+                schedule_pdf(pdf_ingestor.run(owner,uid),('ingest',uid))
             else:
                 raise DocumentConflict("PDF not ready for resumption")
             return {"accepted":True,"document":status}
@@ -637,7 +643,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 raise ValueError("Invalid PDF question")
             result=await asyncio.to_thread(pdf_research.submit,
                 owner,uid,query["question"],query.get("mode","full"))
-            schedule_pdf(pdf_research.run(owner,result["id"]))
+            schedule_pdf(pdf_research.run(owner,result["id"]),('research',result['id']))
             return result
         except (ValueError,TypeError):
             raise HTTPException(status_code=400,detail="Invalid PDF question") from None
@@ -666,7 +672,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             status=await asyncio.to_thread(pdf_research.status,owner,run_id)
             if status["status"] not in ("paused","queued"):
                 raise DocumentConflict("Analysis cannot be resumed")
-            schedule_pdf(pdf_research.run(owner,run_id))
+            schedule_pdf(pdf_research.run(owner,run_id),('research',run_id))
             return {"accepted":True,"research":status}
         except DocumentNotFound:
             raise HTTPException(status_code=404,detail="PDF research unavailable") from None
