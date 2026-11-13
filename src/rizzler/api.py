@@ -127,6 +127,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     pdf_store = pdf_ingestor = pdf_research = None
     pdf_tasks: set[asyncio.Task] = set()
     pdf_active: set[tuple[str,str]] = set()
+    max_pdf_tasks=int(environ.get("RIZZLER_PDF_MAX_ACTIVE","2"))
+    if not 1 <= max_pdf_tasks <= 8:
+        raise ValueError("RIZZLER_PDF_MAX_ACTIVE must be 1..8")
     if visual is not None:
         from .pdf_documents import PDFStore, PDFIngestor
         from .pdf_analysis import PDFResearch
@@ -142,7 +145,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         pdf_research=PDFResearch(pdf_store,visual.provider)
 
     def schedule_pdf(coro,key):
-        if key in pdf_active:
+        if key in pdf_active or len(pdf_active)>=max_pdf_tasks:
+            # Leave the durable queued/expired task to the recovery watchdog;
+            # do not allocate an unbounded in-memory waiting coroutine.
             coro.close()
             return None
         pdf_active.add(key)
@@ -301,7 +306,14 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         expected = "Bearer " + ops_token
         if not ops_token or not secrets.compare_digest(presented, expected):
             raise HTTPException(status_code=401, detail="Unauthorized") from None
-        return operations.snapshot()
+        data=operations.snapshot()
+        data["pdf_scheduler"]={"active":len(pdf_active),"limit":max_pdf_tasks,
+                              "scope":"process-local; persistent leases enforce cross-process exclusion"}
+        from .production_guard import budget_from_environment
+        ledger=budget_from_environment()
+        data["ai_admission"]=ledger.snapshot() if ledger else {
+            "enabled":False,"warning":"No daily AI spending reservation configured; Google billing applies"}
+        return data
 
     @app.get('/ready')
     def ready():
