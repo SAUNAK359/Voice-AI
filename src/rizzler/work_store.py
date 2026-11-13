@@ -90,6 +90,13 @@ class WorkStore:
               FOREIGN KEY(child_id) REFERENCES jobs(id),
               FOREIGN KEY(parent_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS lineage_parent ON job_lineage(parent_id);
+            CREATE TABLE IF NOT EXISTS agent_approvals(
+              id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              action TEXT NOT NULL, arguments TEXT NOT NULL,
+              status TEXT NOT NULL, created REAL NOT NULL,
+              expires REAL NOT NULL, result TEXT NOT NULL DEFAULT '');
+            CREATE INDEX IF NOT EXISTS agent_approvals_owner
+              ON agent_approvals(owner,status,expires);
             """)
 
     @contextmanager
@@ -261,6 +268,71 @@ class WorkStore:
                              VALUES(?,?,?,?)""",(new["id"],jid,operation,time.time()))
                 self._event(c,new["id"],"queued","Created from owned "+operation+" job")
         return new
+
+    def prepare_agent_action(self, owner: str, action: str, arguments: dict) -> dict:
+        """Prepare but never execute a model-proposed mutation."""
+        if action not in ("work.cancel", "work.revise", "work.retry"):
+            raise PermissionError("Unsupported action")
+        if not isinstance(arguments, dict) or not isinstance(arguments.get("job_id"), str):
+            raise ValueError("Missing owned job")
+        jid=arguments["job_id"]
+        self.get(owner, jid)
+        if action == "work.revise":
+            from .contracts import Handoff
+            Handoff(session_id=owner,objective=arguments.get("objective",""),
+                    deliverables=tuple(arguments.get("deliverables",[]))).validate()
+        if action == "work.retry" and self.get(owner,jid)["status"] not in ("failed","cancelled"):
+            raise Conflict("Only failed or cancelled work can be retried")
+        if action != "work.revise" and set(arguments)!={"job_id"}:
+            raise ValueError("Unexpected mutation arguments")
+        if action == "work.revise" and set(arguments)!={"job_id","objective","deliverables"}:
+            raise ValueError("Invalid revision arguments")
+        now=time.time()
+        key=secrets.token_hex(16)
+        with self._tx() as c:
+            c.execute("DELETE FROM agent_approvals WHERE expires<? AND status='pending'",(now,))
+            count=c.execute("SELECT COUNT(*) FROM agent_approvals WHERE owner=? AND status='pending'",
+                            (owner,)).fetchone()[0]
+            if count>=16:raise Conflict("Too many unconfirmed actions")
+            c.execute("""INSERT INTO agent_approvals(id,owner,action,arguments,status,created,expires)
+                         VALUES(?,?,?,?,'pending',?,?)""",
+                      (key,owner,action,json.dumps(arguments,sort_keys=True),now,now+600))
+        return {"id":key,"action":action,"job_id":jid,"expires_at":now+600}
+
+    def confirm_agent_action(self, owner: str, approval_id: str) -> dict:
+        """Separate authenticated confirmation; crash-safe retry via action idempotency."""
+        if not isinstance(approval_id,str) or not re.fullmatch(r"[a-f0-9]{32}",approval_id):
+            raise ValueError("Invalid action identifier")
+        with self._tx() as c:
+            row=c.execute("SELECT * FROM agent_approvals WHERE id=? AND owner=?",
+                          (approval_id,owner)).fetchone()
+            if row is None:raise Missing("Action confirmation not found")
+            if row["status"]=="completed":
+                return json.loads(row["result"])
+            if row["status"]=="pending":
+                if row["expires"]<time.time():
+                    raise Conflict("Action approval expired")
+                c.execute("UPDATE agent_approvals SET status='executing' WHERE id=?",
+                          (approval_id,))
+            elif row["status"]!="executing":
+                raise Conflict("Action unavailable")
+            action,params=row["action"],json.loads(row["arguments"])
+        # On process crash, a repeated explicit confirmation finishes the same
+        # action. Revision and retry reuse the approval ID as idempotency key.
+        if action=="work.cancel":
+            result=self.cancel(owner,params["job_id"])
+        elif action=="work.retry":
+            result=self.derive(owner,params["job_id"],None,None,
+                               "agent_"+approval_id,"retry")
+        elif action=="work.revise":
+            result=self.derive(owner,params["job_id"],params["objective"],
+                               params["deliverables"],"agent_"+approval_id,"revise")
+        else:
+            raise PermissionError("Unknown saved action")
+        with self._tx() as c:
+            c.execute("""UPDATE agent_approvals SET status='completed',result=?
+                         WHERE id=? AND owner=?""",(json.dumps(result),approval_id,owner))
+        return result
 
     def events(self, owner: str, jid: str, after: int = 0):
         self.get(owner, jid)
