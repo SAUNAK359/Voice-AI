@@ -209,7 +209,7 @@ def test_api_complete_upload_status_and_full_question(tmp_path,monkeypatch):
                 content=part)
             assert uploaded.status_code==200,uploaded.text
         completed=client.post(f"/api/pdf/documents/{uid}/complete",headers=hdr)
-        assert completed.status_code==200,completed.text
+        assert completed.status_code==202,completed.text
         limit=time.monotonic()+15
         while time.monotonic()<limit:
             snapshot=client.get("/api/pdf/documents/"+uid,headers=hdr).json()
