@@ -160,6 +160,8 @@ class GeminiLLM:
                         await self.gate.reserve(estimate, self.settings.gemini_quota_wait_seconds)
                         attempt += 1
                         saw_text = False
+                        from .production_guard import reserve_provider_call
+                        reserve_provider_call('voice')
                         async for chunk in self._chunks(model, contents, plan):
                             metadata = getattr(chunk, 'usage_metadata', None)
                             if metadata is not None:
