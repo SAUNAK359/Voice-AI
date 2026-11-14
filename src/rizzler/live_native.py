@@ -83,7 +83,7 @@ def register_native_live(app,settings,sessions,identity,work):
                 coverage=args.get("source_coverage")
                 if coverage not in ("targeted","complete"):
                     return {"error":"Choose targeted retrieval or complete-source analysis"}
-                idem=hashlib.sha256((owner+"|"+str(fc.id)+"|"+objective).encode()).hexdigest()[:48]
+                idem=hashlib.sha256((owner+"|"+str(fc.id or secrets.token_hex(12))+"|"+objective).encode()).hexdigest()[:48]
                 job=await asyncio.to_thread(work.submit,owner,objective,deliverables,idem,[],
                                             list(session.sources),coverage)
                 await ws.send_json({"type":"job","job":job})
