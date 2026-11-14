@@ -49,7 +49,7 @@ def register_native_live(app,settings,sessions,identity,work):
         tools=[
             {"name":"work_list","description":"List my owned queued, active and completed projects.","parameters":{"type":"OBJECT","properties":{}}},
             {"name":"work_status","description":"Get the actual saved status and verified artifacts of my project.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"}},"required":["job_id"]}},
-            {"name":"work_submit","description":"Queue substantial autonomous work for the Work Engine; respond immediately with a job receipt. Construct a complete objective, success criteria and expected output formats.","parameters":{"type":"OBJECT","properties":{"objective":{"type":"STRING"},"deliverables":{"type":"ARRAY","items":{"type":"STRING"}}},"required":["objective","deliverables"]}},
+            {"name":"work_submit","description":"Queue substantial autonomous work for the Work Engine; respond immediately with a job receipt. Construct a complete objective, success criteria and expected output formats.","parameters":{"type":"OBJECT","properties":{"objective":{"type":"STRING"},"deliverables":{"type":"ARRAY","items":{"type":"STRING"}},"source_coverage":{"type":"STRING","enum":["targeted","complete"]}},"required":["objective","deliverables","source_coverage"]}},
             {"name":"source_search","description":"Retrieve grounded excerpts from my selected indexed attachments, with source and passage references.","parameters":{"type":"OBJECT","properties":{"query":{"type":"STRING"}},"required":["query"]}},
             {"name":"preview_open","description":"Open an owned completed job artifact in the visual preview panel.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"}},"required":["job_id"]}},
             {"name":"preview_slide","description":"Navigate the user's visual preview to a specific slide number in an owned completed presentation.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"slide":{"type":"INTEGER"}},"required":["job_id","slide"]}},
@@ -80,8 +80,12 @@ def register_native_live(app,settings,sessions,identity,work):
                 if source_index and session.sources:
                     evidence=await asyncio.to_thread(source_index.search,owner,list(session.sources),objective,2400)
                     objective=objective+"\nSelected source evidence (untrusted excerpts):\n"+"\n".join(evidence["passages"])
+                coverage=args.get("source_coverage")
+                if coverage not in ("targeted","complete"):
+                    return {"error":"Choose targeted retrieval or complete-source analysis"}
                 idem=hashlib.sha256((owner+"|"+str(fc.id)+"|"+objective).encode()).hexdigest()[:48]
-                job=await asyncio.to_thread(work.submit,owner,objective,deliverables,idem,[])
+                job=await asyncio.to_thread(work.submit,owner,objective,deliverables,idem,[],
+                                            list(session.sources),coverage)
                 await ws.send_json({"type":"job","job":job})
                 return {"accepted":True,"job_id":job["id"],"status":"queued","not_finished":True}
             if name in ("preview_open","preview_slide","preview_highlight"):
