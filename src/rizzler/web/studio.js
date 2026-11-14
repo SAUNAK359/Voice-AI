@@ -116,17 +116,24 @@ async function refresh(prefer){
 async function uploadFile(file){
  if(!state.auth)throw Error('Connect Rizzler first.');
  const name=file.name,ext=name.split('.').pop().toLowerCase();
- if(ext==='pdf'){
-  report('PDF full-document upload is available in Rizzler, but this workspace cannot yet link indexed PDF content to an autonomous Work job. No analysis will be claimed.');
-  throw Error('Full-document Work integration for PDF is not ready yet.');
+ if(!['txt','md','json','csv','xlsx','pdf','docx','pptx','db','sqlite','sqlite3'].includes(ext))
+   throw Error('Unsupported source type: '+ext);
+ if(file.size>8_000_000)throw Error('This source exceeds the 8 MB indexed-Work limit. Large PDF indexing is available separately; full Work linkage is not yet supported.');
+ const response=await api('/api/work/sources',{method:'POST',headers:{'x-file-name':name,'content-type':'application/octet-stream'},body:file});
+ const item=await response.json();
+ state.sources.push({name,id:item.id,kind:ext});
+ state.sources=state.sources.slice(-8);
+ // One select call atomically updates the source set for both text and voice.
+ const sel=await api('/api/source/selection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({source_ids:state.sources.map(x=>x.id)})});
+ if(!sel.ok)throw Error('Cannot select source');
+ if(['csv','xlsx'].includes(ext)){
+  const data=await api('/api/voice/uploads',{method:'POST',headers:{'x-file-name':name,'content-type':'application/octet-stream'},body:file});
+  await data.json();
  }
- if(!['csv','xlsx'].includes(ext)){
-  throw Error('This Work engine currently validates CSV/XLSX only. '+ext.toUpperCase()+' attachment processing is not yet implemented.');
- }
- if(file.size>8_000_000)throw Error('This dataset exceeds the current 8 MB upload limit.');
- const r=await api('/api/voice/uploads',{method:'POST',headers:{'x-file-name':name,'content-type':'application/octet-stream'},body:file});
- const info=await r.json();state.sources=[{name,id:info.id||null,kind:'dataset'}];renderSources();report('Attached '+name+'. Ask Rizzler to analyze it.');
+ renderSources();
+ report(name+' indexed: '+item.passages+' searchable passages. Ready for Rizzler.');
 }
+
 function renderSources(){
  const panel=$('workspace-attachment-status');panel.replaceChildren();
  for(const source of state.sources){
@@ -151,7 +158,7 @@ $('workspace-files')?.addEventListener('change',async e=>{
  input.value='';
 });
 $('attach-link')?.addEventListener('click',()=>{$('link-entry').hidden=!$('link-entry').hidden});
-$('link-entry')?.addEventListener('submit',e=>{
+$('link-add')?.addEventListener('click',e=>{
  e.preventDefault();
  try{const url=new URL($('link-input').value);
  if(url.protocol!=='https:'||url.username||url.password)throw Error('Only public HTTPS links are permitted.');
