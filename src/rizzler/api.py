@@ -550,6 +550,27 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             session.uploads[:]=[receipt['id']]
             return {'name':name,'size':receipt.get('size'),'ready':True}
 
+    @app.post('/api/source/selection')
+    async def choose_sources(request: Request):
+        sid=auth(request,True)
+        if work is None:raise HTTPException(status_code=409,detail="Work sources unavailable")
+        from .source_index import SourceIndex
+        raw=await request.body()
+        if len(raw)>1000:raise HTTPException(status_code=413,detail="Selection too large")
+        try:
+            selection=json.loads(raw)
+            ids=selection["source_ids"]
+            if set(selection)!={"source_ids"} or not isinstance(ids,list) or len(ids)>8 or len(set(ids))!=len(ids):
+                raise ValueError()
+            owned={r["id"] for r in await asyncio.to_thread(SourceIndex(work.root).list,sid)}
+            if not set(ids).issubset(owned):raise PermissionError()
+        except (ValueError,TypeError,KeyError,UnicodeDecodeError):
+            raise HTTPException(status_code=400,detail="Invalid source selection") from None
+        except PermissionError:
+            raise HTTPException(status_code=404,detail="Source unavailable") from None
+        sessions.get(sid).sources[:]=ids
+        return {"source_ids":ids,"selected":len(ids)}
+
     @app.post('/api/agent/turn')
     async def agent_text_turn(request: Request):
         owner=auth(request,True)
@@ -574,7 +595,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             response=await agent_runtime.run(body['text'],owner,
                   history=list(session.history),uploads=list(session.uploads),
                   visuals=list(session.visuals),nonce=session.nonce,
-                  sequence=session.generation)
+                  sequence=session.generation,source_ids=list(session.sources))
             session.history=(session.history + [
                 {'role':'user','content':body['text']},
                 {'role':'assistant','content':response['text']}])[-8:]
@@ -1083,7 +1104,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                                                 owner=sid, sequence=generation,
                                                 uploads=list(session.uploads), nonce=session.nonce,
                                                 visuals=list(session.visuals),
-                                                pdf_document=session.pdf_document):
+                                                pdf_document=session.pdf_document,sources=list(session.sources)):
                     if generation != session.generation:
                         raise HTTPException(status_code=409, detail='Turn superseded')
                     if event['type'] == 'audio':
@@ -1203,7 +1224,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                                                          uploads=list(session.uploads),
                                                          nonce=session.nonce,
                                                          visuals=list(session.visuals),
-                                                         pdf_document=session.pdf_document):
+                                                         pdf_document=session.pdf_document,sources=list(session.sources)):
                             if seq != session.generation:
                                 return
                             if event['type'] == 'audio':
