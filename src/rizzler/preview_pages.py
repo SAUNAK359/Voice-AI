@@ -81,3 +81,21 @@ def render_page(root,owner,path,sha,kind,page):
                          colorspace=fitz.csRGB,alpha=False)
         if pix.width*pix.height>8_000_000:raise ValueError("Rendered page too large")
         return pix.tobytes("png")
+
+def locate_text(root,owner,path,sha,kind,phrase):
+    """Locate actual document words so Live can visually point to evidence."""
+    if not isinstance(phrase,str) or not 2<=len(phrase.strip())<=180:
+        raise ValueError("Invalid text selection")
+    import fitz
+    pdf=source_pdf(root,owner,path,sha,kind)
+    with fitz.open(pdf) as doc:
+        if doc.page_count>MAX_PAGES:raise ValueError("Searchable preview exceeds page limit")
+        for i,page in enumerate(doc):
+            rectangles=page.search_for(phrase,quads=False)
+            if not rectangles:continue
+            box=rectangles[0]
+            if page.rect.width<=0 or page.rect.height<=0:raise ValueError("Invalid page geometry")
+            return {"page":i+1,"x":box.x0/page.rect.width,"y":box.y0/page.rect.height,
+                    "width":box.width/page.rect.width,"height":box.height/page.rect.height,
+                    "matched":True}
+    return {"matched":False}
