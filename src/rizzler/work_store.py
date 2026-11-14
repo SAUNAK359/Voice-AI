@@ -418,9 +418,14 @@ class WorkStore:
         now = time.time()
         with self._tx() as c:
             while True:
-                row = c.execute("""SELECT * FROM jobs WHERE status='queued' OR
-                    (status='running' AND lease_until < ?) ORDER BY created LIMIT 1""",
-                    (now,)).fetchone()
+                row = c.execute("""SELECT j.* FROM jobs j WHERE
+                    (j.status='queued' OR (j.status='running' AND j.lease_until < ?))
+                    AND NOT EXISTS (
+                        SELECT 1 FROM jobs active
+                        WHERE active.owner=j.owner AND active.id<>j.id
+                          AND active.status='running' AND active.lease_until>=?
+                    )
+                    ORDER BY j.created LIMIT 1""",(now,now)).fetchone()
                 if row is None:
                     return None
                 jid = row["id"]
