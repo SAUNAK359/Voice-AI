@@ -74,6 +74,33 @@ class QueueIsolationTests(unittest.TestCase):
             self.assertEqual(store.get("owner_one",second["id"])["status"],"queued")
             self.assertIsNone(store.claim("worker_C",lease_seconds=60))
 
+class VoicePreviewAuthorizationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_owned_artifacts_only(self):
+        from rizzler.agent_runtime import AgentRuntime, discover
+        from rizzler.work_store import Missing
+        class Stub:
+            root=None
+            def get(self,owner,jid):
+                if owner!="owner_a" or jid!="owned1234":raise Missing("Unknown project")
+                return {"status":"completed"}
+            def artifacts(self,owner,jid):
+                return [{"id":"file1234","kind":"pptx","name":"slides.pptx"}]
+        # The stub has no real filesystem, so bypass SourceIndex construction.
+        agent=AgentRuntime(None,None)
+        agent.store=Stub()
+        tools=discover(agent.store)
+        self.assertIn("preview.slide",tools)
+        call={"name":"preview.slide","arguments":{"job_id":"owned1234","slide":"2"}}
+        result=await agent.execute(call,"owner_a","", "",1,0,[],[],[])
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["ui_action"]["slide"],2)
+        with self.assertRaises(Missing):
+            await agent.execute(call,"owner_b","", "",1,0,[],[],[])
+        with self.assertRaises(ValueError):
+            await agent.execute({"name":"preview.slide",
+                "arguments":{"job_id":"owned1234","slide":"not-a-number"}},
+                "owner_a","", "",1,0,[],[],[])
+
 class StudioContractTests(unittest.TestCase):
     def test_desktop_layout_and_attachment_control_present(self):
         root=Path(__file__).resolve().parents[1]/"src"/"rizzler"/"web"
