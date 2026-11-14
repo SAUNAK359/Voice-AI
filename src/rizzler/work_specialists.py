@@ -204,7 +204,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         unexpected = sorted(receipts.keys() - expected)
         from .work_quality import inspect_artifact
         from .work_visual import quality_mode
-        strict = quality_mode() == "strict"
+        strict = quality_mode() != "structural"
         detailed_qa = {}
         bundle = {receipt.name: receipt for receipt in receipts.values() if receipt.kind != "zip"}
         for receipt in receipts.values():
@@ -222,6 +222,13 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 detailed_qa[receipt.kind] = preflight["quality"]
             else:
                 detailed_qa[receipt.kind] = structural_qa
+            if quality_mode()=="agentic" and receipt.kind in ("pptx","docx","xlsx","pdf"):
+                from .visual_agentic_qa import review
+                verdict=await review(store.root,owner,checkpoint / receipt.name,
+                                     receipt.kind,receipt.sha256,payload["objective"])
+                detailed_qa[receipt.kind]["agentic_visual_review"]=verdict
+                if not verdict["passed"]:
+                    raise ValueError("Rendered artifact failed independent multimodal review")
             verified = verify_artifact(checkpoint / receipt.name, receipt.kind)
             if verified.sha256 != receipt.sha256 or not verified.verified:
                 raise ValueError("Final quality gate failed structural receipt")
@@ -247,7 +254,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
     inspections = {}
     from .work_quality import inspect_artifact
     from .work_visual import quality_mode
-    strict = quality_mode() == "strict"
+    strict = quality_mode() != "structural"
     # One independent format-specific renderer, reusing the existing vetted
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
