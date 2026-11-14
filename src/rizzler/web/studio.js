@@ -1,7 +1,7 @@
 /* Rizzler V13: owner-scoped project canvas. Status is read from persisted Work events, not estimated. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-const state={auth:null,selected:null,artifact:null,jobs:[],busy:false,lastCompleted:new Set(),sources:[],link:null};
+const state={auth:null,selected:null,artifact:null,jobs:[],busy:false,lastCompleted:new Set(),sources:[],visualFiles:[],link:null};
 const headers=()=>!state.auth?{}:state.auth.production?{'x-csrf-token':decodeURIComponent((document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))||'').split('=').slice(1).join('=')||'')}:{'x-rizzler-key':state.auth.key,'x-session-id':state.auth.sessionId};
 function report(msg){$('studio-feedback').textContent=msg;}
 async function api(path,options={}){
@@ -157,6 +157,17 @@ async function refresh(prefer){
 async function uploadFile(file){
  if(!state.auth)throw Error('Connect Rizzler first.');
  const name=file.name,ext=name.split('.').pop().toLowerCase();
+ if(['png','jpg','jpeg','webp'].includes(ext)){
+  if(file.size>8_000_000)throw Error('Image attachment exceeds the 8 MB limit.');
+  const res=await api('/api/visual/attachments',{method:'POST',
+    headers:{'x-file-name':name,'content-type':'application/octet-stream'},body:file});
+  const record=await res.json();
+  state.visualFiles.push({name:record.name,id:record.id});
+  state.visualFiles=state.visualFiles.slice(-4);
+  renderSources();
+  report('Image attached. Rizzler can discuss this visual; image-to-Work handoff is not yet supported.');
+  return;
+ }
  if(!['txt','md','json','csv','xlsx','pdf','docx','pptx','db','sqlite','sqlite3'].includes(ext))
    throw Error('Unsupported source type: '+ext);
  if(file.size>8_000_000)throw Error('This source exceeds the 8 MB indexed-Work limit. Large PDF indexing is available separately; full Work linkage is not yet supported.');
@@ -177,7 +188,7 @@ async function uploadFile(file){
 
 function renderSources(){
  const panel=$('workspace-attachment-status');panel.replaceChildren();
- for(const source of state.sources){
+ for(const source of [...state.sources,...state.visualFiles]){
   const el=document.createElement('span');el.className='workspace-chip';el.textContent=source.name;
   panel.append(el);
  }
