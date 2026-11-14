@@ -120,6 +120,7 @@ class SourceIndex:
         self.root=Path(root).resolve()/"source_index";self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
         self.db=self.root/"sources.sqlite3"
         with sqlite3.connect(self.db) as db:
+            had_fts=bool(db.execute("SELECT 1 FROM sqlite_master WHERE name='passage_fts'").fetchone())
             db.executescript("""CREATE TABLE IF NOT EXISTS sources(
                 id TEXT PRIMARY KEY,owner TEXT NOT NULL,name TEXT NOT NULL,
                 sha256 TEXT NOT NULL,bytes INT NOT NULL,kind TEXT NOT NULL,
@@ -136,7 +137,7 @@ class SourceIndex:
                 CREATE TRIGGER IF NOT EXISTS passage_delete AFTER DELETE ON chunks BEGIN
                     INSERT INTO passage_fts(passage_fts,rowid,body) VALUES('delete',old.rowid,old.body);
                 END;""")
-            if db.execute("SELECT count(*) FROM passage_fts").fetchone()[0]==0 and db.execute(
+            if not had_fts and db.execute(
                 "SELECT count(*) FROM chunks").fetchone()[0]>0:
                 db.execute("INSERT INTO passage_fts(passage_fts) VALUES('rebuild')")
     def register(self,owner,name,data,source_url=None):
