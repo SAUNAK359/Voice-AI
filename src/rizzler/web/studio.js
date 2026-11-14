@@ -163,32 +163,62 @@ async function uploadFile(file){
  if(!state.auth)throw Error('Connect Rizzler first.');
  const name=file.name,ext=name.split('.').pop().toLowerCase();
  if(['png','jpg','jpeg','webp'].includes(ext)){
-  if(file.size>8_000_000)throw Error('Image attachment exceeds the 8 MB limit.');
+  if(file.size>8_000_000)throw Error('Image exceeds the current 8 MB visual attachment limit.');
   const res=await api('/api/visual/attachments',{method:'POST',
     headers:{'x-file-name':name,'content-type':'application/octet-stream'},body:file});
-  const record=await res.json();
-  state.visualFiles.push({name:record.name,id:record.id});
-  state.visualFiles=state.visualFiles.slice(-4);
-  renderSources();
-  report('Image attached. Rizzler can discuss this visual; image-to-Work handoff is not yet supported.');
-  return;
+  const record=await res.json();state.visualFiles=[...state.visualFiles,{name:record.name,id:record.id}].slice(-4);
+  renderSources();report('Image attached to the private Live session.');return;
  }
  if(!['txt','md','json','csv','xlsx','pdf','docx','pptx','db','sqlite','sqlite3'].includes(ext))
-   throw Error('Unsupported source type: '+ext);
- if(file.size>8_000_000)throw Error('This source exceeds the 8 MB indexed-Work limit. Large PDF indexing is available separately; full Work linkage is not yet supported.');
- const response=await api('/api/work/sources',{method:'POST',headers:{'x-file-name':name,'content-type':'application/octet-stream'},body:file});
- const item=await response.json();
- state.sources.push({name,id:item.id,kind:ext});
- state.sources=state.sources.slice(-8);
- // One select call atomically updates the source set for both text and voice.
- const sel=await api('/api/source/selection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({source_ids:state.sources.map(x=>x.id)})});
- if(!sel.ok)throw Error('Cannot select source');
- if(['csv','xlsx'].includes(ext)){
-  const data=await api('/api/voice/uploads',{method:'POST',headers:{'x-file-name':name,'content-type':'application/octet-stream'},body:file});
-  await data.json();
+  throw Error('Unsupported document type: '+ext);
+ if(!file.size||file.size>200_000_000)throw Error('Sources must be between 1 byte and 200 MB.');
+ let item;
+ if(file.size<=8_000_000){
+  item=await api('/api/work/sources',{method:'POST',headers:{
+   'x-file-name':name,'content-type':'application/octet-stream'},body:file}).then(r=>r.json());
+ }else{
+  if(!crypto?.subtle)throw Error('HTTPS is required for integrity-checked large uploads.');
+  const transfer=await api('/api/work/sources/transfers',{method:'POST',
+   headers:{'content-type':'application/json'},
+   body:JSON.stringify({name,bytes:file.size,sha256:''})}).then(r=>r.json());
+  let offset=transfer.offset||0;
+  const chunkSize=transfer.chunk_size;
+  while(offset<file.size){
+   const buf=await file.slice(offset,Math.min(offset+chunkSize,file.size)).arrayBuffer();
+   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buf)))
+      .map(v=>v.toString(16).padStart(2,'0')).join('');
+   let result;
+   for(let attempt=0;attempt<3;attempt++){
+    try{
+     result=await api('/api/work/sources/transfers/'+encodeURIComponent(transfer.id)+'/chunks',{
+      method:'PUT',headers:{'x-chunk-offset':String(offset),'x-chunk-sha256':digest,
+       'content-type':'application/octet-stream'},body:buf}).then(r=>r.json());
+     break;
+    }catch(error){
+     if(attempt===2)throw error;
+     const position=await api('/api/work/sources/transfers/'+encodeURIComponent(transfer.id)).then(r=>r.json());
+     if(position.offset>offset){result={offset:position.offset};break;}
+    }
+   }
+   offset=result.offset;
+   report('Uploading '+name+' — '+Math.round(100*offset/file.size)+'%');
+  }
+  report('Validating and indexing '+name+'; large files may take longer…');
+  item=await api('/api/work/sources/transfers/'+encodeURIComponent(transfer.id)+'/complete',
+    {method:'POST'}).then(r=>r.json());
+ }
+ state.sources=[...state.sources,{name,id:item.id,kind:ext}].slice(-8);
+ await api('/api/source/selection',{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify({source_ids:state.sources.map(x=>x.id)})});
+ // The legacy tabular specialist remains limited to small datasets. The full
+ // source index is available to Live and to source-grounded Work objectives.
+ if(['csv','xlsx'].includes(ext)&&file.size<=8_000_000){
+  await api('/api/voice/uploads',{method:'POST',headers:{
+   'x-file-name':name,'content-type':'application/octet-stream'},body:file});
  }
  renderSources();
- report(name+' indexed: '+item.passages+' searchable passages. Ready for Rizzler.');
+ const coverage=item.metadata?.coverage||'bounded indexed passages';
+ report(name+' indexed: '+item.passages+' passages ('+coverage+'). Ready for Rizzler.');
 }
 
 function renderSources(){
