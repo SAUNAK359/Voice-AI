@@ -62,7 +62,7 @@ class CorpusWorkTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             store=WorkStore(root)
             source=SourceIndex(root).register("owner","body.md",
-                      ("Inventories are evaluated on real input rows.\n"*200).encode())
+                      ("Inventories are evaluated on real input rows.\n"*2000).encode())
             result=asyncio.run(analyze(store,"owner","inventory",[source["id"]],"targeted"))
             self.assertEqual(result["coverage"],"retrieved_excerpts_only")
             self.assertLess(result["passages_examined"],result["passages_total"])
