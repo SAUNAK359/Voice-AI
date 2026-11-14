@@ -59,6 +59,27 @@ async function inspect(id){
   }
   if(state.artifact&&!j.artifacts.some(f=>f.id===state.artifact.id))state.artifact=null;
   if(!state.artifact)await showArtifact(j.artifacts[0]);
+  try{
+   const history=await api('/api/work/jobs/'+encodeURIComponent(id)+'/versions').then(r=>r.json());
+   for(const version of history.versions||[]){
+    for(const kind of version.formats||[]){
+     const button=document.createElement('button');
+     button.type='button';button.textContent='Previous v'+version.version+' · '+kind.toUpperCase();
+     button.title='Download the previous verified source artifact before Gemini repair';
+     button.addEventListener('click',async()=>{
+      try{
+       const response=await api('/api/work/jobs/'+encodeURIComponent(id)+'/versions/'+
+          version.revision+'/'+encodeURIComponent(kind));
+       const blob=await response.blob(),url=URL.createObjectURL(blob);
+       const link=document.createElement('a');link.href=url;
+       link.download='rizzler-previous-v'+version.version+'.'+kind;link.click();
+       setTimeout(()=>URL.revokeObjectURL(url),25000);
+      }catch(err){report('Previous revision unavailable: '+err.message)}
+     });
+     list.append(button);
+    }
+   }
+  }catch(e){report('Artifact revision history unavailable')}
  }else{
   $('studio-artifact-toolbar').hidden=true;
   if(job.status!=='completed'){$('studio-preview').replaceChildren();const p=document.createElement('p');p.className='studio-placeholder';p.textContent=job.status==='queued'?'Your project is waiting in the queue. The preview opens after verification.':'Rizzler is preparing your artifact. Verified output will appear here.';$('studio-preview').append(p)}
