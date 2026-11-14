@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3346,
-      "git_blob_sha1": "1471ca718c0ae589045cad72fb7f7f100cd3d295"
+      "bytes": 3399,
+      "git_blob_sha1": "321c29c15406d42e3cc3caa6f50e79cb08a67353"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -214,8 +214,8 @@
     },
     {
       "path": "Dockerfile",
-      "bytes": 869,
-      "git_blob_sha1": "82063cc54ef5646e9f80c3dd3f4eeb2ebdcd017e"
+      "bytes": 897,
+      "git_blob_sha1": "f64df69c2b7141c84500bad99fc1150418adf71c"
     },
     {
       "path": "docs/api.md",
@@ -366,6 +366,11 @@
       "path": "docs/V13_QUALIFICATION.md",
       "bytes": 5565,
       "git_blob_sha1": "4562ad26ad2bd9cedad9f36c2e20070043f6b364"
+    },
+    {
+      "path": "docs/V14_RELEASE_GATES.md",
+      "bytes": 5122,
+      "git_blob_sha1": "cada89da432499a89ab4b9d8bf0d78e521b24a3d"
     },
     {
       "path": "docs/VOICE_SUPERVISOR_V10.md",
@@ -574,8 +579,8 @@
     },
     {
       "path": "src/rizzler/agent_runtime.py",
-      "bytes": 17797,
-      "git_blob_sha1": "e844bf7e515233b16ccee98190bfc275490640ee"
+      "bytes": 17814,
+      "git_blob_sha1": "232f10c6ee9dde44dfae8c0238086345cbaf7f01"
     },
     {
       "path": "src/rizzler/agent_skills/excel/SKILL.md",
@@ -664,8 +669,8 @@
     },
     {
       "path": "src/rizzler/live_native.py",
-      "bytes": 13497,
-      "git_blob_sha1": "54960ff933d7ce7ac69cecc92ee58accb39cbce4"
+      "bytes": 13889,
+      "git_blob_sha1": "7368c4bb39f7e7ffe0b157650956d9f6ebfc0deb"
     },
     {
       "path": "src/rizzler/math_engine.py",
@@ -754,13 +759,13 @@
     },
     {
       "path": "src/rizzler/source_index.py",
-      "bytes": 12822,
-      "git_blob_sha1": "70e949c8589206d5eec9e3e7f475a3e2d4035d5a"
+      "bytes": 12969,
+      "git_blob_sha1": "2f06c4a370584801c8788c80140db0d89d240cf9"
     },
     {
       "path": "src/rizzler/source_large.py",
-      "bytes": 13544,
-      "git_blob_sha1": "0e81018ae823b9089e1300f235362a502335edb9"
+      "bytes": 13939,
+      "git_blob_sha1": "a0ec3afe52f143f14870af6db24eaf5479677482"
     },
     {
       "path": "src/rizzler/source_links.py",
@@ -791,6 +796,11 @@
       "path": "src/rizzler/upload_scan.py",
       "bytes": 3325,
       "git_blob_sha1": "4ec10bdbed6bb4f3cba0d44b96b43ef9cf11aa32"
+    },
+    {
+      "path": "src/rizzler/visual_agentic_qa.py",
+      "bytes": 4897,
+      "git_blob_sha1": "9caff9f166a1946f6629b3e168957449b6c1ff6b"
     },
     {
       "path": "src/rizzler/visual_intelligence.py",
@@ -864,18 +874,23 @@
     },
     {
       "path": "src/rizzler/work_agents.py",
-      "bytes": 6835,
-      "git_blob_sha1": "8d83180937541d7aff2b6e7cd8f95f22613dc232"
+      "bytes": 6851,
+      "git_blob_sha1": "93c5d5b6eae324e1131fbedc45139d116c0f8634"
     },
     {
       "path": "src/rizzler/work_api.py",
-      "bytes": 21965,
-      "git_blob_sha1": "8d43dd15892679273c74b93c8478e789e4338b30"
+      "bytes": 22169,
+      "git_blob_sha1": "751fd96d1821413bdd5c37ae9e6d9616086d01ab"
     },
     {
       "path": "src/rizzler/work_auth.py",
       "bytes": 2502,
       "git_blob_sha1": "3c150adf9973ef7031346562c83327d23dabf23f"
+    },
+    {
+      "path": "src/rizzler/work_corpus.py",
+      "bytes": 8990,
+      "git_blob_sha1": "d215f17bf3a6ff03a306a16747420393f007060e"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -899,8 +914,8 @@
     },
     {
       "path": "src/rizzler/work_objects.py",
-      "bytes": 4312,
-      "git_blob_sha1": "8b3680739a52a8677a9b1724cf9d46143ca4f62c"
+      "bytes": 4313,
+      "git_blob_sha1": "cec3699ea038e46082ae4945529b6ad4635df592"
     },
     {
       "path": "src/rizzler/work_postgres.py",
@@ -919,8 +934,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 15869,
-      "git_blob_sha1": "930a630a0bb6438acbfe525fe6e7de524cd59a58"
+      "bytes": 17203,
+      "git_blob_sha1": "eaca947d8f2ab87aa36fee4ac74c7a9f4f4984b4"
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -929,13 +944,13 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "bytes": 47950,
-      "git_blob_sha1": "81f54e32f60a26af59b59fa5393d822fccf3267f"
+      "bytes": 49094,
+      "git_blob_sha1": "1cb90d6ce73fbb97059b0385dabbdc6c23ff80fa"
     },
     {
       "path": "src/rizzler/work_visual.py",
-      "bytes": 4226,
-      "git_blob_sha1": "bff6ca23c555e37ed9337c292755f329e9cec27b"
+      "bytes": 4246,
+      "git_blob_sha1": "fffcaff36d9fdf9e498381d9019029e1f7a47ae2"
     },
     {
       "path": "src/rizzler/work_worker.py",
@@ -1153,9 +1168,19 @@
       "git_blob_sha1": "db368b1e6dda8d6a857ca049735023a78c42ae2f"
     },
     {
+      "path": "tests/test_v14_corpus.py",
+      "bytes": 5743,
+      "git_blob_sha1": "fd0e868acde57bc7ae68847967b9b1079e3b40a4"
+    },
+    {
       "path": "tests/test_v14_large_sources.py",
       "bytes": 4265,
       "git_blob_sha1": "efb4717d8daca2e8cf12084b3df956de356da29c"
+    },
+    {
+      "path": "tests/test_v14_rendering.py",
+      "bytes": 2093,
+      "git_blob_sha1": "58c18c265a9ca17b04f80154d9dc58fec39d87ee"
     },
     {
       "path": "tests/test_voice_core.cjs",
