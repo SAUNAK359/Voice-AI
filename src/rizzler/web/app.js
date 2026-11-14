@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- memoryEnabled:false,workEnabled:false,agentEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,agentEnabled:false,nativeEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -203,6 +203,7 @@ async function openMic(){
  }
 }
 async function disconnect(){clearTimeout(s.pdfPoll);s.pdfSelected=null;s.pdfDocs=[];s.visualIDs=[];renderVisuals();s.session=false;s.recording=false;clearTimeout(s.reconnectTimer);s.reconnecting=false;
+ if(s.mode==='native')await window.RizzlerNative?.disconnect();
  stopAudio();s.ledger.cancel(s.fence.generation);s.request?.abort();s.ws?.close();s.media?.getTracks().forEach(t=>t.stop());
  if(s.deviceListener){navigator.mediaDevices?.removeEventListener?.('devicechange',s.deviceListener);s.deviceListener=null;}
  await s.ctx?.close();s.ctx=null;s.mode='offline';$('connection').textContent='Disconnected';status('offline','Session ended');
@@ -215,7 +216,12 @@ async function connectSession(){
      if(!r.ok)throw Error('Invalid access key');
    }
    if(!window.isSecureContext)throw Error('Microphone requires HTTPS or localhost');
-   await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
+   if(s.nativeEnabled){
+     await window.RizzlerNative.connect(s.key,s.sessionId,s.production);
+     s.mode='native';
+   }else{
+     await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
+   }
    s.session=true;window.RizzlerStudio?.setAuth({key:s.key,sessionId:s.sessionId,production:s.production});$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
    for(const id of ['mute','send','reset'])$(id).disabled=false;
    status('listening','Ready. Speak naturally.');noteLatency();
@@ -495,7 +501,7 @@ $('logout').addEventListener('click',async()=>{
   const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
   const d=await r.json();s.production=d.mode==='production';
   s.workEnabled=!!d.work_enabled;$('work-panel').hidden=!s.workEnabled;
-  s.agentEnabled=!!d.agentic_enabled;$('agent-chat').hidden=!s.agentEnabled;
+  s.agentEnabled=!!d.agentic_enabled;s.nativeEnabled=!!d.native_live_enabled;$('agent-chat').hidden=!s.agentEnabled;
   s.visualEnabled=!!d.multimodal_enabled;$('visual-panel').hidden=!s.visualEnabled;
   s.memoryEnabled=!!d.encrypted_memory_enabled;$('memory-open').hidden=!s.memoryEnabled;
   $('logout').hidden=!s.production;
@@ -642,7 +648,7 @@ uploadField?.addEventListener('change',async()=>{
 });
 setInterval(()=>{if(!document.hidden&&s.session&&s.workEnabled)refreshWork()},8000);
 
-$('mute').addEventListener('click',()=>{s.muted=!s.muted;$('mute').textContent=s.muted?'Unmute':'Mute';
+$('mute').addEventListener('click',()=>{s.muted=!s.muted;if(s.mode==='native')window.RizzlerNative?.setMuted(s.muted);$('mute').textContent=s.muted?'Unmute':'Mute';
  if(s.muted){interrupt();s.recording=false;s.gate.reset();status('muted','Microphone muted')}else status('listening','Speak naturally')});
 $('send').addEventListener('click',()=>{if(s.recording){finish();return}if(s.recentBytes<s.rate*2*.35)return;
  start(true);finish()});
