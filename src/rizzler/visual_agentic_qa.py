@@ -51,7 +51,8 @@ async def review(root,owner,path,kind,sha,objective):
                         model=model,
                         contents=[types.Content(role="user",parts=parts)],
                         config=types.GenerateContentConfig(
-                            response_mime_type="application/json",temperature=0,max_output_tokens=1200))
+                            response_mime_type="application/json",temperature=0,max_output_tokens=1200,
+                            thinking_config=__import__("rizzler.work_reasoning",fromlist=["config"]).config()))
                 raw=(getattr(response,"text","") or "").strip()
                 if len(raw)>6000:raise ValueError("Oversize QA output")
                 result=json.loads(raw)
