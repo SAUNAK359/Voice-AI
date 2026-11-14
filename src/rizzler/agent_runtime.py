@@ -257,12 +257,19 @@ class AgentRuntime:
             return {"tool":"agent","verified":False,"actions":calls,"ui_actions":ui_actions,
                     "text":"Execution budget exhausted. Inspect the Work dashboard for accepted jobs.",
                     "spoken":"I reached the operation limit. You can check Work for accepted jobs."}
-        except Exception:
-            # Provider details and tool output can contain secrets or untrusted text.
-            # Do not turn failures into user-visible unverified success claims.
+        except (TimeoutError,asyncio.TimeoutError):
+            # A model timeout is not a Work job failure and should not imply one.
             return {"tool":"agent","verified":False,"actions":calls,"ui_actions":ui_actions,
-                    "text":"I couldn't safely finish that request. Accepted Work jobs remain available.",
-                    "spoken":"I couldn't safely finish. Check Work for any accepted tasks."}
+                    "text":"The model did not respond within the conversational deadline. Please try again; any accepted jobs remain intact.",
+                    "spoken":"The model response timed out. Please try again."}
+        except Exception as exc:
+            # Safe error category for operators; do not log prompts, credentials,
+            # provider raw output or private tool responses.
+            import logging
+            logging.getLogger("rizzler.agent").warning("Turn failed: %s",type(exc).__name__)
+            return {"tool":"agent","verified":False,"actions":calls,"ui_actions":ui_actions,
+                    "text":"Rizzler couldn't complete this turn. You can retry; existing jobs are unaffected.",
+                    "spoken":"I couldn't complete that turn. Please try again."}
         finally:
             if self.client is None:
                 await client.aio.aclose()
