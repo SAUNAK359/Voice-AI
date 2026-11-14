@@ -90,12 +90,15 @@ def extract(name:str,data:bytes)->tuple[str,dict]:
                 book=openpyxl.load_workbook(io.BytesIO(data),read_only=True,data_only=True)
                 try:
                     parts=[]
+                    extracted_size=0
                     for sheet in book.worksheets[:30]:
                         parts.append(f"[Sheet {sheet.title}]")
                         for idx,row in enumerate(sheet.iter_rows(values_only=True)):
                             if idx>=10000:break
-                            parts.append(" | ".join(str(v)[:150] if v is not None else "" for v in row[:80]))
-                            if sum(map(len,parts))>MAX_TEXT:break
+                            line=" | ".join(str(v)[:150] if v is not None else "" for v in row[:80])
+                            parts.append(line)
+                            extracted_size+=len(line)
+                            if extracted_size>MAX_TEXT:break
                 finally:book.close()
             except ImportError:raise ValueError("Excel indexing requires openpyxl") from None
         return "\n".join(parts)[:MAX_TEXT],{"kind":extension[1:]}
@@ -125,11 +128,15 @@ class SourceIndex:
                 CREATE TABLE IF NOT EXISTS chunks(
                 source_id TEXT NOT NULL,number INT NOT NULL,position INT NOT NULL,
                 body TEXT NOT NULL,PRIMARY KEY(source_id,number));""")
-    def register(self,owner,name,data):
+    def register(self,owner,name,data,source_url=None):
         from .security import safe_upload_name
         safe_upload_name(name,allowed=ALLOWED)
         digest=hashlib.sha256(data).hexdigest()
         text,meta=extract(name,data)
+        if source_url is not None:
+            if not isinstance(source_url,str) or not source_url.startswith("https://") or len(source_url)>2000:
+                raise ValueError("Invalid source URL provenance")
+            meta["source_url"]=source_url
         if not text.strip():raise ValueError("Document contains no extractable text; use visual PDF indexing")
         parts=chunks(text)
         if len(parts)>900:raise ValueError("Source index exceeds bounded passage limit")
