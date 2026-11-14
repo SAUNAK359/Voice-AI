@@ -140,7 +140,7 @@ class SourceIndex:
             if not had_fts and db.execute(
                 "SELECT count(*) FROM chunks").fetchone()[0]>0:
                 db.execute("INSERT INTO passage_fts(passage_fts) VALUES('rebuild')")
-    def register(self,owner,name,data,source_url=None):
+    def register(self,owner,name,data,source_url=None,objects=None):
         """Legacy small-upload API uses the same complete-coverage indexer."""
         import tempfile
         from .source_large import index_large,MAX_BYTES
@@ -156,6 +156,9 @@ class SourceIndex:
         with tempfile.TemporaryDirectory(prefix="rizzler-small-",dir=self.root) as temp:
             path=Path(temp)/name
             path.write_bytes(data)
+            if objects is not None:
+                from .source_large import source_key
+                objects.put(source_key(owner,uid),path,hashlib.sha256(data).hexdigest(),len(data))
             result=index_large(self,owner,name,path,uid)
         if source_url is not None:
             with sqlite3.connect(self.db) as db:
@@ -166,8 +169,9 @@ class SourceIndex:
         return result
     def list(self,owner):
         with sqlite3.connect(self.db) as db:
-            rows=db.execute("SELECT id,name,bytes,kind,metadata FROM sources WHERE owner=? ORDER BY created DESC LIMIT 30",(owner,)).fetchall()
-        return [{"id":i,"name":name,"bytes":n,"kind":kind,"metadata":json.loads(meta)} for i,name,n,kind,meta in rows]
+            rows=db.execute("SELECT id,name,bytes,kind,metadata,sha256 FROM sources WHERE owner=? ORDER BY created DESC LIMIT 30",(owner,)).fetchall()
+        return [{"id":i,"name":name,"bytes":n,"kind":kind,"metadata":json.loads(meta),"sha256":sha}
+                for i,name,n,kind,meta,sha in rows]
     def search(self,owner,ids,query,max_chars=9000):
         """Owner-scoped, indexed retrieval; complete coverage is a separate Work operation."""
         if type(ids) is not list or not ids or len(ids)>8 or len(set(ids))!=len(ids):
