@@ -123,3 +123,7 @@
 .dashboard-data th,.dashboard-data td{padding:7px;border-bottom:1px solid #d8e0e5;white-space:nowrap}
 .dashboard-pagination{display:flex;gap:12px;align-items:center;padding:8px 0;font-size:12px}
 .dashboard-pagination button{border:1px solid #bfcbd6;background:#fff;color:#263e50;padding:6px 9px;border-radius:7px}
+
+.studio-page-wrap{position:relative;display:inline-block;max-width:100%;width:100%;line-height:0}
+.studio-page-wrap img{width:100%;height:auto;display:block}
+.studio-text-highlight{position:absolute;pointer-events:none;border:2px solid #e78c25;background:#ffd35f69;border-radius:3px;box-shadow:0 0 0 4px #f8d38a77;z-index:2}
