@@ -250,6 +250,19 @@ def router(store: WorkStore, identity: Identity | None = None,
         except (ValueError,OSError):
             raise HTTPException(status_code=422,detail="Dashboard data unavailable") from None
 
+    @api.get("/artifacts/{aid}/locate")
+    async def artifact_locate(req: Request,aid: str,text: str):
+        from .preview_pages import locate_text
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            return await asyncio.to_thread(locate_text,store.root,who,path,
+                                           info["sha256"],info["kind"],text)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,RuntimeError,OSError):
+            raise HTTPException(status_code=422,detail="Searchable visual location unavailable") from None
+
     @api.get("/artifacts/{aid}/pages")
     async def artifact_pages(req: Request,aid: str):
         from .preview_pages import page_info
