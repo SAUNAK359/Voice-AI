@@ -142,11 +142,28 @@ async function showPages(f,target){
  return true;
 }
 async function showArtifact(f){
- state.artifact=f;state.navigateSlide=null;
+ state.artifact=f;state.navigateSlide=null;state.dashboard=null;
  const target=$('studio-preview');target.replaceChildren();
  const loading=document.createElement('p');loading.textContent='Opening '+f.name+'…';target.append(loading);
  try{
-  if(['pdf','pptx','docx','xlsx'].includes(f.kind.toLowerCase())){
+  if(f.kind.toLowerCase()==='csv'){
+   state.dashboard=await window.RizzlerDashboard.open(f,target,api);
+   return;
+  }
+  if(f.kind.toLowerCase()==='xlsx'){
+   const switcher=document.createElement('div');switcher.className='studio-artifact-list';
+   const dashboardButton=document.createElement('button'),pageButton=document.createElement('button');
+   dashboardButton.textContent='Interactive dashboard';pageButton.textContent='Original pages';
+   target.append(switcher);
+   const holder=document.createElement('div');target.append(holder);
+   switcher.append(dashboardButton,pageButton);
+   dashboardButton.onclick=async()=>{holder.replaceChildren();state.dashboard=await window.RizzlerDashboard.open(f,holder,api);
+      dashboardButton.setAttribute('aria-pressed','true');pageButton.setAttribute('aria-pressed','false')};
+   pageButton.onclick=async()=>{holder.replaceChildren();await showPages(f,holder);
+      dashboardButton.setAttribute('aria-pressed','false');pageButton.setAttribute('aria-pressed','true')};
+   await dashboardButton.onclick();return;
+  }
+  if(['pdf','pptx','docx'].includes(f.kind.toLowerCase())){
    try{
     await showPages(f,target);
    }catch(e){
@@ -327,6 +344,14 @@ async function applyActions(actions){
   }
  }
 }
-window.RizzlerStudio={setAuth(auth){state.auth=auth;refresh()},refresh,showArtifact,inspect,applyActions};
+window.RizzlerStudio={setAuth(auth){state.auth=auth;refresh()},refresh,showArtifact,inspect,applyActions,
+  configureDashboard:async action=>{
+    const detail=await api('/api/voice/jobs/'+encodeURIComponent(action.job_id)).then(r=>r.json());
+    const f=(detail.artifacts||[]).find(item=>['csv','xlsx'].includes(item.kind));
+    if(!f)throw Error('Project has no tabular dashboard');
+    state.selected=action.job_id;await showArtifact(f);
+    await state.dashboard?.configure(action);
+  }
+};
 setInterval(()=>{if(state.auth&&!document.hidden)refresh()},5000);
 })();
