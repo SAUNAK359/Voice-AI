@@ -184,8 +184,8 @@
     },
     {
       "path": "compose.production.yml",
-      "bytes": 2877,
-      "git_blob_sha1": "1daf0431452a52846f3697c3a60febfd35371e94"
+      "bytes": 3043,
+      "git_blob_sha1": "9679aa8c2b3b47045ef4e194179a7e73eaac468b"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -879,8 +879,8 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "bytes": 22169,
-      "git_blob_sha1": "751fd96d1821413bdd5c37ae9e6d9616086d01ab"
+      "bytes": 22181,
+      "git_blob_sha1": "6601fbd8ecc50014543c519a8a10693789e5ae00"
     },
     {
       "path": "src/rizzler/work_auth.py",
