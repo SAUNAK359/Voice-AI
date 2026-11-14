@@ -18,6 +18,11 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 MAX_BYTES = 200_000_000
+def source_key(owner,uid):
+    """Opaque per-user object key with no user-controlled path components."""
+    if not re.fullmatch(r"[a-f0-9]{32}",uid):raise ValueError("Invalid source ID")
+    return "sources/"+hashlib.sha256(owner.encode()).hexdigest()+"/"+uid+".blob"
+
 CHUNK_BYTES = 1_000_000
 MAX_EXTRACTED_BYTES = 1_000_000_000
 MAX_CHUNKS = 650_000
@@ -232,7 +237,7 @@ class LargeSourceTransfers:
             received+=len(blob)
             db.execute("UPDATE transfers SET received=? WHERE id=?",(received,uid))
         return {"offset":received,"complete":received==total}
-    def finalize(self,owner,uid,index,scanner=None):
+    def finalize(self,owner,uid,index,scanner=None,objects=None):
         with sqlite3.connect(self.db,timeout=40) as db:
             db.execute("BEGIN IMMEDIATE")
             rec=db.execute("SELECT name,size,sha,received,state FROM transfers WHERE id=? AND owner=?",
@@ -246,6 +251,8 @@ class LargeSourceTransfers:
             path=self._path(owner,uid)
             if path.stat().st_size!=total or (sha and _sha256(path)!=sha):raise ValueError("Source checksum mismatch")
             if scanner is not None:scanner(path)
+            if objects is not None:
+                objects.put(source_key(owner,uid),path,_sha256(path),total)
             item=index_large(index,owner,name,path,uid)
         except BaseException:
             with sqlite3.connect(self.db) as db:
