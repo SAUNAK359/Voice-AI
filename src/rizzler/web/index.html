@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#09131b"><title>Rizzler — Voice AI</title>
+<meta name="theme-color" content="#09131b"><title>Rizzler — AI Workspace</title>
 <link rel="stylesheet" href="/static/style.css"></head>
 <body><div class="shell">
-<header><div class="brand"><div class="logo">R/</div><div><strong>RIZZLER</strong><span>Voice + Work · Unified Agent</span></div></div><nav><button id="logout" hidden type="button">Sign out</button></nav><div id="connection" role="status">Disconnected</div></header>
-<main><section class="voice" aria-label="Voice conversation">
+<header><div class="brand"><div class="logo">R/</div><div><strong>RIZZLER</strong><span>Voice Intelligence · Your Workspace</span></div></div><nav><button id="logout" hidden type="button">Sign out</button></nav><div id="connection" role="status">Disconnected</div></header>
+<main class="studio-shell"><div class="left-workspace"><section class="voice" aria-label="Voice conversation">
 <div class="orb" id="orb" aria-hidden="true"><div class="orb-inner"></div></div>
 <h1 id="phase">Voice assistant</h1><p id="detail">Enter the private access key to begin.</p>
 <div class="buttons"><button id="connect">Connect microphone</button><button id="mute" disabled>Mute</button><button id="send" disabled>Send now</button><button id="reset" disabled>New conversation</button></div>
@@ -13,9 +13,9 @@
 <div id="tool-status" class="small" aria-live="polite">Tools are checked when you connect.</div>
 </section><section class="chat" aria-label="Transcript and replies"><h2>Conversation</h2><div id="messages" aria-live="polite" aria-relevant="additions text"><p class="empty">Your conversation will appear here.</p></div><div class="metrics" id="metrics">Latency metrics appear after a completed turn. Server-side timing does not measure speaker output.</div><div class="metrics" id="clientmetrics">Browser output-start latency not yet measured.</div>
 <form id="agent-chat" class="agent-chat" hidden aria-label="Agentic text conversation">
-<label for="agent-text">Ask Rizzler or instruct the Work Agent</label>
-<div class="agent-chat-row"><input id="agent-text" type="text" maxlength="8000" autocomplete="off" placeholder="Research, analyze or create work..." required>
-<button id="agent-send" type="submit">Send</button></div>
+<label for="agent-text">Ask Rizzler</label>
+<div id="workspace-attachment-status" aria-live="polite" class="workspace-chips"></div>
+<div class="agent-chat-row"><label class="attach-trigger" title="Attach sources" aria-label="Attach files">+<input id="workspace-files" type="file" multiple accept=".csv,.xlsx,.txt,.md,.pdf,.docx,.db,.sqlite,.sqlite3,.json,.pptx,.png,.jpg,.jpeg,.webp" hidden></label><button type="button" id="attach-link" aria-label="Attach a URL" title="Attach a link">Link</button><input id="agent-text" type="text" maxlength="8000" autocomplete="off" placeholder="Ask Rizzler anything…" required><button id="agent-send" type="submit">Send</button></div><form id="link-entry" class="link-entry" hidden><input id="link-input" type="url" placeholder="https://example.com/report" aria-label="Web link"><button type="submit">Add link</button></form>
 <p class="small" id="agent-feedback" role="status" aria-live="polite">Uses the same private conversation and Work tasks as voice.</p>
 </form>
 <section id="visual-panel" hidden aria-label="Visual analysis" class="visual-panel">
@@ -43,8 +43,8 @@
 <button type="submit">Save memory</button></form>
 <div id="memory-feedback" role="status"></div><div id="memory-items"></div>
 <button type="button" id="memory-clear">Delete all saved memories</button>
-</section><section id="work-panel" class="work-panel" hidden aria-label="Background work"><div class="work-heading"><h2>Agent activity</h2><label class="upload-label">Attach CSV/XLSX <input id="data-upload" type="file" accept=".csv,.xlsx" aria-label="Upload analysis dataset"></label></div><div id="upload-feedback" role="status"></div><div id="work-jobs" aria-live="polite"></div></section></section></main>
-<footer><span>Rizzler V12 · Unified agent · Verified work</span><span>Production sign-in uses an external identity provider</span></footer>
+</section><section id="work-panel" class="work-panel" hidden aria-label="Background work"><div class="work-heading"><h2>Agent activity</h2><label class="upload-label">Attach CSV/XLSX <input id="data-upload" type="file" accept=".csv,.xlsx" aria-label="Upload analysis dataset"></label></div><div id="upload-feedback" role="status"></div><div id="work-jobs" aria-live="polite"></div></section></section></div><aside class="studio-panel" aria-label="Live project and artifact preview"><div class="studio-heading"><div><span class="studio-eyebrow">WORKSPACE</span><h2>Live Preview</h2></div><select id="studio-job-select" aria-label="Choose project"><option value="">Latest project</option></select></div><div id="studio-project" class="studio-project" aria-live="polite"><div id="studio-status">Rizzler will show work progress and artifacts here.</div><div id="studio-progress" class="studio-progress"></div></div><div id="studio-artifact-toolbar" class="studio-artifact-toolbar" hidden><div id="studio-artifact-list" class="studio-artifact-list"></div><button id="studio-download" type="button">Download</button></div><div id="studio-preview" class="studio-preview" aria-label="Artifact content"><p class="studio-placeholder">Attach a source and tell Rizzler what you want to create. Finished work will open here automatically.</p></div><div id="studio-feedback" class="studio-feedback" role="status" aria-live="polite"></div></aside></main>
+<footer><span>Rizzler V13 · Live intelligence · Verified artifacts</span><span>Production sign-in uses an external identity provider</span></footer>
 </div>
 <div id="modal" class="overlay"><form id="unlock" class="dialog"><h2>Start private Rizzler session</h2><p>Enter <code>RIZZLER_ACCESS_KEY</code>. This key stays in your browser memory and is not stored.</p><label for="key">Access key</label><input id="key" type="password" autocomplete="off" required minlength="16" placeholder="Private server key"><button type="submit">Connect microphone</button><button type="button" id="text-only">Use text and Work instead</button><div id="error" role="alert"></div></form></div>
-<script src="/static/rich-text.js" defer></script><script src="/static/voice-core.js" defer></script><script src="/static/app.js" defer></script></body></html>
+<script src="/static/rich-text.js" defer></script><script src="/static/voice-core.js" defer></script><script src="/static/app.js" defer></script><script src="/static/studio.js" defer></script></body></html>
