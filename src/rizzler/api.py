@@ -409,7 +409,9 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 "multimodal_enabled":visual is not None,
                 "full_pdf_ingestion":pdf_store is not None,
                 "agentic_enabled":agent_runtime is not None,
-                "runtime":"native_v12" if agent_runtime is not None else "native_v11"}
+                "native_live_enabled":native_live_enabled,
+                "runtime":"native_v14_live" if native_live_enabled else
+                          ("native_v12" if agent_runtime is not None else "native_v11")}
 
     @app.get('/api/voice/tools')
     def voice_tool_catalog(request: Request):
@@ -476,6 +478,13 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
     @app.get('/')
     def index():
         return FileResponse(WEB / 'index.html')
+
+    # Server-owned Gemini Live connection: the API key never reaches the browser.
+    native_live_enabled=bool(cfg.gemini_api_key) and environ.get(
+        "RIZZLER_NATIVE_LIVE","1").lower() not in ("0","false","no")
+    if native_live_enabled:
+        from .live_native import register_native_live
+        register_native_live(app,cfg,sessions,identity,work)
 
     app.mount('/static', StaticFiles(directory=WEB), name='static')
 
