@@ -78,9 +78,31 @@ async def _summarize(client,cfg,objective,body,*,reducing=False):
     if not 30<=len(value)<=3500:raise ValueError("Source synthesis returned insufficient grounded text")
     return value
 
-async def analyze(store,owner,objective,source_ids,coverage="targeted"):
+async def analyze(store,owner,objective,source_ids,coverage="targeted",source_refs=None):
     from .source_index import SourceIndex
+    from .source_large import source_key,index_large
     index=SourceIndex(store.root)
+    present={item["id"]:item for item in index.list(owner)}
+    refs=source_refs or []
+    if set(source_ids)!=set(rec.get("id") for rec in refs):
+        # Historical jobs without source receipts can read only the shared index.
+        if refs:raise ValueError("Source receipt mismatch")
+    for receipt in refs:
+        uid=receipt["id"]
+        if uid in present:
+            if (present[uid]["sha256"]!=receipt["sha256"] or
+                    present[uid]["bytes"]!=receipt["bytes"]):
+                raise ValueError("Local source integrity mismatch")
+            continue
+        if store.objects is None:
+            raise RuntimeError("Indexed source not mounted on this worker; configure shared storage")
+        digest=hashlib.sha256(owner.encode()).hexdigest()
+        path=index.root/"originals"/digest/(uid+Path(receipt["name"]).suffix.lower())
+        path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+        await asyncio.to_thread(store.objects.get,source_key(owner,uid),path,
+                                receipt["sha256"],receipt["bytes"])
+        await asyncio.to_thread(index_large,index,owner,receipt["name"],path,uid)
+
     if coverage=="targeted":
         evidence=await asyncio.to_thread(index.search,owner,source_ids,objective,9000)
         return {"text":"\n".join(evidence["passages"]),"coverage":"retrieved_excerpts_only",
