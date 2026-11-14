@@ -122,6 +122,40 @@ def router(store: WorkStore, identity: Identity | None = None,
         return {"job_id": jid, "agents": steps,
                 "sla_definition": "Best-effort stage target, not a contractual guarantee"}
 
+    @api.get("/jobs/{jid}/versions")
+    def job_versions(req: Request,jid: str):
+        who=owner(req)
+        store.get(who,jid)
+        import re
+        from .contracts import FILE_FORMATS
+        root=store.root/"quality_versions"/who/jid
+        versions=[]
+        if root.exists() and not root.is_symlink():
+            for directory in sorted(root.iterdir()):
+                if not directory.is_dir() or directory.is_symlink():continue
+                match=re.fullmatch(r"revision-(\d+)",directory.name)
+                if not match:continue
+                kinds=[p.suffix.lstrip(".") for p in directory.iterdir()
+                       if p.is_file() and not p.is_symlink() and
+                          p.name==p.suffix.lstrip(".")+"."+p.suffix.lstrip(".") and
+                          p.suffix.lstrip(".") in FILE_FORMATS]
+                versions.append({"version":int(match.group(1))-1,"revision":int(match.group(1)),
+                                 "formats":sorted(set(kinds))})
+        return {"job_id":jid,"versions":versions}
+
+    @api.get("/jobs/{jid}/versions/{revision}/{kind}")
+    def job_version_download(req: Request,jid: str,revision: int,kind: str):
+        from .contracts import FILE_FORMATS
+        who=owner(req)
+        store.get(who,jid)
+        if not 1<=revision<=5 or kind not in FILE_FORMATS:
+            raise HTTPException(status_code=404,detail="Revision unavailable")
+        path=store.root/"quality_versions"/who/jid/("revision-"+str(revision))/(kind+"."+kind)
+        if not path.is_file() or path.is_symlink():
+            raise HTTPException(status_code=404,detail="Revision unavailable")
+        return FileResponse(path,filename=f"rizzler-before-revision-{revision}.{kind}",
+                            headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"})
+
     @api.get("/jobs/{jid}/quality")
     def job_quality(req: Request, jid: str):
         try:
