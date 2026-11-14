@@ -624,45 +624,11 @@ function toolNotice(msg){
    (Number.isFinite(msg.elapsed_ms)?' · '+Math.round(msg.elapsed_ms)+' ms':'');
 }
 async function refreshWork(){
- if(!s.workEnabled||(!s.key&&!s.production))return;
- try{
- const response=await fetch('/api/voice/jobs',{headers:headers()});
- if(!response.ok)return;
- const {jobs}=await response.json(),target=$('work-jobs');target.replaceChildren();
- for(const job of jobs.slice(0,6)){
-  const card=document.createElement('article');card.className='job-card';
-  const heading=document.createElement('strong');heading.textContent='Job '+job.id.slice(0,8)+' · '+job.status;
-  const subtitle=document.createElement('p');subtitle.textContent='Stage: '+job.stage+' · '+job.attempts+' worker attempts';
-  card.append(heading,subtitle);
-  if(['queued','running','completed','failed','cancelled'].includes(job.status)){
-    const res=await fetch('/api/voice/jobs/'+encodeURIComponent(job.id),{headers:headers()});
-    if(res.ok){
-     const detail=await res.json();
-     if(detail.plan?.steps?.length){
-       const flow=document.createElement('p');flow.className='job-workflow';
-       flow.textContent='Plan: '+detail.plan.steps.map(n=>n.tool.replaceAll('_',' ')).join(' · ');
-       card.append(flow);
-     }
-     const agents=document.createElement('p');agents.className='job-agents';
-     agents.textContent=detail.agents.map(a=>a.agent.replaceAll('_',' ')+': '+a.status).join(' · ');
-     card.append(agents);
-     for(const file of detail.artifacts){
-      const btn=document.createElement('button');btn.textContent='Download '+file.kind.toUpperCase();
-      btn.addEventListener('click',async()=>{
-       try{const result=await fetch('/api/voice/artifacts/'+encodeURIComponent(file.id),{headers:headers()});
-        if(!result.ok)throw Error('Download unavailable');
-        const blob=await result.blob(),url=URL.createObjectURL(blob);
-        const a=document.createElement('a');a.href=url;a.download=file.name;a.click();
-        setTimeout(()=>URL.revokeObjectURL(url),30000);
-       }catch(e){$('upload-feedback').textContent=e.message;}
-      });card.append(btn);
-     }
-    }
-  }
-  target.append(card);
- }
- }catch(_){/* An offline dashboard must not interrupt the microphone. */}
+ // The V13 Project Canvas consumes persisted job state and does not duplicate
+ // the hidden V12 dashboard's six sequential detail requests.
+ window.RizzlerStudio?.refresh();
 }
+
 const uploadField=$('data-upload');
 uploadField?.addEventListener('change',async()=>{
  const file=uploadField.files?.[0];if(!file)return;
