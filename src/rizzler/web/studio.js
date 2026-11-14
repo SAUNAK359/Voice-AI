@@ -1,7 +1,7 @@
 /* Rizzler V13: owner-scoped project canvas. Status is read from persisted Work events, not estimated. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-const state={auth:null,selected:null,artifact:null,jobs:[],busy:false,lastCompleted:new Set(),sources:[],visualFiles:[],link:null};
+const state={auth:null,selected:null,artifact:null,jobs:[],busy:false,lastCompleted:new Set(),sources:[],visualFiles:[],link:null,navigateSlide:null};
 const headers=()=>!state.auth?{}:state.auth.production?{'x-csrf-token':decodeURIComponent((document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))||'').split('=').slice(1).join('=')||'')}:{'x-rizzler-key':state.auth.key,'x-session-id':state.auth.sessionId};
 function report(msg){$('studio-feedback').textContent=msg;}
 async function api(path,options={}){
@@ -75,6 +75,7 @@ function table(rows){
  }return t;
 }
 function renderStructured(preview,target){
+ state.navigateSlide=null;
  target.replaceChildren();
  if(preview.kind==='pptx'){
   let current=0;
@@ -92,6 +93,10 @@ function renderStructured(preview,target){
    prev.disabled=current===0;next.disabled=current===preview.slides.length-1;
   };
   prev.onclick=()=>{current--;show()};next.onclick=()=>{current++;show()};
+  state.navigateSlide=index=>{
+   if(!Number.isInteger(index)||index<1||index>preview.slides.length)return false;
+   current=index-1;show();slide.scrollIntoView({block:'nearest'});return true;
+  };
   nav.append(prev,label,next);target.append(nav,slide);show();
  }else if(preview.kind==='docx'){
   for(const line of preview.blocks){
@@ -109,7 +114,7 @@ function renderStructured(preview,target){
  target.append(note);
 }
 async function showArtifact(f){
- state.artifact=f;
+ state.artifact=f;state.navigateSlide=null;
  const target=$('studio-preview');target.replaceChildren();
  const loading=document.createElement('p');loading.textContent='Opening '+f.name+'…';target.append(loading);
  try{
@@ -231,6 +236,30 @@ $('link-add')?.addEventListener('click',async e=>{
  }catch(err){report(err.message)}
 });
 
-window.RizzlerStudio={setAuth(auth){state.auth=auth;refresh()},refresh,showArtifact,inspect};
+async function applyActions(actions){
+ for(const action of actions||[]){
+  if(!action?.job_id||!['open','slide','highlight'].includes(action.kind))continue;
+  state.selected=action.job_id;state.artifact=null;
+  await refresh();
+  if(action.kind==='slide'){
+   if(!state.navigateSlide?.(action.slide))report('Slide unavailable in this preview.');
+  }else if(action.kind==='highlight'){
+   const needle=String(action.text||'').trim().toLowerCase();
+   if(!needle)continue;
+   const walker=document.createTreeWalker($('studio-preview'),NodeFilter.SHOW_TEXT);
+   let node;
+   while((node=walker.nextNode())){
+    const index=(node.nodeValue||'').toLowerCase().indexOf(needle);
+    if(index<0)continue;
+    const start=node.nodeValue.slice(0,index),match=node.nodeValue.slice(index,index+needle.length),end=node.nodeValue.slice(index+needle.length);
+    const mark=document.createElement('mark');mark.textContent=match;
+    const fragment=document.createDocumentFragment();fragment.append(document.createTextNode(start),mark,document.createTextNode(end));
+    node.parentNode.replaceChild(fragment,node);mark.scrollIntoView({block:'center'});
+    break;
+   }
+  }
+ }
+}
+window.RizzlerStudio={setAuth(auth){state.auth=auth;refresh()},refresh,showArtifact,inspect,applyActions};
 setInterval(()=>{if(state.auth&&!document.hidden)refresh()},5000);
 })();
