@@ -73,7 +73,8 @@ async def _summarize(client,cfg,objective,body,*,reducing=False):
     async with asyncio.timeout(max(10,min(cfg.request_timeout,90))):
         response=await client.aio.models.generate_content(
             model=cfg.gemini_model,contents=instruction,
-            config=types.GenerateContentConfig(temperature=0,max_output_tokens=1200))
+            config=types.GenerateContentConfig(temperature=0,max_output_tokens=1200,
+                thinking_config=__import__("rizzler.work_reasoning",fromlist=["config"]).config()))
     value=(getattr(response,"text","") or "").strip()
     if not 30<=len(value)<=3500:raise ValueError("Source synthesis returned insufficient grounded text")
     return value
