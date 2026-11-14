@@ -13,7 +13,8 @@ human-oriented artifact quality performs correctly in production.
 - [x] Native output and input text transcriptions in the conversation pane.
 - [x] Native Live session used preferentially over legacy ASR/TTS when enabled.
 - [ ] Provider-verified audio transport, reconnection tokens, microphone persistence.
-- [ ] Adaptive medium/high reasoning levels validated for the selected Live model.
+- [x] Work model DAG now selects Medium/High thinking per capability and propagates it to Gemini calls.
+- [ ] Provider validation of supported Medium/High levels on the deployed model; Live remains natively dynamic.
 - [ ] Long-session natural interruption and device-compatibility qualification.
 
 Production configuration: `GEMINI_API_KEY`, `RIZZLER_LIVE_MODEL`, and
@@ -54,8 +55,12 @@ multimodal validation gap.
 - [x] Safe structured-text fallback where the renderer is missing.
 - [x] Original editable artifacts remain downloadable.
 - [ ] Pixel-identical parity with MS Office (depends on renderer and fonts).
-- [ ] Fully interactive dashboards with filtering, links, drilldowns and
-      keyboard-driven graphical editing across all artifact kinds.
+- [x] CSV/XLSX data dashboards with charts, filters, row drilldowns, worksheet
+      selection, sorting, keyboard navigation and filtered CSV export.
+- [x] Gemini Live model-directed chart, grouping and metric selection using verified columns.
+- [x] Rendered PDF/Office page coordinates for model-directed text highlighting.
+- [ ] General-purpose HTML application editing and arbitrarily complex dashboards
+      beyond the bounded CSV/XLSX visual explorer remain unqualified.
 
 ## Phase 4 — Artifact quality
 
@@ -64,8 +69,10 @@ multimodal validation gap.
 - [x] Independent model visual review examines actual rendered pages in
       bounded batches, fails closed for serious visual issues.
 - [x] Production Docker image opts into `RIZZLER_ARTIFACT_QA=agentic`.
-- [ ] Automatic model-directed artifact repair with versioned, independently
-      revalidated results.
+- [x] Gemini-directed bounded revision, re-render and independent structural/
+      numerical/visual revalidation before publication; original versions retained.
+- [x] Previous versions available as owner-authenticated downloads with QA history.
+- [ ] Actual Gemini provider tests on difficult artifact defects and design quality benchmarks.
 - [ ] Independent factual source verification and calibrated aesthetic benchmarking.
 - [ ] Visual QA full coverage beyond the current 120-page model-review limit.
 
@@ -80,15 +87,16 @@ failure injection.
 ### Continuous-integration commands
 
 ```sh
-python -m pytest -q tests/test_v13_studio.py tests/test_v14_large_sources.py tests/test_v14_rendering.py
+python -m pytest -q tests/test_v13_studio.py tests/test_v14_large_sources.py tests/test_v14_rendering.py tests/test_v14_final_features.py tests/test_v14_final_integration.py
 python -m compileall -q src/rizzler
 node --check src/rizzler/web/native-live.js
 node --check src/rizzler/web/studio.js
+node --check src/rizzler/web/dashboard.js
 python scripts/verify_release.py
 ```
 
 ## Release decision
 
-V14 is a draft until provider/device validation, true complete-corpus Work
-coverage, artifact repair, factual QA, and production deployment checks pass.
+V14 is a draft until actual provider/device validation, multimodal completeness,
+independent factual QA, production deployment and reliability checks pass.
 Do not describe these unchecked gates as complete in launch announcements.
