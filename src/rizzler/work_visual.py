@@ -15,8 +15,8 @@ import tempfile
 
 def quality_mode() -> str:
     mode = os.environ.get("RIZZLER_ARTIFACT_QA", "structural").strip().lower()
-    if mode not in ("strict", "structural"):
-        raise ValueError("RIZZLER_ARTIFACT_QA must be strict or structural")
+    if mode not in ("strict", "structural", "agentic"):
+        raise ValueError("RIZZLER_ARTIFACT_QA must be agentic, strict or structural")
     return mode
 
 
