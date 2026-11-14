@@ -327,7 +327,7 @@ def router(store: WorkStore, identity: Identity | None = None,
             scanner=lambda path:scan_clamd_file(path,host,port)
         try:
             return await asyncio.to_thread(LargeSourceTransfers(store.root).finalize,
-                                           who,uid,SourceIndex(store.root),scanner)
+                                           who,uid,SourceIndex(store.root),scanner,store.objects)
         except ScanUnavailable:
             raise HTTPException(status_code=503,detail="Source malware scanning unavailable") from None
         except (ValueError,UnicodeError,sqlite3.DatabaseError,zipfile.BadZipFile):
@@ -349,7 +349,7 @@ def router(store: WorkStore, identity: Identity | None = None,
             if store.upload_scanner is not None:
                 await asyncio.to_thread(store.upload_scanner,result["data"])
             item=await asyncio.to_thread(SourceIndex(store.root).register,
-                                          who,name,result["data"],result["url"])
+                                          who,name,result["data"],result["url"],store.objects)
             return {**item,"url":result["url"],"content_type":result["content_type"]}
         except (ValueError,UnicodeError,TimeoutError,asyncio.TimeoutError,json.JSONDecodeError):
             raise HTTPException(status_code=422,detail="Unable to safely retrieve or index public HTTPS source") from None
@@ -369,7 +369,7 @@ def router(store: WorkStore, identity: Identity | None = None,
             if store.upload_scanner is not None:
                 await asyncio.to_thread(store.upload_scanner,bytes(raw))
             return await asyncio.to_thread(SourceIndex(store.root).register,
-                    who,req.headers.get("x-file-name",""),bytes(raw))
+                    who,req.headers.get("x-file-name",""),bytes(raw),None,store.objects)
         except ScanUnavailable:
             raise HTTPException(status_code=503,detail="Source scanner unavailable") from None
         except (ValueError,UnicodeError,sqlite3.DatabaseError):
