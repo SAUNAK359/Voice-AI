@@ -238,6 +238,18 @@ def router(store: WorkStore, identity: Identity | None = None,
 
     # V13 source intake: indexed passages are not raw context pasted into prompts.
     # The source index is owner-scoped and shares the existing Work storage root.
+    @api.get("/artifacts/{aid}/dashboard")
+    async def artifact_dashboard(req: Request,aid: str,sheet: str|None=None):
+        from .dashboard_data import data
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            return await asyncio.to_thread(data,path,info["kind"],sheet)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,OSError):
+            raise HTTPException(status_code=422,detail="Dashboard data unavailable") from None
+
     @api.get("/artifacts/{aid}/pages")
     async def artifact_pages(req: Request,aid: str):
         from .preview_pages import page_info
