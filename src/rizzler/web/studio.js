@@ -319,7 +319,8 @@ $('link-add')?.addEventListener('click',async e=>{
 
 async function applyActions(actions){
  for(const action of actions||[]){
-  if(!action?.job_id||!['open','slide','highlight'].includes(action.kind))continue;
+  if(!action?.job_id||!['open','slide','highlight','dashboard'].includes(action.kind))continue;
+  if(action.kind==='dashboard'){await window.RizzlerStudio.configureDashboard(action);continue;}
   state.selected=action.job_id;state.artifact=null;
   await refresh();
   if(action.kind==='slide'){
