@@ -74,11 +74,52 @@ function table(rows){
   t.append(tr);
  }return t;
 }
+function renderStructured(preview,target){
+ target.replaceChildren();
+ if(preview.kind==='pptx'){
+  let current=0;
+  const nav=document.createElement('div');nav.className='studio-artifact-list';
+  const prev=document.createElement('button'),next=document.createElement('button'),label=document.createElement('span');
+  prev.textContent='Previous';next.textContent='Next';
+  const slide=document.createElement('section');slide.className='studio-slide';
+  const show=()=>{
+   const item=preview.slides[current];slide.replaceChildren();
+   const title=document.createElement('h2');title.textContent=item.title;slide.append(title);
+   for(const text of item.lines.slice(1)){
+    const p=document.createElement('p');p.textContent=text;slide.append(p);
+   }
+   label.textContent=(current+1)+' / '+preview.total;
+   prev.disabled=current===0;next.disabled=current===preview.slides.length-1;
+  };
+  prev.onclick=()=>{current--;show()};next.onclick=()=>{current++;show()};
+  nav.append(prev,label,next);target.append(nav,slide);show();
+ }else if(preview.kind==='docx'){
+  for(const line of preview.blocks){
+   const p=document.createElement('p');p.textContent=line;p.className='studio-doc-block';target.append(p);
+  }
+ }else if(preview.kind==='xlsx'){
+  const select=document.createElement('select');
+  preview.sheets.forEach((sh,i)=>select.append(new Option(sh.name,String(i))));
+  const body=document.createElement('div');
+  const show=()=>{body.replaceChildren(table(preview.sheets[+select.value].rows));
+   if(preview.sheets[+select.value].truncated){const notice=document.createElement('p');notice.textContent='Preview shows the first 160 rows. Download the workbook for all data.';body.append(notice)}};
+  select.onchange=show;target.append(select,body);select.value='0';show();
+ }
+ const note=document.createElement('small');note.className='studio-preview-note';note.textContent='Structured content preview; native document layout may differ. Download to view the original formatting.';
+ target.append(note);
+}
 async function showArtifact(f){
  state.artifact=f;
  const target=$('studio-preview');target.replaceChildren();
  const loading=document.createElement('p');loading.textContent='Opening '+f.name+'…';target.append(loading);
  try{
+  if(['pptx','docx','xlsx'].includes(f.kind.toLowerCase())){
+   const record=await api('/api/work/artifacts/'+encodeURIComponent(f.id)+'/preview').then(r=>r.json());
+   renderStructured(record,target);
+   for(const b of $('studio-artifact-list').querySelectorAll('button'))
+    b.setAttribute('aria-pressed',String(b.textContent===f.kind.toUpperCase()));
+   return;
+  }
   const r=await api('/api/voice/artifacts/'+encodeURIComponent(f.id));
   const blob=await r.blob();
   if(blob.size>35_000_000)throw Error('Preview too large; use Download.');
