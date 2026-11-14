@@ -739,8 +739,13 @@
     },
     {
       "path": "src/rizzler/source_index.py",
-      "bytes": 9963,
-      "git_blob_sha1": "424dc9386e00c7175713e57f5fdf4f322065d3ed"
+      "bytes": 10358,
+      "git_blob_sha1": "722c8fe656306b366e594b92df40845649d4a127"
+    },
+    {
+      "path": "src/rizzler/source_links.py",
+      "bytes": 5200,
+      "git_blob_sha1": "3094e72d71d5fbf2be623faa5bf5070bf905eb3e"
     },
     {
       "path": "src/rizzler/speech_text.py",
@@ -809,8 +814,8 @@
     },
     {
       "path": "src/rizzler/web/studio.js",
-      "bytes": 13448,
-      "git_blob_sha1": "588b4e65f4c7c99b15b0c9ccb801de258e06dc45"
+      "bytes": 14642,
+      "git_blob_sha1": "6280a0a00ce50256bf1c54f55b65d77c0d712497"
     },
     {
       "path": "src/rizzler/web/style.css",
@@ -839,8 +844,8 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "bytes": 16005,
-      "git_blob_sha1": "fe985fbfe5af65fbafcbb6246a8abbf3f51a077d"
+      "bytes": 17451,
+      "git_blob_sha1": "f26b1281129b0915c5d4fc8b9560fd2ddb0c6760"
     },
     {
       "path": "src/rizzler/work_auth.py",
@@ -874,8 +879,8 @@
     },
     {
       "path": "src/rizzler/work_postgres.py",
-      "bytes": 3943,
-      "git_blob_sha1": "066a5ee1d0e53b108d2fd4c06d94f2c8284e989b"
+      "bytes": 4583,
+      "git_blob_sha1": "66f562710117527dbc27b65a542247680e667818"
     },
     {
       "path": "src/rizzler/work_quality.py",
@@ -899,8 +904,8 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "bytes": 47891,
-      "git_blob_sha1": "c2838106ed10a10a5cdc226dbd4542d119a607bb"
+      "bytes": 47950,
+      "git_blob_sha1": "81f54e32f60a26af59b59fa5393d822fccf3267f"
     },
     {
       "path": "src/rizzler/work_visual.py",
@@ -969,8 +974,8 @@
     },
     {
       "path": "tests/test_phase5_postgres.py",
-      "bytes": 5493,
-      "git_blob_sha1": "53cc7030fe83ea7cf453007e9318648c0419f72a"
+      "bytes": 5749,
+      "git_blob_sha1": "13d8f7d5beb5d479f7e1c6655fe19b12207172ba"
     },
     {
       "path": "tests/test_rich_text.cjs",
@@ -1119,8 +1124,8 @@
     },
     {
       "path": "tests/test_v13_studio.py",
-      "bytes": 3807,
-      "git_blob_sha1": "dc1951cec92fe42b275de4ef5eec679d60926900"
+      "bytes": 4979,
+      "git_blob_sha1": "0c68c437d20881490ff172029137dde74d5306c4"
     },
     {
       "path": "tests/test_voice_core.cjs",
