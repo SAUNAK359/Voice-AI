@@ -41,6 +41,25 @@ class SourceIndexTests(unittest.TestCase):
         self.assertEqual(meta["sampling"],"read_only")
         self.assertEqual(raw,p.read_bytes())
 
+class SourceLinkSecurityTests(unittest.TestCase):
+    def test_only_public_https_sources(self):
+        from rizzler.source_links import _validate, _address
+        with self.assertRaises(ValueError):_validate("http://example.com/")
+        with self.assertRaises(ValueError):_validate("https://name:secret@example.com/report")
+        with self.assertRaises(ValueError):_validate("https://example.com:8080/report")
+        with patch("rizzler.source_links.socket.getaddrinfo",return_value=[(2,1,6,"",("127.0.0.1",443))]):
+            with self.assertRaises(ValueError):_address("internal.invalid")
+        with patch("rizzler.source_links.socket.getaddrinfo",return_value=[(2,1,6,"",("192.168.0.1",443))]):
+            with self.assertRaises(ValueError):_address("private.invalid")
+    def test_markup_is_data_not_executable(self):
+        from rizzler.source_links import VisibleHTML
+        p=VisibleHTML()
+        p.feed("<h1>Operations</h1><script>alert('bad')</script><p>Delivery delay 5 days.</p>")
+        text="".join(p.chunks)
+        self.assertIn("Operations",text)
+        self.assertIn("Delivery delay",text)
+        self.assertNotIn("alert",text)
+
 class QueueIsolationTests(unittest.TestCase):
     def test_one_active_job_per_owner_even_with_multiple_workers(self):
         with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,{"RIZZLER_AGENTIC_ENABLED":"1"}):
