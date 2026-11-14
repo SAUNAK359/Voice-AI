@@ -199,16 +199,27 @@ $('workspace-files')?.addEventListener('change',async e=>{
  input.value='';
 });
 $('attach-link')?.addEventListener('click',()=>{$('link-entry').hidden=!$('link-entry').hidden});
-$('link-add')?.addEventListener('click',e=>{
+$('link-add')?.addEventListener('click',async e=>{
  e.preventDefault();
- try{const url=new URL($('link-input').value);
- if(url.protocol!=='https:'||url.username||url.password)throw Error('Only public HTTPS links are permitted.');
- state.link=url.toString();renderSources();
- const input=$('agent-text');if(!input.value.includes(state.link))input.value=(input.value+'\nSource URL: '+state.link).trim();
- report('Link added to the prompt. Retrieval depends on model grounding availability.');
- $('link-entry').hidden=true;
- }catch(e){report(e.message)}
+ try{
+  if(!state.auth)throw Error('Connect Rizzler before adding a source.');
+  const url=new URL($('link-input').value);
+  if(url.protocol!=='https:'||url.username||url.password)throw Error('Only public HTTPS links are supported.');
+  report('Retrieving and indexing the public source…');
+  const response=await api('/api/work/sources/url',{method:'POST',
+    headers:{'content-type':'application/json'},body:JSON.stringify({url:url.toString()})});
+  const item=await response.json();
+  state.sources=[...state.sources,{name:item.url,id:item.id,kind:'url'}].slice(-8);
+  await api('/api/source/selection',{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({source_ids:state.sources.map(x=>x.id)})});
+  state.link=item.url;renderSources();
+  const input=$('agent-text');
+  if(!input.value.includes(item.url))input.value=(input.value+'\nSource URL: '+item.url).trim();
+  report('Web source indexed: '+item.passages+' passages. Rizzler can inspect its evidence.');
+  $('link-entry').hidden=true;
+ }catch(err){report(err.message)}
 });
+
 window.RizzlerStudio={setAuth(auth){state.auth=auth;refresh()},refresh,showArtifact,inspect};
 setInterval(()=>{if(state.auth&&!document.hidden)refresh()},5000);
 })();
