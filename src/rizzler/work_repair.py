@@ -99,7 +99,7 @@ async def _verify_bundle(store,owner,checkpoint,context,payload):
         errors.append({"kind":"analysis","problem":"Independent data verification missing"})
     return qa,errors
 
-async def _rebuild(store,claim,checkpoint,context,payload,revision,ir):
+async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir):
     owner,jid,fence=claim["owner"],claim["id"],claim["fence"]
     version_dir=store.root/"quality_versions"/owner/jid/("revision-"+str(revision))
     version_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -138,7 +138,7 @@ async def _rebuild(store,claim,checkpoint,context,payload,revision,ir):
             bundle.writestr("MANIFEST.json",json.dumps({"schema_version":1,"files":entry}))
         proposed["zip"]=(path,verify_artifact(path,"zip"))
     for kind,(path,receipt) in proposed.items():
-        promoted=store.agent_publish(jid,claim["worker"],fence,owner,path,receipt)
+        promoted=store.agent_publish(jid,worker_id,fence,owner,path,receipt)
         if not verify_checkpoint(promoted,receipt):
             raise ValueError("Repair publication integrity mismatch")
         context["receipts"][kind]=receipt
@@ -148,7 +148,7 @@ async def _rebuild(store,claim,checkpoint,context,payload,revision,ir):
             "current_ir_sha256":ir.sha256,
             "artifacts":{kind:receipt.sha256 for kind,receipt in context["receipts"].items()}}
 
-async def validate_repair(store,claim,checkpoint,context,payload):
+async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
     if not context.get("text") and not context.get("summary"):
         raise ValueError("No substantive evidence to publish")
     if set(context["receipts"])!=(set(payload["deliverables"]) & FILE_FORMATS):
@@ -171,7 +171,7 @@ async def validate_repair(store,claim,checkpoint,context,payload):
             raise ValueError("Artifact failed QA after repair budget; no final deliverables published")
         revision=await _revision(context["artifact_ir"],payload["objective"],defects,
                                  context.get("summary"),iteration+1)
-        audit=await _rebuild(store,claim,checkpoint,context,payload,iteration+1,revision)
+        audit=await _rebuild(store,claim,worker_id,checkpoint,context,payload,iteration+1,revision)
         audit["defects"]=defects
         history.append(audit)
     raise RuntimeError("Unreachable repair state")
