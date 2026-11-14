@@ -193,7 +193,7 @@ class LargeSourceTransfers:
         from .source_index import ALLOWED
         safe_upload_name(name,allowed=ALLOWED)
         if type(size) is not int or not 1<=size<=MAX_BYTES:raise ValueError("Source size outside 200 MB limit")
-        if not isinstance(sha,str) or not re.fullmatch("[a-f0-9]{64}",sha):raise ValueError("Invalid SHA-256")
+        if not isinstance(sha,str) or (sha and not re.fullmatch("[a-f0-9]{64}",sha)):raise ValueError("Invalid SHA-256")
         with sqlite3.connect(self.db,timeout=30) as db:
             n=db.execute("SELECT count(*) FROM transfers WHERE owner=? AND state IN ('uploading','indexing')",
                          (owner,)).fetchone()[0]
@@ -244,7 +244,7 @@ class LargeSourceTransfers:
             db.execute("UPDATE transfers SET state='indexing' WHERE id=?",(uid,))
         try:
             path=self._path(owner,uid)
-            if path.stat().st_size!=total or _sha256(path)!=sha:raise ValueError("Source checksum mismatch")
+            if path.stat().st_size!=total or (sha and _sha256(path)!=sha):raise ValueError("Source checksum mismatch")
             if scanner is not None:scanner(path)
             item=index_large(index,owner,name,path,uid)
         except BaseException:
