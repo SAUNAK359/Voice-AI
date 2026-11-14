@@ -1,6 +1,7 @@
 """Work endpoints share the single authenticated Voice/Work owner session."""
 from __future__ import annotations
 import json
+import hashlib
 import sqlite3
 import zipfile
 import asyncio
@@ -246,6 +247,29 @@ def router(store: WorkStore, identity: Identity | None = None,
             raise HTTPException(status_code=404,detail="Artifact unavailable") from None
         except (ValueError,OSError,zipfile.BadZipFile):
             raise HTTPException(status_code=422,detail="Safe structured preview unavailable") from None
+
+    @api.post("/sources/url",status_code=201)
+    async def source_url_upload(req: Request):
+        who=owner(req);same_origin(req)
+        from .source_links import download
+        from .source_index import SourceIndex
+        try:
+            raw=await req.body()
+            if len(raw)>2400:raise ValueError("URL request too large")
+            data=json.loads(raw)
+            if type(data) is not dict or set(data)!={"url"} or type(data["url"]) is not str:
+                raise ValueError("Invalid URL request")
+            result=await asyncio.wait_for(asyncio.to_thread(download,data["url"]),timeout=26)
+            name="web_"+hashlib.sha256(result["url"].encode()).hexdigest()[:16]+result["extension"]
+            if store.upload_scanner is not None:
+                await asyncio.to_thread(store.upload_scanner,result["data"])
+            item=await asyncio.to_thread(SourceIndex(store.root).register,
+                                          who,name,result["data"],result["url"])
+            return {**item,"url":result["url"],"content_type":result["content_type"]}
+        except (ValueError,UnicodeError,TimeoutError,asyncio.TimeoutError,json.JSONDecodeError):
+            raise HTTPException(status_code=422,detail="Unable to safely retrieve or index public HTTPS source") from None
+        except ScanUnavailable:
+            raise HTTPException(status_code=503,detail="Source scanner unavailable") from None
 
     @api.post("/sources",status_code=201)
     async def source_upload(req: Request):
