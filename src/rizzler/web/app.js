@@ -489,7 +489,7 @@ document.addEventListener('pointerdown',()=>{
  if(s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{});
 },{passive:true});
 $('unlock').addEventListener('submit',async e=>{e.preventDefault();s.key=$('key').value;await connectSession()});
-$('connect').addEventListener('click',()=>s.session&&s.ctx?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
+$('connect').addEventListener('click',()=>s.session?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
 $('logout').addEventListener('click',async()=>{
   await disconnect();
   if(!s.production){$('modal').classList.remove('hidden');return}
