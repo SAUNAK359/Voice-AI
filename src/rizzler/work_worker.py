@@ -44,7 +44,8 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=1
             response=await client.aio.models.generate_content(
                 model=cfg.gemini_model, contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.25,
-                    max_output_tokens=3000))
+                    max_output_tokens=3000,
+                    thinking_config=__import__("rizzler.work_reasoning",fromlist=["config"]).config()))
         result=getattr(response, "text", "") or ""
         if not 15<=len(result.strip())<=max_chars:
             raise ValueError("Model report missing or too long")
@@ -88,7 +89,8 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 config=types.GenerateContentConfig(
                     system_instruction=skill,
                     tools=[types.Tool(google_search=types.GoogleSearch())],
-                    temperature=0.15,max_output_tokens=1100))
+                    temperature=0.15,max_output_tokens=1100,
+                    thinking_config=__import__("rizzler.work_reasoning",fromlist=["config"]).config()))
         records=source_records(response)
         answer=(getattr(response,"text","") or "").strip()
         if len(answer)<40 or not records:

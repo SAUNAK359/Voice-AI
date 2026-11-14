@@ -39,7 +39,7 @@ class VoiceEngine:
     def __init__(self, settings: Settings, providers: ProviderSet, tools=None):
         self.settings, self.providers, self.tools = settings, providers, tools
 
-    async def events(self, pcm: bytes, rate: int, history: list[dict], owner: str | None = None, sequence: int = 0, uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None) -> AsyncIterator[dict]:
+    async def events(self, pcm: bytes, rate: int, history: list[dict], owner: str | None = None, sequence: int = 0, uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None, sources: list[str] | None = None) -> AsyncIterator[dict]:
         """Stream status, transcript, text, PCM16 and final metrics.
 
         A single producer and speech worker share bounded queues. On disconnect,
@@ -124,14 +124,15 @@ class VoiceEngine:
                         if intent == 'work_submit':
                             await output.put({'type':'status','label':'Planning requested work'})
                             await speech_queue.put('I will organize the work into verified steps.')
-                        tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads, nonce=nonce, visuals=visuals,pdf_document=pdf_document,history=history)
+                        tool_result = await self.tools.execute(transcript, owner, sequence, uploads=uploads, nonce=nonce, visuals=visuals,pdf_document=pdf_document,history=history,sources=sources)
                         if tool_result is not None:
                             await output.put({'type':'tool_result',
                                 'tool':tool_result['tool'],
                                 'verified':tool_result.get('verified',False),
                                 'elapsed_ms':tool_result.get('tool_elapsed_ms'),
                                 'job':tool_result.get('job'),
-                                'approvals':tool_result.get('approvals',[])})
+                                'approvals':tool_result.get('approvals',[]),
+                                'ui_actions':tool_result.get('ui_actions',[])})
                     answer = ''
                     pending = ''
                     last_ui_ms, last_ui_len = 0.0, 0

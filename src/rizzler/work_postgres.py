@@ -76,6 +76,19 @@ class _Tx:
 
 
 class PostgresWorkStore(WorkStore):
+    def claim(self, worker: str, lease_seconds: float = 30):
+        """Serialize concurrent claims across processes before selecting a user job.
+
+        The short transaction-scoped lock avoids selecting distinct queued
+        projects for the same owner from simultaneous PostgreSQL snapshots.
+        """
+        import time
+        if not isinstance(worker,str) or not worker or not 5<=lease_seconds<=600:
+            raise ValueError("Invalid worker or lease")
+        with self._tx() as tx:
+            tx.execute("SELECT pg_advisory_xact_lock(72639421)")
+            return self._claim_locked(tx,worker,lease_seconds,time.time())
+
     def __init__(self, root: str | Path, dsn: str, upload_scanner=None, object_store=None):
         if not isinstance(dsn, str) or not dsn.startswith(("postgresql://", "postgres://")):
             raise ValueError("PostgreSQL DSN required")

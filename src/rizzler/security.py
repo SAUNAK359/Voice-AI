@@ -23,7 +23,7 @@ def new_session_id() -> str:
     return secrets.token_urlsafe(32)
 
 
-def safe_upload_name(name: str) -> str:
+def safe_upload_name(name: str, allowed=None) -> str:
     """Reject directory traversal and misleading filename encodings."""
     if not isinstance(name, str) or not name or len(name) > 100:
         raise ValueError('Invalid filename')
@@ -31,7 +31,7 @@ def safe_upload_name(name: str) -> str:
         raise ValueError('Path separators are not permitted')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. -]{0,99}', name):
         raise ValueError('Unsafe filename')
-    if name.lower().endswith(('.csv', '.xlsx', '.xls')):
+    if name.lower().endswith(tuple(allowed) if allowed is not None else ('.csv', '.xlsx', '.xls')):
         return name
     raise ValueError('Unsupported upload type')
 

@@ -1,6 +1,9 @@
 """Work endpoints share the single authenticated Voice/Work owner session."""
 from __future__ import annotations
 import json
+import hashlib
+import sqlite3
+import zipfile
 import asyncio
 from pathlib import Path
 from urllib.parse import urlparse
@@ -13,6 +16,7 @@ from .work_skills import SKILLS
 from .work_agents import SPECS
 from .work_store import WorkStore, Conflict, Missing
 from .upload_scan import ScanUnavailable
+from .work_objects import StorageUnavailable
 
 def router(store: WorkStore, identity: Identity | None = None,
            owner_admission=None, owner_resolver=None) -> APIRouter:
@@ -117,6 +121,40 @@ def router(store: WorkStore, identity: Identity | None = None,
             step.pop("qa_json", None)
         return {"job_id": jid, "agents": steps,
                 "sla_definition": "Best-effort stage target, not a contractual guarantee"}
+
+    @api.get("/jobs/{jid}/versions")
+    def job_versions(req: Request,jid: str):
+        who=owner(req)
+        store.get(who,jid)
+        import re
+        from .contracts import FILE_FORMATS
+        root=store.root/"quality_versions"/who/jid
+        versions=[]
+        if root.exists() and not root.is_symlink():
+            for directory in sorted(root.iterdir()):
+                if not directory.is_dir() or directory.is_symlink():continue
+                match=re.fullmatch(r"revision-(\d+)",directory.name)
+                if not match:continue
+                kinds=[p.suffix.lstrip(".") for p in directory.iterdir()
+                       if p.is_file() and not p.is_symlink() and
+                          p.name==p.suffix.lstrip(".")+"."+p.suffix.lstrip(".") and
+                          p.suffix.lstrip(".") in FILE_FORMATS]
+                versions.append({"version":int(match.group(1))-1,"revision":int(match.group(1)),
+                                 "formats":sorted(set(kinds))})
+        return {"job_id":jid,"versions":versions}
+
+    @api.get("/jobs/{jid}/versions/{revision}/{kind}")
+    def job_version_download(req: Request,jid: str,revision: int,kind: str):
+        from .contracts import FILE_FORMATS
+        who=owner(req)
+        store.get(who,jid)
+        if not 1<=revision<=5 or kind not in FILE_FORMATS:
+            raise HTTPException(status_code=404,detail="Revision unavailable")
+        path=store.root/"quality_versions"/who/jid/("revision-"+str(revision))/(kind+"."+kind)
+        if not path.is_file() or path.is_symlink():
+            raise HTTPException(status_code=404,detail="Revision unavailable")
+        return FileResponse(path,filename=f"rizzler-before-revision-{revision}.{kind}",
+                            headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"})
 
     @api.get("/jobs/{jid}/quality")
     def job_quality(req: Request, jid: str):
@@ -231,6 +269,193 @@ def router(store: WorkStore, identity: Identity | None = None,
             return FileResponse(path,filename=info["name"],headers={
                 "Cache-Control":"no-store","X-Content-Type-Options":"nosniff"})
         except Missing:raise HTTPException(status_code=404,detail="Artifact unavailable")
+
+    # V13 source intake: indexed passages are not raw context pasted into prompts.
+    # The source index is owner-scoped and shares the existing Work storage root.
+    @api.get("/artifacts/{aid}/dashboard")
+    async def artifact_dashboard(req: Request,aid: str,sheet: str|None=None):
+        from .dashboard_data import data
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            return await asyncio.to_thread(data,path,info["kind"],sheet)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,OSError):
+            raise HTTPException(status_code=422,detail="Dashboard data unavailable") from None
+
+    @api.get("/artifacts/{aid}/locate")
+    async def artifact_locate(req: Request,aid: str,text: str):
+        from .preview_pages import locate_text
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            return await asyncio.to_thread(locate_text,store.root,who,path,
+                                           info["sha256"],info["kind"],text)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,RuntimeError,OSError):
+            raise HTTPException(status_code=422,detail="Searchable visual location unavailable") from None
+
+    @api.get("/artifacts/{aid}/pages")
+    async def artifact_pages(req: Request,aid: str):
+        from .preview_pages import page_info
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            return await asyncio.to_thread(page_info,store.root,who,path,info["sha256"],info["kind"])
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,RuntimeError,OSError):
+            raise HTTPException(status_code=422,detail="Page renderer unavailable for artifact") from None
+
+    @api.get("/artifacts/{aid}/pages/{page}")
+    async def artifact_page(req: Request,aid: str,page: int):
+        from .preview_pages import render_page
+        from fastapi.responses import Response
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            data=await asyncio.to_thread(render_page,store.root,who,path,
+                                         info["sha256"],info["kind"],page)
+            return Response(content=data,media_type="image/png",
+                            headers={"Cache-Control":"private, max-age=120"})
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,RuntimeError,OSError):
+            raise HTTPException(status_code=422,detail="Page render failed") from None
+
+    @api.get("/artifacts/{aid}/preview")
+    def preview_artifact(req: Request,aid: str):
+        from .artifact_preview import render
+        try:
+            path,meta=store.artifact(owner(req),aid)
+            return render(path,meta["kind"])
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,OSError,zipfile.BadZipFile):
+            raise HTTPException(status_code=422,detail="Safe structured preview unavailable") from None
+
+    # Large source transfers: sequential, checksummed chunks with persisted offsets.
+    @api.post("/sources/transfers",status_code=201)
+    async def transfer_start(req: Request):
+        who=owner(req);same_origin(req)
+        from .source_large import LargeSourceTransfers
+        try:
+            body=await req.body()
+            if len(body)>1200:raise ValueError("Invalid upload metadata")
+            data=json.loads(body)
+            if set(data)!={"name","bytes","sha256"}:raise ValueError("Invalid metadata fields")
+            return await asyncio.to_thread(LargeSourceTransfers(store.root).start,who,
+                        data["name"],data["bytes"],data["sha256"])
+        except (ValueError,TypeError,KeyError):
+            raise HTTPException(status_code=422,detail="Invalid 200 MB upload metadata") from None
+
+    @api.get("/sources/transfers/{uid}")
+    def transfer_status(req: Request,uid: str):
+        from .source_large import LargeSourceTransfers
+        try:return LargeSourceTransfers(store.root).get(owner(req),uid)
+        except ValueError:raise HTTPException(status_code=404,detail="Upload unavailable") from None
+
+    @api.put("/sources/transfers/{uid}/chunks")
+    async def transfer_chunk(req: Request,uid: str):
+        who=owner(req);same_origin(req)
+        from .source_large import LargeSourceTransfers,CHUNK_BYTES
+        try:
+            offset=int(req.headers.get("x-chunk-offset",""))
+            digest=req.headers.get("x-chunk-sha256","")
+            raw=bytearray()
+            async for part in req.stream():
+                raw.extend(part)
+                if len(raw)>CHUNK_BYTES:raise HTTPException(status_code=413,detail="Chunk too large")
+            return await asyncio.to_thread(LargeSourceTransfers(store.root).append,
+                                           who,uid,offset,bytes(raw),digest)
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=409,detail="Invalid chunk or offset") from None
+
+    @api.post("/sources/transfers/{uid}/complete")
+    async def transfer_complete(req: Request,uid: str):
+        who=owner(req);same_origin(req)
+        from .source_large import LargeSourceTransfers
+        from .source_index import SourceIndex
+        scanner=None
+        import os
+        if os.environ.get("RIZZLER_DEPLOYMENT_MODE")=="production":
+            from .upload_scan import scan_clamd_file
+            host=os.environ.get("RIZZLER_CLAMD_HOST","")
+            port=int(os.environ.get("RIZZLER_CLAMD_PORT","3310"))
+            scanner=lambda path:scan_clamd_file(path,host,port,timeout=120)
+        try:
+            return await asyncio.to_thread(LargeSourceTransfers(store.root).finalize,
+                                           who,uid,SourceIndex(store.root),scanner,store.objects)
+        except (ScanUnavailable,StorageUnavailable):
+            raise HTTPException(status_code=503,detail="Source scanning or private storage unavailable") from None
+        except (ValueError,UnicodeError,sqlite3.DatabaseError,zipfile.BadZipFile):
+            raise HTTPException(status_code=422,detail="Source integrity or indexing failed") from None
+
+    @api.post("/sources/url",status_code=201)
+    async def source_url_upload(req: Request):
+        who=owner(req);same_origin(req)
+        from .source_links import download
+        from .source_index import SourceIndex
+        try:
+            raw=await req.body()
+            if len(raw)>2400:raise ValueError("URL request too large")
+            data=json.loads(raw)
+            if type(data) is not dict or set(data)!={"url"} or type(data["url"]) is not str:
+                raise ValueError("Invalid URL request")
+            result=await asyncio.wait_for(asyncio.to_thread(download,data["url"]),timeout=26)
+            name="web_"+hashlib.sha256(result["url"].encode()).hexdigest()[:16]+result["extension"]
+            if store.upload_scanner is not None:
+                await asyncio.to_thread(store.upload_scanner,result["data"])
+            item=await asyncio.to_thread(SourceIndex(store.root).register,
+                                          who,name,result["data"],result["url"],store.objects)
+            return {**item,"url":result["url"],"content_type":result["content_type"]}
+        except (ValueError,UnicodeError,TimeoutError,asyncio.TimeoutError,json.JSONDecodeError):
+            raise HTTPException(status_code=422,detail="Unable to safely retrieve or index public HTTPS source") from None
+        except (ScanUnavailable,StorageUnavailable):
+            raise HTTPException(status_code=503,detail="Source scanner or private storage unavailable") from None
+
+    @api.post("/sources",status_code=201)
+    async def source_upload(req: Request):
+        who=owner(req);same_origin(req)
+        from .source_index import SourceIndex, MAX_BYTES
+        raw=bytearray()
+        async for part in req.stream():
+            raw.extend(part)
+            if len(raw)>MAX_BYTES:
+                raise HTTPException(status_code=413,detail="Source exceeds 8 MB limit")
+        try:
+            if store.upload_scanner is not None:
+                await asyncio.to_thread(store.upload_scanner,bytes(raw))
+            return await asyncio.to_thread(SourceIndex(store.root).register,
+                    who,req.headers.get("x-file-name",""),bytes(raw),None,store.objects)
+        except (ScanUnavailable,StorageUnavailable):
+            raise HTTPException(status_code=503,detail="Source scanner or private storage unavailable") from None
+        except (ValueError,UnicodeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=400,detail="Invalid or unsupported source") from None
+
+    @api.get("/sources")
+    def sources(req: Request):
+        from .source_index import SourceIndex
+        return {"sources":SourceIndex(store.root).list(owner(req))}
+
+    @api.post("/sources/search")
+    async def sources_search(req: Request):
+        from .source_index import SourceIndex
+        who=owner(req);same_origin(req)
+        try:
+            raw=await req.body()
+            if len(raw)>3000:raise ValueError()
+            data=json.loads(raw)
+            if set(data)!={"ids","query"} or not isinstance(data["ids"],list) or not isinstance(data["query"],str):
+                raise ValueError()
+            return await asyncio.to_thread(SourceIndex(store.root).search,who,
+                data["ids"],data["query"])
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=400,detail="Invalid source search") from None
+        except PermissionError:
+            raise HTTPException(status_code=404,detail="Source not found") from None
 
     @api.post("/uploads",status_code=201)
     async def upload(req: Request):

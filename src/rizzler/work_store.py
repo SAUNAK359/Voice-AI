@@ -122,7 +122,9 @@ class WorkStore:
                   (jid, stage, message[:180], time.time()))
 
     def submit(self, owner: str, objective: str, formats: list[str],
-               idem: str, uploads: list[str] | None = None) -> dict:
+               idem: str, uploads: list[str] | None = None,
+               source_ids: list[str] | None = None,
+               source_coverage: str = "targeted") -> dict:
         if not isinstance(idem, str) or not KEY_RE.fullmatch(idem):
             raise ValueError("Idempotency-Key must be 8-96 safe characters")
         if not isinstance(formats, list) or not all(isinstance(f, str) for f in formats):
@@ -131,7 +133,24 @@ class WorkStore:
                 deliverables=tuple(formats)).validate()
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
-        payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
+        source_ids=source_ids or []
+        if (not isinstance(source_ids,list) or len(source_ids)>8 or
+            any(type(uid) is not str for uid in source_ids) or
+            len(set(source_ids))!=len(source_ids) or
+            source_coverage not in ("targeted","complete")):
+            raise ValueError("Invalid source scope")
+        source_refs=[]
+        if source_ids:
+            from .source_index import SourceIndex
+            owned={x["id"]:x for x in SourceIndex(self.root).list(owner)}
+            if not set(source_ids).issubset(owned):
+                raise Missing("Selected Work source is unavailable")
+            source_refs=[{"id":uid,"name":owned[uid]["name"],
+                          "sha256":owned[uid]["sha256"],"bytes":owned[uid]["bytes"]}
+                         for uid in source_ids]
+        payload = {"objective": objective, "deliverables": formats, "uploads": uploads,
+                   "source_ids": source_ids, "source_refs": source_refs,
+                   "source_coverage": source_coverage}
         # New agentic submissions do not select specialists until the worker
         # obtains an authenticated job lease and requests a model-authored plan.
         import os
@@ -306,7 +325,8 @@ class WorkStore:
         else:
             if not isinstance(objective,str) or not isinstance(formats,list):
                 raise ValueError("Revision requires a new objective and deliverables")
-        new=self.submit(owner,objective,formats,idem,source["uploads"])
+        new=self.submit(owner,objective,formats,idem,source["uploads"],
+                        source.get("source_ids",[]),source.get("source_coverage","targeted"))
         if new["id"] == jid:
             raise Conflict("Cannot derive a job from itself")
         with self._tx() as c:
@@ -415,35 +435,43 @@ class WorkStore:
         """Reap expired or cancelled tasks without starving later queued work."""
         if not isinstance(worker, str) or not worker or not 5 <= lease_seconds <= 600:
             raise ValueError("Invalid worker or lease")
-        now = time.time()
         with self._tx() as c:
-            while True:
-                row = c.execute("""SELECT * FROM jobs WHERE status='queued' OR
-                    (status='running' AND lease_until < ?) ORDER BY created LIMIT 1""",
-                    (now,)).fetchone()
-                if row is None:
-                    return None
-                jid = row["id"]
-                if row["cancel_requested"]:
-                    c.execute("""UPDATE jobs SET status='cancelled',stage='cancelled',
-                                 lease_owner=NULL,lease_until=0,updated=? WHERE id=?""", (now, jid))
-                    self._settle_agents(c, jid, "cancelled")
-                    self._event(c, jid, "cancelled", "Cancelled during recovery")
-                    continue
-                if row["attempts"] >= 3:
-                    c.execute("""UPDATE jobs SET status='failed',stage='failed',
-                        error_code='max_attempts',lease_owner=NULL,lease_until=0,updated=? WHERE id=?""",
-                              (now, jid))
-                    self._settle_agents(c, jid, "failed")
-                    self._event(c, jid, "failed", "Execution retries exhausted")
-                    continue
-                fence = row["fence"] + 1
-                c.execute("""UPDATE jobs SET status='running',stage='planning',
-                      lease_owner=?,lease_until=?,fence=?,attempts=attempts+1,updated=?
-                      WHERE id=?""", (worker, now+lease_seconds, fence, now, jid))
-                self._event(c, jid, "running", "Worker leased task")
-                return {"id": jid, "owner": row["owner"], "fence": fence,
-                        "payload": json.loads(row["payload"])}
+            return self._claim_locked(c,worker,lease_seconds,time.time())
+
+    def _claim_locked(self,c,worker,lease_seconds,now):
+        """The scheduler invokes this only within an atomic claim transaction."""
+        while True:
+            row = c.execute("""SELECT j.* FROM jobs j WHERE
+                (j.status='queued' OR (j.status='running' AND j.lease_until < ?))
+                AND NOT EXISTS (
+                    SELECT 1 FROM jobs active
+                    WHERE active.owner=j.owner AND active.id<>j.id
+                      AND active.status='running' AND active.lease_until>=?
+                )
+                ORDER BY j.created LIMIT 1""",(now,now)).fetchone()
+            if row is None:
+                return None
+            jid = row["id"]
+            if row["cancel_requested"]:
+                c.execute("""UPDATE jobs SET status='cancelled',stage='cancelled',
+                             lease_owner=NULL,lease_until=0,updated=? WHERE id=?""", (now, jid))
+                self._settle_agents(c, jid, "cancelled")
+                self._event(c, jid, "cancelled", "Cancelled during recovery")
+                continue
+            if row["attempts"] >= 3:
+                c.execute("""UPDATE jobs SET status='failed',stage='failed',
+                    error_code='max_attempts',lease_owner=NULL,lease_until=0,updated=? WHERE id=?""",
+                          (now, jid))
+                self._settle_agents(c, jid, "failed")
+                self._event(c, jid, "failed", "Execution retries exhausted")
+                continue
+            fence = row["fence"] + 1
+            c.execute("""UPDATE jobs SET status='running',stage='planning',
+                  lease_owner=?,lease_until=?,fence=?,attempts=attempts+1,updated=?
+                  WHERE id=?""", (worker, now+lease_seconds, fence, now, jid))
+            self._event(c, jid, "running", "Worker leased task")
+            return {"id": jid, "owner": row["owner"], "fence": fence,
+                    "payload": json.loads(row["payload"])}
 
     def _active(self, c, jid, worker, fence):
         row = c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()

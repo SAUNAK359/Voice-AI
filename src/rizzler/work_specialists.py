@@ -37,8 +37,20 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     checkpoint = store.root / "checkpoints" / owner / jid
     checkpoint.mkdir(parents=True, exist_ok=True, mode=0o700)
     context = {"objective": payload["objective"], "sources": [], "text": None,
-               "summary": None, "receipts": {}, "uploaded": [], "preflight": {}}
+               "summary": None, "receipts": {}, "uploaded": [], "preflight": {},
+               "source_coverage": None}
+    # All selected passages are processed only when the Live model explicitly
+    # requested complete coverage. Partial retrieval is never called complete.
+    if payload.get("source_ids"):
+        from .work_corpus import analyze
+        scope=await analyze(store,owner,payload["objective"],payload["source_ids"],
+                            payload.get("source_coverage","targeted"),
+                            payload.get("source_refs"))
+        context["source_coverage"]=scope
+        context["objective"]=(payload["objective"][:3000]+
+            "\n\nSource evidence ("+scope["coverage"]+"):\n"+scope["text"][:5000])
 
+    levels={}
     async def run_agent(spec):
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
         if saved is not None:
@@ -52,10 +64,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     "excel", "pdf_visual") else None
                 attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
                 attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
-                result = await asyncio.wait_for(invoke(spec, checkpoint, context, formats,
-                         payload, store, owner, composer, researcher,
-                         jid, worker_id, fence, attempt),
-                         timeout=spec.sla_seconds * 2)
+                from .work_reasoning import use
+                with use(levels.get(spec.name,"medium")):
+                    result = await asyncio.wait_for(invoke(spec, checkpoint, context, formats,
+                             payload, store, owner, composer, researcher,
+                             jid, worker_id, fence, attempt),
+                             timeout=spec.sla_seconds * 2)
                 qa = gate_agent(spec.name, result, formats)
                 for receipt in result_receipts(result):
                     if not verify_checkpoint(checkpoint / receipt.name, receipt):
@@ -98,8 +112,10 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     dynamic = graph.get("schema_version")==2
     if dynamic and graph["status"]=="planning":
         from .work_dynamic import generate, WorkModelConfig
-        proposed = await generate(payload,WorkModelConfig.from_env())
+        proposed = await generate({**payload,"objective":context["objective"]},
+                                  WorkModelConfig.from_env())
         graph=store.install_dynamic_graph(owner,jid,worker_id,fence,proposed)
+    levels.update({step["id"]:step.get("thinking_level","medium") for step in graph["steps"]})
     if dynamic:
         from .work_agents import SPECS
         planned={node["id"]:SPECS[node["id"]] for node in graph["steps"]}
@@ -195,51 +211,12 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         source = store.upload(owner, uploads[0])
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
-        text = await composer(payload["objective"], context["summary"])
+        text = await composer(context["objective"], context["summary"])
         return {"text": text}
     if name == "quality":
-        receipts = context["receipts"]
-        expected = formats.intersection(FILE_FORMATS)
-        missing = sorted(expected - receipts.keys())
-        unexpected = sorted(receipts.keys() - expected)
-        from .work_quality import inspect_artifact
-        from .work_visual import quality_mode
-        strict = quality_mode() == "strict"
-        detailed_qa = {}
-        bundle = {receipt.name: receipt for receipt in receipts.values() if receipt.kind != "zip"}
-        for receipt in receipts.values():
-            if not verify_checkpoint(checkpoint / receipt.name, receipt):
-                raise ValueError("Final quality gate failed artifact checksum")
-            structural_qa = await asyncio.to_thread(
-                inspect_artifact, checkpoint / receipt.name, receipt.kind,
-                dataset_rows=context["summary"]["rows"] if context["summary"] else None,
-                bundle_receipts=bundle, artifact_ir=context["artifact_ir"],
-                dataset_summary=context["summary"])
-            preflight = context["preflight"].get(receipt.kind)
-            if receipt.kind in ("pptx", "docx", "pdf", "xlsx") and strict:
-                if not preflight or preflight["sha256"] != receipt.sha256:
-                    raise ValueError("Strict QA inspection checkpoint missing or mismatched")
-                detailed_qa[receipt.kind] = preflight["quality"]
-            else:
-                detailed_qa[receipt.kind] = structural_qa
-            verified = verify_artifact(checkpoint / receipt.name, receipt.kind)
-            if verified.sha256 != receipt.sha256 or not verified.verified:
-                raise ValueError("Final quality gate failed structural receipt")
-        if missing or unexpected:
-            raise ValueError("Required deliverables missing or extra")
-        if "research" in formats and not context["sources"]:
-            raise ValueError("Research lineage missing grounding")
-        if "data_analysis" in formats and not context["summary"]:
-            raise ValueError("Analysis lineage missing independent SQL")
-        if not context["text"] and not context["summary"]:
-            raise ValueError("No substantive evidence to publish")
-        return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
-                "artifact_ir_schema": context["artifact_ir"].schema_version,
-                "artifact_ir_sha256": context["artifact_ir"].sha256,
-                "artifact_qa_mode": quality_mode(),
-                "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
-                             "sql_reconciled": bool(context["summary"])},
-                "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
+        from .work_repair import validate_repair
+        return await validate_repair(store,{"id":jid,"owner":owner,"fence":fence},
+                                     worker_id,checkpoint,context,payload)
     if name not in ("powerpoint", "word", "excel", "pdf_visual"):
         raise ValueError("Unknown specialist")
     requested = sorted(formats.intersection(spec.formats))
@@ -247,7 +224,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
     inspections = {}
     from .work_quality import inspect_artifact
     from .work_visual import quality_mode
-    strict = quality_mode() == "strict"
+    strict = quality_mode() != "structural"
     # One independent format-specific renderer, reusing the existing vetted
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
@@ -271,9 +248,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     artifact_ir=ir, dataset_summary=context["summary"],
                     visual_required=strict)
                 break
-            except ValueError:
+            except ValueError as exc:
                 if attempt_no:
-                    raise
+                    if quality_mode()!="agentic":
+                        raise
+                    # Stage verifies file integrity only; substantive defects
+                    # are explicitly deferred to the model-driven final QA,
+                    # which either repairs and revalidates or fails the job.
+                    verify_artifact(working,kind)
+                    report={"kind":kind,"passed":True,
+                            "checks":["staging_receipt_valid"],
+                            "deferred_to_quality":str(exc)[:350]}
+                    break
                 repairs += 1
                 working.unlink(missing_ok=True)
         receipt = verify_artifact(working, kind)

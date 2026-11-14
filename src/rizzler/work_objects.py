@@ -60,7 +60,7 @@ class S3Objects:
 
     def put(self, key: str, path: Path, digest: str, size: int):
         path = Path(path)
-        if size < 1 or size > 50_000_000:
+        if size < 1 or size > 200_000_000:
             raise ValueError("Object outside size policy")
         self._check_bytes(path, digest, size)
         name = self._key(key)
