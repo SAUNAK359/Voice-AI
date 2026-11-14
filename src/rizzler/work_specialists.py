@@ -50,7 +50,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         context["objective"]=(payload["objective"][:3000]+
             "\n\nSource evidence ("+scope["coverage"]+"):\n"+scope["text"][:5000])
 
-    levels={step["id"]:step.get("thinking_level","medium") for step in (graph.get("steps",[]) if "graph" in locals() else [])}
+    levels={}
     async def run_agent(spec):
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
         if saved is not None:
@@ -214,56 +214,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         text = await composer(context["objective"], context["summary"])
         return {"text": text}
     if name == "quality":
-        receipts = context["receipts"]
-        expected = formats.intersection(FILE_FORMATS)
-        missing = sorted(expected - receipts.keys())
-        unexpected = sorted(receipts.keys() - expected)
-        from .work_quality import inspect_artifact
-        from .work_visual import quality_mode
-        strict = quality_mode() != "structural"
-        detailed_qa = {}
-        bundle = {receipt.name: receipt for receipt in receipts.values() if receipt.kind != "zip"}
-        for receipt in receipts.values():
-            if not verify_checkpoint(checkpoint / receipt.name, receipt):
-                raise ValueError("Final quality gate failed artifact checksum")
-            structural_qa = await asyncio.to_thread(
-                inspect_artifact, checkpoint / receipt.name, receipt.kind,
-                dataset_rows=context["summary"]["rows"] if context["summary"] else None,
-                bundle_receipts=bundle, artifact_ir=context["artifact_ir"],
-                dataset_summary=context["summary"])
-            preflight = context["preflight"].get(receipt.kind)
-            if receipt.kind in ("pptx", "docx", "pdf", "xlsx") and strict:
-                if not preflight or preflight["sha256"] != receipt.sha256:
-                    raise ValueError("Strict QA inspection checkpoint missing or mismatched")
-                detailed_qa[receipt.kind] = preflight["quality"]
-            else:
-                detailed_qa[receipt.kind] = structural_qa
-            if quality_mode()=="agentic" and receipt.kind in ("pptx","docx","xlsx","pdf"):
-                from .visual_agentic_qa import review
-                verdict=await review(store.root,owner,checkpoint / receipt.name,
-                                     receipt.kind,receipt.sha256,payload["objective"])
-                detailed_qa[receipt.kind]["agentic_visual_review"]=verdict
-                if not verdict["passed"]:
-                    raise ValueError("Rendered artifact failed independent multimodal review")
-            verified = verify_artifact(checkpoint / receipt.name, receipt.kind)
-            if verified.sha256 != receipt.sha256 or not verified.verified:
-                raise ValueError("Final quality gate failed structural receipt")
-        if missing or unexpected:
-            raise ValueError("Required deliverables missing or extra")
-        if "research" in formats and not context["sources"]:
-            raise ValueError("Research lineage missing grounding")
-        if "data_analysis" in formats and not context["summary"]:
-            raise ValueError("Analysis lineage missing independent SQL")
-        if not context["text"] and not context["summary"]:
-            raise ValueError("No substantive evidence to publish")
-        return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
-                "artifact_ir_schema": context["artifact_ir"].schema_version,
-                "artifact_ir_sha256": context["artifact_ir"].sha256,
-                "artifact_qa_mode": quality_mode(),
-                "artifact_quality": detailed_qa, "source_coverage": context["source_coverage"],
-                "evidence": {"grounded_urls": len(context["sources"]),
-                             "sql_reconciled": bool(context["summary"])},
-                "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
+        from .work_repair import validate_repair
+        return await validate_repair(store,{"id":jid,"owner":owner,"fence":fence},
+                                     worker_id,checkpoint,context,payload)
     if name not in ("powerpoint", "word", "excel", "pdf_visual"):
         raise ValueError("Unknown specialist")
     requested = sorted(formats.intersection(spec.formats))
