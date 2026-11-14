@@ -44,7 +44,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     if payload.get("source_ids"):
         from .work_corpus import analyze
         scope=await analyze(store,owner,payload["objective"],payload["source_ids"],
-                            payload.get("source_coverage","targeted"))
+                            payload.get("source_coverage","targeted"),
+                            payload.get("source_refs"))
         context["source_coverage"]=scope
         context["objective"]=(payload["objective"][:3000]+
             "\n\nSource evidence ("+scope["coverage"]+"):\n"+scope["text"][:5000])
