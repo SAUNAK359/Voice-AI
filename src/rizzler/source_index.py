@@ -141,25 +141,29 @@ class SourceIndex:
                 "SELECT count(*) FROM chunks").fetchone()[0]>0:
                 db.execute("INSERT INTO passage_fts(passage_fts) VALUES('rebuild')")
     def register(self,owner,name,data,source_url=None):
+        """Legacy small-upload API uses the same complete-coverage indexer."""
+        import tempfile
+        from .source_large import index_large,MAX_BYTES
         from .security import safe_upload_name
         safe_upload_name(name,allowed=ALLOWED)
-        digest=hashlib.sha256(data).hexdigest()
-        text,meta=extract(name,data)
+        if not isinstance(data,bytes) or not 1<=len(data)<=MAX_BYTES:
+            raise ValueError("Invalid source size")
+        if source_url is not None and (
+            not isinstance(source_url,str) or not source_url.startswith("https://")
+            or len(source_url)>2000):
+            raise ValueError("Invalid URL provenance")
+        uid=secrets.token_hex(16)
+        with tempfile.TemporaryDirectory(prefix="rizzler-small-",dir=self.root) as temp:
+            path=Path(temp)/name
+            path.write_bytes(data)
+            result=index_large(self,owner,name,path,uid)
         if source_url is not None:
-            if not isinstance(source_url,str) or not source_url.startswith("https://") or len(source_url)>2000:
-                raise ValueError("Invalid source URL provenance")
-            meta["source_url"]=source_url
-        if not text.strip():raise ValueError("Document contains no extractable text; use visual PDF indexing")
-        parts=chunks(text)
-        if len(parts)>900:raise ValueError("Source index exceeds bounded passage limit")
-        with sqlite3.connect(self.db,timeout=15) as db:
-            n=db.execute("SELECT COUNT(*) FROM sources WHERE owner=?",(owner,)).fetchone()[0]
-            if n>=30:raise ValueError("Source limit reached")
-            uid=secrets.token_hex(16)
-            db.execute("INSERT INTO sources VALUES(?,?,?,?,?,?,?,?)",
-                       (uid,owner,name,digest,len(data),meta["kind"],json.dumps(meta),time.time()))
-            db.executemany("INSERT INTO chunks VALUES(?,?,?,?)",[(uid,i,pos,body) for i,(pos,body) in enumerate(parts)])
-        return {"id":uid,"name":name,"bytes":len(data),"passages":len(parts),"metadata":meta}
+            with sqlite3.connect(self.db) as db:
+                metadata=dict(result["metadata"],source_url=source_url)
+                db.execute("UPDATE sources SET metadata=? WHERE id=? AND owner=?",
+                           (json.dumps(metadata),uid,owner))
+            result["metadata"]=metadata
+        return result
     def list(self,owner):
         with sqlite3.connect(self.db) as db:
             rows=db.execute("SELECT id,name,bytes,kind,metadata FROM sources WHERE owner=? ORDER BY created DESC LIMIT 30",(owner,)).fetchall()
