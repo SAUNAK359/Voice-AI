@@ -30,7 +30,7 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'interim_transcript':if(s.recording)status('listening','Provisional: '+String(msg.text||'').slice(0,100));break;
  case'transcript':message('user',msg.text,seq);break;
  case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
- case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();showAgentApprovals(msg.approvals||[]);break;
+ case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job){refreshWork();window.RizzlerStudio?.refresh(msg.job.id);}showAgentApprovals(msg.approvals||[]);break;
  case'audio_begin':s.allowSeq=seq;s.done=false;break;
  case'metrics':{const m=msg.data||{};
  $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · ${m.tool?('Tool '+m.tool+' '+(m.tool_ms??'—')+' ms'):('Gemini first text '+(m.llm_first_text_ms??'—')+' ms')} · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
@@ -216,7 +216,7 @@ async function connectSession(){
    }
    if(!window.isSecureContext)throw Error('Microphone requires HTTPS or localhost');
    await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
-   s.session=true;$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
+   s.session=true;window.RizzlerStudio?.setAuth({key:s.key,sessionId:s.sessionId,production:s.production});$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
    for(const id of ['mute','send','reset'])$(id).disabled=false;
    status('listening','Ready. Speak naturally.');noteLatency();
    refreshToolCatalog();if(s.workEnabled)refreshWork();if(s.visualEnabled)refreshPDFDocs();
@@ -234,6 +234,7 @@ async function enableTextOnly(){
    }
    if(!s.agentEnabled)throw Error('The V12 agent runtime is not enabled');
    s.session=true;
+   window.RizzlerStudio?.setAuth({key:s.key,sessionId:s.sessionId,production:s.production});
    $('modal').classList.add('hidden');
    $('connection').textContent='Private text session';
    status('listening','Text and Work available. Microphone is optional.');
@@ -572,7 +573,7 @@ $('agent-chat')?.addEventListener('submit',async e=>{
    input.value='';
    feedback.textContent=result.approvals?.length?'Explicit approval required for the proposed change.':
      result.job?'Work accepted; track progress below.':'Agent response ready.';
-   if(result.job)refreshWork();
+   if(result.job){refreshWork();window.RizzlerStudio?.refresh(result.job.id);}
    showAgentApprovals(result.approvals||[]);
  }catch(error){feedback.textContent=error.message}
  finally{send.disabled=false}
