@@ -30,7 +30,7 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'interim_transcript':if(s.recording)status('listening','Provisional: '+String(msg.text||'').slice(0,100));break;
  case'transcript':message('user',msg.text,seq);break;
  case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
- case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job){refreshWork();window.RizzlerStudio?.refresh(msg.job.id);}showAgentApprovals(msg.approvals||[]);break;
+ case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job){refreshWork();window.RizzlerStudio?.refresh(msg.job.id);}window.RizzlerStudio?.applyActions(msg.ui_actions||[]);showAgentApprovals(msg.approvals||[]);break;
  case'audio_begin':s.allowSeq=seq;s.done=false;break;
  case'metrics':{const m=msg.data||{};
  $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · ${m.tool?('Tool '+m.tool+' '+(m.tool_ms??'—')+' ms'):('Gemini first text '+(m.llm_first_text_ms??'—')+' ms')} · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
@@ -574,6 +574,7 @@ $('agent-chat')?.addEventListener('submit',async e=>{
    feedback.textContent=result.approvals?.length?'Explicit approval required for the proposed change.':
      result.job?'Work accepted; track progress below.':'Agent response ready.';
    if(result.job){refreshWork();window.RizzlerStudio?.refresh(result.job.id);}
+   window.RizzlerStudio?.applyActions(result.ui_actions||[]);
    showAgentApprovals(result.approvals||[]);
  }catch(error){feedback.textContent=error.message}
  finally{send.disabled=false}
