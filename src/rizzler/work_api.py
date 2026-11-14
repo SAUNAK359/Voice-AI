@@ -16,6 +16,7 @@ from .work_skills import SKILLS
 from .work_agents import SPECS
 from .work_store import WorkStore, Conflict, Missing
 from .upload_scan import ScanUnavailable
+from .work_objects import StorageUnavailable
 
 def router(store: WorkStore, identity: Identity | None = None,
            owner_admission=None, owner_resolver=None) -> APIRouter:
@@ -328,8 +329,8 @@ def router(store: WorkStore, identity: Identity | None = None,
         try:
             return await asyncio.to_thread(LargeSourceTransfers(store.root).finalize,
                                            who,uid,SourceIndex(store.root),scanner,store.objects)
-        except ScanUnavailable:
-            raise HTTPException(status_code=503,detail="Source malware scanning unavailable") from None
+        except (ScanUnavailable,StorageUnavailable):
+            raise HTTPException(status_code=503,detail="Source scanning or private storage unavailable") from None
         except (ValueError,UnicodeError,sqlite3.DatabaseError,zipfile.BadZipFile):
             raise HTTPException(status_code=422,detail="Source integrity or indexing failed") from None
 
@@ -353,8 +354,8 @@ def router(store: WorkStore, identity: Identity | None = None,
             return {**item,"url":result["url"],"content_type":result["content_type"]}
         except (ValueError,UnicodeError,TimeoutError,asyncio.TimeoutError,json.JSONDecodeError):
             raise HTTPException(status_code=422,detail="Unable to safely retrieve or index public HTTPS source") from None
-        except ScanUnavailable:
-            raise HTTPException(status_code=503,detail="Source scanner unavailable") from None
+        except (ScanUnavailable,StorageUnavailable):
+            raise HTTPException(status_code=503,detail="Source scanner or private storage unavailable") from None
 
     @api.post("/sources",status_code=201)
     async def source_upload(req: Request):
@@ -370,8 +371,8 @@ def router(store: WorkStore, identity: Identity | None = None,
                 await asyncio.to_thread(store.upload_scanner,bytes(raw))
             return await asyncio.to_thread(SourceIndex(store.root).register,
                     who,req.headers.get("x-file-name",""),bytes(raw),None,store.objects)
-        except ScanUnavailable:
-            raise HTTPException(status_code=503,detail="Source scanner unavailable") from None
+        except (ScanUnavailable,StorageUnavailable):
+            raise HTTPException(status_code=503,detail="Source scanner or private storage unavailable") from None
         except (ValueError,UnicodeError,sqlite3.DatabaseError):
             raise HTTPException(status_code=400,detail="Invalid or unsupported source") from None
 
