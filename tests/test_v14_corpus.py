@@ -25,6 +25,9 @@ class CorpusWorkTests(unittest.TestCase):
                     ["md"],"corpus_job_002",[],[source["id"]],"complete")
 
     def test_full_corpus_is_mapped_and_cached_without_provider_on_replay(self):
+        import importlib.util
+        if importlib.util.find_spec("google.genai") is None:
+            self.skipTest("Full corpus model mock requires optional google-genai SDK")
         from rizzler.work_corpus import analyze
         from rizzler.work_dynamic import WorkModelConfig
         from google import genai
