@@ -37,7 +37,17 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     checkpoint = store.root / "checkpoints" / owner / jid
     checkpoint.mkdir(parents=True, exist_ok=True, mode=0o700)
     context = {"objective": payload["objective"], "sources": [], "text": None,
-               "summary": None, "receipts": {}, "uploaded": [], "preflight": {}}
+               "summary": None, "receipts": {}, "uploaded": [], "preflight": {},
+               "source_coverage": None}
+    # All selected passages are processed only when the Live model explicitly
+    # requested complete coverage. Partial retrieval is never called complete.
+    if payload.get("source_ids"):
+        from .work_corpus import analyze
+        scope=await analyze(store,owner,payload["objective"],payload["source_ids"],
+                            payload.get("source_coverage","targeted"))
+        context["source_coverage"]=scope
+        context["objective"]=(payload["objective"][:3000]+
+            "\n\nSource evidence ("+scope["coverage"]+"):\n"+scope["text"][:5000])
 
     async def run_agent(spec):
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
@@ -98,7 +108,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     dynamic = graph.get("schema_version")==2
     if dynamic and graph["status"]=="planning":
         from .work_dynamic import generate, WorkModelConfig
-        proposed = await generate(payload,WorkModelConfig.from_env())
+        proposed = await generate({**payload,"objective":context["objective"]},
+                                  WorkModelConfig.from_env())
         graph=store.install_dynamic_graph(owner,jid,worker_id,fence,proposed)
     if dynamic:
         from .work_agents import SPECS
@@ -195,7 +206,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         source = store.upload(owner, uploads[0])
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
-        text = await composer(payload["objective"], context["summary"])
+        text = await composer(context["objective"], context["summary"])
         return {"text": text}
     if name == "quality":
         receipts = context["receipts"]
@@ -244,7 +255,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
                 "artifact_qa_mode": quality_mode(),
-                "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
+                "artifact_quality": detailed_qa, "source_coverage": context["source_coverage"],
+                "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
                 "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
     if name not in ("powerpoint", "word", "excel", "pdf_visual"):
