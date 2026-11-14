@@ -242,6 +242,9 @@ async function applyActions(actions){
   state.selected=action.job_id;state.artifact=null;
   await refresh();
   if(action.kind==='slide'){
+   const detail=await api('/api/voice/jobs/'+encodeURIComponent(action.job_id)).then(r=>r.json());
+   const presentation=(detail.artifacts||[]).find(x=>x.kind==='pptx');
+   if(presentation&&state.artifact?.id!==presentation.id)await showArtifact(presentation);
    if(!state.navigateSlide?.(action.slide))report('Slide unavailable in this preview.');
   }else if(action.kind==='highlight'){
    const needle=String(action.text||'').trim().toLowerCase();
