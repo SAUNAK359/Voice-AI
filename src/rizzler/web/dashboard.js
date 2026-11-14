@@ -30,7 +30,7 @@ function render(data,target,actions={}){
  const columns=data.columns,rows=data.rows;
  const state={group:actions.group_by||columns[0],metric:actions.metric||'Count',
               chart:['bar','line','scatter'].includes(actions.chart)?actions.chart:'bar',
-              filterCol:'All',filter:'',sort:'Source order',search:'',page:0};
+              filterCol:'All',filter:'',sort:'Highest first',rowSort:null,ascending:true,search:'',page:0};
  const top=el('div',{class:'dashboard-top'});
  const name=el('h3',{text:data.sheet?data.sheet+' · Interactive Dashboard':'Interactive Data Dashboard'});
  const count=el('p',{class:'dashboard-metadata',text:rows.length+' source rows · '+columns.length+' columns · filter, group, drill down'});
@@ -52,13 +52,25 @@ function render(data,target,actions={}){
   controls.append(select('Group by',columns,state.group,v=>{state.group=v;state.page=0;update()}),
     select('Value',metricOptions,state.metric,v=>{state.metric=v;update()}),
     select('Chart',['bar','line','scatter'],state.chart,v=>{state.chart=v;update()}),
-    select('Filter column',['All',...columns],state.filterCol,v=>{state.filterCol=v;update()}));
+    select('Filter column',['All',...columns],state.filterCol,v=>{state.filterCol=v;update()}),
+    select('Group order',['Highest first','Lowest first','Alphabetical'],state.sort,v=>{state.sort=v;update()}));
   const query=el('input',{placeholder:'Filter value…','aria-label':'Filter value'});query.value=state.filter;
   query.oninput=()=>{state.filter=query.value;state.page=0;draw()};
   controls.append(query);
   const search=el('input',{placeholder:'Search all rows…','aria-label':'Search all rows'});search.value=state.search;
   search.oninput=()=>{state.search=search.value;state.page=0;draw()};
   controls.append(search);
+  const exportBtn=el('button',{type:'button',text:'Export selected rows'});
+  exportBtn.onclick=()=>{
+    const values=[columns,...filtered()],escaped=values.map(row=>row.map(cell=>{
+      const val=String(cell??'').replace(/"/g,'""');
+      return '"'+val+'"';
+    }).join(',')).join('\r\n');
+    const url=URL.createObjectURL(new Blob([escaped],{type:'text/csv;charset=utf-8'}));
+    const link=el('a',{download:'rizzler-filtered-analysis.csv'});link.href=url;link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
+  };
+  controls.append(exportBtn);
   const sheetNames=data.sheets||[];
   if(sheetNames.length){controls.append(select('Worksheet',sheetNames,data.sheet,async v=>{
     try{const updated=await current.loadSheet(v);render(updated,target,{group_by:state.group,metric:state.metric,chart:state.chart})}
@@ -78,7 +90,8 @@ function render(data,target,actions={}){
    grouped.set(label,prev);
   }
   let items=[...grouped.values()].map(x=>({...x,value:state.metric==='Count'?x.count:x.sum}));
-  items.sort((a,b)=>b.value-a.value);
+  if(state.sort==='Alphabetical')items.sort((a,b)=>a.label.localeCompare(b.label));
+  else items.sort((a,b)=>state.sort==='Lowest first'?a.value-b.value:b.value-a.value);
   const visible=items.slice(0,24),maximum=Math.max(1,...visible.map(x=>Math.abs(x.value)));
   chartRoot.replaceChildren();
   if(!subset.length){chartRoot.append(el('p',{text:'No matching records.'}));}
@@ -128,8 +141,24 @@ function render(data,target,actions={}){
   nav.append(prev,el('span',{text:'Page '+(state.page+1)+' / '+Math.max(1,Math.ceil(subset.length/50))}),next);
   details.append(nav);
   const table=el('table'),head=el('tr');
-  columns.forEach(c=>head.append(el('th',{text:c})));table.append(head);
-  subset.slice(state.page*50,(state.page+1)*50).forEach(row=>{
+  columns.forEach(c=>{
+    const title=el('th',{text:c+(state.rowSort===c?(state.ascending?' ▲':' ▼'):'')});
+    title.tabIndex=0;title.setAttribute('role','button');title.setAttribute('aria-label','Sort by '+c);
+    const sort=()=>{if(state.rowSort===c)state.ascending=!state.ascending;
+      else {state.rowSort=c;state.ascending=true}state.page=0;draw()};
+    title.addEventListener('click',sort);title.addEventListener('keydown',evt=>{if(evt.key==='Enter')sort()});
+    head.append(title);
+  });table.append(head);
+  let ordered=subset;
+  if(state.rowSort){
+    const col=columns.indexOf(state.rowSort);
+    ordered=[...subset].sort((a,b)=>{
+      const na=numeric(a[col]),nb=numeric(b[col]);
+      const cmp=na!==null&&nb!==null?na-nb:String(a[col]??'').localeCompare(String(b[col]??''));
+      return state.ascending?cmp:-cmp;
+    });
+  }
+  ordered.slice(state.page*50,(state.page+1)*50).forEach(row=>{
    const tr=el('tr');row.forEach(v=>tr.append(el('td',{text:String(v??'').slice(0,450)})));table.append(tr);
   });
   details.append(table);
