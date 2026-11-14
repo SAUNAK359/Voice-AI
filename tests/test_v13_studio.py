@@ -45,9 +45,9 @@ class QueueIsolationTests(unittest.TestCase):
     def test_one_active_job_per_owner_even_with_multiple_workers(self):
         with tempfile.TemporaryDirectory() as d,patch.dict(os.environ,{"RIZZLER_AGENTIC_ENABLED":"1"}):
             store=WorkStore(d)
-            first=store.submit("owner_one","Build a verified presentation",["pptx"],"first_job_001")
-            second=store.submit("owner_one","Build an inventory summary",["md"],"second_job_001")
-            other=store.submit("owner_two","Generate a short report",["md"],"other_job_001")
+            first=store.submit("owner_one","Build a verified presentation",["pptx"],"first_job_001",[])
+            second=store.submit("owner_one","Build an inventory summary",["md"],"second_job_001",[])
+            other=store.submit("owner_two","Generate a short report",["md"],"other_job_001",[])
             claimed=store.claim("worker_A",lease_seconds=60)
             self.assertEqual(claimed["id"],first["id"])
             claimed_2=store.claim("worker_B",lease_seconds=60)
