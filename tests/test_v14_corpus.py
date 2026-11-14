@@ -57,6 +57,38 @@ class CorpusWorkTests(unittest.TestCase):
             self.assertEqual(count[0],calls)
             self.assertEqual(second["passages_examined"],first["passages_examined"])
 
+    def test_cross_worker_source_hydration_from_private_object_store(self):
+        from rizzler.work_corpus import analyze
+        import hashlib
+        from pathlib import Path
+        class PrivateObjects:
+            def __init__(self):self.data={}
+            def put(self,key,path,digest,size):
+                data=Path(path).read_bytes()
+                assert hashlib.sha256(data).hexdigest()==digest and len(data)==size
+                self.data[key]=data
+            def get(self,key,path,digest,size):
+                data=self.data[key]
+                assert hashlib.sha256(data).hexdigest()==digest and len(data)==size
+                Path(path).parent.mkdir(parents=True,exist_ok=True)
+                Path(path).write_bytes(data)
+        with tempfile.TemporaryDirectory() as one,tempfile.TemporaryDirectory() as two:
+            remote=PrivateObjects()
+            source=SourceIndex(one).register("owner","remote.txt",
+                ("Independent worker should retrieve the source accurately.\n"*60).encode(),
+                objects=remote)
+            api=WorkStore(one,object_store=remote)
+            job=api.submit("owner","Read my independent worker source",
+                ["md"],"cross_worker_001",[],[source["id"]],"targeted")
+            receipts=api.specification("owner",job["id"])["source_refs"]
+            worker=WorkStore(two,object_store=remote)
+            report=asyncio.run(analyze(worker,"owner","independent worker",
+                                [source["id"]],"targeted",receipts))
+            self.assertEqual(report["coverage"],"retrieved_excerpts_only")
+            self.assertIn("source",report["text"])
+            self.assertEqual(SourceIndex(two).list("owner")[0]["sha256"],source["metadata"].get("sha256",
+                hashlib.sha256(("Independent worker should retrieve the source accurately.\n"*60).encode()).hexdigest()))
+
     def test_targeted_scope_never_claims_complete_coverage(self):
         from rizzler.work_corpus import analyze
         with tempfile.TemporaryDirectory() as root:
