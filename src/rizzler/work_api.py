@@ -1,6 +1,7 @@
 """Work endpoints share the single authenticated Voice/Work owner session."""
 from __future__ import annotations
 import json
+import sqlite3
 import asyncio
 from pathlib import Path
 from urllib.parse import urlparse
@@ -231,6 +232,49 @@ def router(store: WorkStore, identity: Identity | None = None,
             return FileResponse(path,filename=info["name"],headers={
                 "Cache-Control":"no-store","X-Content-Type-Options":"nosniff"})
         except Missing:raise HTTPException(status_code=404,detail="Artifact unavailable")
+
+    # V13 source intake: indexed passages are not raw context pasted into prompts.
+    # The source index is owner-scoped and shares the existing Work storage root.
+    @api.post("/sources",status_code=201)
+    async def source_upload(req: Request):
+        who=owner(req);same_origin(req)
+        from .source_index import SourceIndex, MAX_BYTES
+        raw=bytearray()
+        async for part in req.stream():
+            raw.extend(part)
+            if len(raw)>MAX_BYTES:
+                raise HTTPException(status_code=413,detail="Source exceeds 8 MB limit")
+        try:
+            if store.upload_scanner is not None:
+                await asyncio.to_thread(store.upload_scanner,bytes(raw))
+            return await asyncio.to_thread(SourceIndex(store.root).register,
+                    who,req.headers.get("x-file-name",""),bytes(raw))
+        except ScanUnavailable:
+            raise HTTPException(status_code=503,detail="Source scanner unavailable") from None
+        except (ValueError,UnicodeError,sqlite3.DatabaseError):
+            raise HTTPException(status_code=400,detail="Invalid or unsupported source") from None
+
+    @api.get("/sources")
+    def sources(req: Request):
+        from .source_index import SourceIndex
+        return {"sources":SourceIndex(store.root).list(owner(req))}
+
+    @api.post("/sources/search")
+    async def sources_search(req: Request):
+        from .source_index import SourceIndex
+        who=owner(req);same_origin(req)
+        try:
+            raw=await req.body()
+            if len(raw)>3000:raise ValueError()
+            data=json.loads(raw)
+            if set(data)!={"ids","query"} or not isinstance(data["ids"],list) or not isinstance(data["query"],str):
+                raise ValueError()
+            return await asyncio.to_thread(SourceIndex(store.root).search,who,
+                data["ids"],data["query"])
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=400,detail="Invalid source search") from None
+        except PermissionError:
+            raise HTTPException(status_code=404,detail="Source not found") from None
 
     @api.post("/uploads",status_code=201)
     async def upload(req: Request):
