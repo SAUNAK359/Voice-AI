@@ -317,7 +317,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
             'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
             'Content-Security-Policy': "default-src 'self'; script-src 'self'; "
-              "style-src 'self'; connect-src 'self' ws: wss:; img-src 'self'; "
+              "style-src 'self'; connect-src 'self' ws: wss:; img-src 'self' blob:; frame-src 'self' blob:; "
               "worker-src 'self'; base-uri 'none'; frame-ancestors 'none'",
         })
         if production:
