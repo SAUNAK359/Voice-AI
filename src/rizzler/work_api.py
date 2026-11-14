@@ -325,7 +325,7 @@ def router(store: WorkStore, identity: Identity | None = None,
             from .upload_scan import scan_clamd_file
             host=os.environ.get("RIZZLER_CLAMD_HOST","")
             port=int(os.environ.get("RIZZLER_CLAMD_PORT","3310"))
-            scanner=lambda path:scan_clamd_file(path,host,port)
+            scanner=lambda path:scan_clamd_file(path,host,port,timeout=120)
         try:
             return await asyncio.to_thread(LargeSourceTransfers(store.root).finalize,
                                            who,uid,SourceIndex(store.root),scanner,store.objects)
