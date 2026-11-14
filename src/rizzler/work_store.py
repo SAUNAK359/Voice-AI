@@ -139,13 +139,18 @@ class WorkStore:
             len(set(source_ids))!=len(source_ids) or
             source_coverage not in ("targeted","complete")):
             raise ValueError("Invalid source scope")
+        source_refs=[]
         if source_ids:
             from .source_index import SourceIndex
-            owned={x["id"] for x in SourceIndex(self.root).list(owner)}
+            owned={x["id"]:x for x in SourceIndex(self.root).list(owner)}
             if not set(source_ids).issubset(owned):
                 raise Missing("Selected Work source is unavailable")
+            source_refs=[{"id":uid,"name":owned[uid]["name"],
+                          "sha256":owned[uid]["sha256"],"bytes":owned[uid]["bytes"]}
+                         for uid in source_ids]
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads,
-                   "source_ids": source_ids, "source_coverage": source_coverage}
+                   "source_ids": source_ids, "source_refs": source_refs,
+                   "source_coverage": source_coverage}
         # New agentic submissions do not select specialists until the worker
         # obtains an authenticated job lease and requests a model-authored plan.
         import os
