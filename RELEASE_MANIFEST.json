@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3186,
-      "git_blob_sha1": "41566f97b1471dc5e086c3cdbc4231f073d0ae9b"
+      "bytes": 3346,
+      "git_blob_sha1": "1471ca718c0ae589045cad72fb7f7f100cd3d295"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -609,8 +609,8 @@
     },
     {
       "path": "src/rizzler/api.py",
-      "bytes": 70252,
-      "git_blob_sha1": "0cf33e7e826f755b0dcaf0e09a07a71b45c7ea04"
+      "bytes": 70776,
+      "git_blob_sha1": "593809dfd0ef6e0933595cba870d135c76564844"
     },
     {
       "path": "src/rizzler/artifact_preview.py",
@@ -663,6 +663,11 @@
       "git_blob_sha1": "3bc4ff405dceabc640855d831c859d357706562e"
     },
     {
+      "path": "src/rizzler/live_native.py",
+      "bytes": 13497,
+      "git_blob_sha1": "54960ff933d7ce7ac69cecc92ee58accb39cbce4"
+    },
+    {
       "path": "src/rizzler/math_engine.py",
       "bytes": 7465,
       "git_blob_sha1": "be5fe06200a156cd79960c2f1f2fefa652fda5b5"
@@ -701,6 +706,11 @@
       "path": "src/rizzler/pdf_documents.py",
       "bytes": 31288,
       "git_blob_sha1": "894477ff45abe00a2ce79d20ad2a69cacc969080"
+    },
+    {
+      "path": "src/rizzler/preview_pages.py",
+      "bytes": 3943,
+      "git_blob_sha1": "394112ab1daa702a0e99e6fa0668c6c96bbf909a"
     },
     {
       "path": "src/rizzler/production_guard.py",
@@ -744,8 +754,13 @@
     },
     {
       "path": "src/rizzler/source_index.py",
-      "bytes": 10358,
-      "git_blob_sha1": "722c8fe656306b366e594b92df40845649d4a127"
+      "bytes": 12822,
+      "git_blob_sha1": "70e949c8589206d5eec9e3e7f475a3e2d4035d5a"
+    },
+    {
+      "path": "src/rizzler/source_large.py",
+      "bytes": 13544,
+      "git_blob_sha1": "0e81018ae823b9089e1300f235362a502335edb9"
     },
     {
       "path": "src/rizzler/source_links.py",
@@ -799,8 +814,8 @@
     },
     {
       "path": "src/rizzler/web/app.js",
-      "bytes": 37900,
-      "git_blob_sha1": "787e29d2756146b77aab647dbbc4d6e768d3d60b"
+      "bytes": 38221,
+      "git_blob_sha1": "faf13c9177911dbfd9d0cea0551d37619e10772e"
     },
     {
       "path": "src/rizzler/web/capture.js",
@@ -809,8 +824,13 @@
     },
     {
       "path": "src/rizzler/web/index.html",
-      "bytes": 7529,
-      "git_blob_sha1": "3d38661f25326c1d0c255d2da4a1403709f8728f"
+      "bytes": 7581,
+      "git_blob_sha1": "5fa9c4aa6b04364126b0c1aedf25767d7b3fef66"
+    },
+    {
+      "path": "src/rizzler/web/native-live.js",
+      "bytes": 6185,
+      "git_blob_sha1": "4ac3cacb5e328a1247d5f681ea3091d69291b8d5"
     },
     {
       "path": "src/rizzler/web/rich-text.js",
@@ -819,8 +839,8 @@
     },
     {
       "path": "src/rizzler/web/studio.js",
-      "bytes": 16348,
-      "git_blob_sha1": "672b95fcb54846522815b52388757a3a19f6cd09"
+      "bytes": 19530,
+      "git_blob_sha1": "724378267090072873f5b22f79ed45f2db7a3173"
     },
     {
       "path": "src/rizzler/web/style.css",
@@ -849,8 +869,8 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "bytes": 17451,
-      "git_blob_sha1": "f26b1281129b0915c5d4fc8b9560fd2ddb0c6760"
+      "bytes": 21965,
+      "git_blob_sha1": "8d43dd15892679273c74b93c8478e789e4338b30"
     },
     {
       "path": "src/rizzler/work_auth.py",
@@ -1131,6 +1151,11 @@
       "path": "tests/test_v13_studio.py",
       "bytes": 6371,
       "git_blob_sha1": "db368b1e6dda8d6a857ca049735023a78c42ae2f"
+    },
+    {
+      "path": "tests/test_v14_large_sources.py",
+      "bytes": 4265,
+      "git_blob_sha1": "efb4717d8daca2e8cf12084b3df956de356da29c"
     },
     {
       "path": "tests/test_voice_core.cjs",
