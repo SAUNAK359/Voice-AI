@@ -28,7 +28,7 @@ async def review(root,owner,path,kind,sha,objective):
     try:
         async def one_batch(start):
             async with semaphore:
-                pages_for_batch=list(range(start,min(start+3,pages)+1))
+                pages_for_batch=list(range(start,min(start+2,pages)+1))
                 parts=[types.Part.from_text(text=(
                     "You are independently reviewing an actual rendered business artifact. "
                     "Inspect each supplied page for text occlusion, cropped elements, "
