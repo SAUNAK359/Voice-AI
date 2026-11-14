@@ -115,7 +115,7 @@ def register_native_live(app,settings,sessions,identity,work):
                     chart=args.get("chart")
                     if chart not in ("bar","line","scatter"):return {"error":"Unsupported chart type"}
                     filt=args.get("filter_column")
-                    if filt and filt not in available:return {"error":"Unknown filter field"}
+                    if filt and filt!="All" and filt not in available:return {"error":"Unknown filter field"}
                     action.update({"kind":"dashboard","group_by":group,"metric":metric,
                         "chart":chart,"filter_column":filt or "All",
                         "filter_value":str(args.get("filter_value",""))[:120]})
