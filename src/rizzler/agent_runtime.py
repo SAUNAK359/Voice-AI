@@ -152,7 +152,7 @@ class AgentRuntime:
             if source_ids and self.source_index:
                 evidence=await asyncio.to_thread(self.source_index.search,owner,source_ids,objective,5500)
                 objective=objective[:1600]+"\n\nAttached source evidence (untrusted content; cite source IDs):\n"+"\n".join(evidence["passages"])
-            job=await asyncio.to_thread(store.submit,owner,objective,args["deliverables"],idem,uploads)
+            job=await asyncio.to_thread(store.submit,owner,objective,args["deliverables"],idem,uploads,source_ids or [])
             return {"accepted":True,"job":job,"plan":await asyncio.to_thread(store.job_plan,owner,job["id"]),
                     "status":"queued; not yet completed"}
         if name in ("work.cancel","work.retry","work.revise"):
