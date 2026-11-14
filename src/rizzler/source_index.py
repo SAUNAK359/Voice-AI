@@ -127,7 +127,18 @@ class SourceIndex:
                 CREATE INDEX IF NOT EXISTS sources_owner ON sources(owner,created);
                 CREATE TABLE IF NOT EXISTS chunks(
                 source_id TEXT NOT NULL,number INT NOT NULL,position INT NOT NULL,
-                body TEXT NOT NULL,PRIMARY KEY(source_id,number));""")
+                body TEXT NOT NULL,PRIMARY KEY(source_id,number));
+                CREATE INDEX IF NOT EXISTS passage_source ON chunks(source_id,number);
+                CREATE VIRTUAL TABLE IF NOT EXISTS passage_fts USING fts5(body,content='chunks',content_rowid='rowid');
+                CREATE TRIGGER IF NOT EXISTS passage_insert AFTER INSERT ON chunks BEGIN
+                    INSERT INTO passage_fts(rowid,body) VALUES(new.rowid,new.body);
+                END;
+                CREATE TRIGGER IF NOT EXISTS passage_delete AFTER DELETE ON chunks BEGIN
+                    INSERT INTO passage_fts(passage_fts,rowid,body) VALUES('delete',old.rowid,old.body);
+                END;""")
+            if db.execute("SELECT count(*) FROM passage_fts").fetchone()[0]==0 and db.execute(
+                "SELECT count(*) FROM chunks").fetchone()[0]>0:
+                db.execute("INSERT INTO passage_fts(passage_fts) VALUES('rebuild')")
     def register(self,owner,name,data,source_url=None):
         from .security import safe_upload_name
         safe_upload_name(name,allowed=ALLOWED)
@@ -153,21 +164,45 @@ class SourceIndex:
             rows=db.execute("SELECT id,name,bytes,kind,metadata FROM sources WHERE owner=? ORDER BY created DESC LIMIT 30",(owner,)).fetchall()
         return [{"id":i,"name":name,"bytes":n,"kind":kind,"metadata":json.loads(meta)} for i,name,n,kind,meta in rows]
     def search(self,owner,ids,query,max_chars=9000):
-        if not ids or len(ids)>8:raise ValueError("Select 1–8 owned sources")
-        with sqlite3.connect(self.db) as db:
+        """Owner-scoped, indexed retrieval; complete coverage is a separate Work operation."""
+        if type(ids) is not list or not ids or len(ids)>8 or len(set(ids))!=len(ids):
+            raise ValueError("Select 1–8 distinct owned sources")
+        if not isinstance(query,str) or len(query)>8000 or not 100<=max_chars<=18000:
+            raise ValueError("Invalid retrieval budget")
+        with sqlite3.connect(self.db,timeout=30) as db:
             records=db.execute("SELECT id,name FROM sources WHERE owner=?",(owner,)).fetchall()
             names=dict(records)
             if not set(ids).issubset(names):raise PermissionError("Unowned source reference")
-            tokens=set(re.findall(r"\w{3,}",query.lower()))-{ "the","and","with","from","that","this","into","for","you","your" }
-            found=[]
-            for uid in dict.fromkeys(ids):
-                for idx,pos,body in db.execute("SELECT number,position,body FROM chunks WHERE source_id=?",(uid,)):
-                    score=sum(body.lower().count(t) for t in tokens)
-                    found.append((score,uid,idx,pos,body))
-        selected=sorted(found,key=lambda r:(-r[0],r[1],r[2]))[:12]
-        output=[];total=0
-        for score,uid,idx,pos,body in selected:
-            excerpt=f"[Source {names[uid]} / {uid} / passage {idx+1} / offset {pos}]\n"+body+"\n"
-            if total+len(excerpt)>max_chars:break
-            output.append(excerpt);total+=len(excerpt)
-        return {"passages":output,"indexed":len(found),"returned":len(output),"coverage":"retrieved_excerpts_only"}
+            count=db.execute("SELECT count(*) FROM chunks WHERE source_id IN ("+
+                             ",".join("?" for _ in ids)+")",ids).fetchone()[0]
+            stop={"the","and","with","from","that","this","into","for","you","your","what","how","please","create","make","generate","report","summary"}
+            terms=list(dict.fromkeys(x for x in re.findall(r"\w{3,}",query.lower())
+                                     if x not in stop))[:12]
+            selected=[]
+            if terms:
+                expression=" OR ".join('"'+t.replace('"','')+'"' for t in terms)
+                try:
+                    q=("SELECT c.source_id,c.number,c.position,c.body FROM passage_fts "
+                       "JOIN chunks c ON passage_fts.rowid=c.rowid WHERE passage_fts MATCH ? "
+                       "AND c.source_id IN ("+",".join("?" for _ in ids)+") "
+                       "ORDER BY bm25(passage_fts) LIMIT 18")
+                    selected=db.execute(q,[expression,*ids]).fetchall()
+                except sqlite3.OperationalError:
+                    selected=[]
+            if not selected:
+                # A query without matching terms must not pretend to cover the
+                # whole file; sample the beginning and end explicitly.
+                for uid in ids:
+                    selected.extend(db.execute(
+                        "SELECT source_id,number,position,body FROM chunks WHERE source_id=? "
+                        "ORDER BY number LIMIT 3",(uid,)).fetchall())
+                    selected.extend(db.execute(
+                        "SELECT source_id,number,position,body FROM chunks WHERE source_id=? "
+                        "ORDER BY number DESC LIMIT 2",(uid,)).fetchall())
+        output=[];used=0
+        for uid,number,pos,body in selected:
+            excerpt=f"[Source {names[uid]} / {uid} / passage {number+1} / offset {pos}]\n"+body+"\n"
+            if used+len(excerpt)>max_chars:break
+            output.append(excerpt);used+=len(excerpt)
+        return {"passages":output,"indexed":count,"returned":len(output),
+                "coverage":"retrieved_excerpts_only"}
