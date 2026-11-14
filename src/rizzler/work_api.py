@@ -248,6 +248,63 @@ def router(store: WorkStore, identity: Identity | None = None,
         except (ValueError,OSError,zipfile.BadZipFile):
             raise HTTPException(status_code=422,detail="Safe structured preview unavailable") from None
 
+    # Large source transfers: sequential, checksummed chunks with persisted offsets.
+    @api.post("/sources/transfers",status_code=201)
+    async def transfer_start(req: Request):
+        who=owner(req);same_origin(req)
+        from .source_large import LargeSourceTransfers
+        try:
+            body=await req.body()
+            if len(body)>1200:raise ValueError("Invalid upload metadata")
+            data=json.loads(body)
+            if set(data)!={"name","bytes","sha256"}:raise ValueError("Invalid metadata fields")
+            return await asyncio.to_thread(LargeSourceTransfers(store.root).start,who,
+                        data["name"],data["bytes"],data["sha256"])
+        except (ValueError,TypeError,KeyError):
+            raise HTTPException(status_code=422,detail="Invalid 200 MB upload metadata") from None
+
+    @api.get("/sources/transfers/{uid}")
+    def transfer_status(req: Request,uid: str):
+        from .source_large import LargeSourceTransfers
+        try:return LargeSourceTransfers(store.root).get(owner(req),uid)
+        except ValueError:raise HTTPException(status_code=404,detail="Upload unavailable") from None
+
+    @api.put("/sources/transfers/{uid}/chunks")
+    async def transfer_chunk(req: Request,uid: str):
+        who=owner(req);same_origin(req)
+        from .source_large import LargeSourceTransfers,CHUNK_BYTES
+        try:
+            offset=int(req.headers.get("x-chunk-offset",""))
+            digest=req.headers.get("x-chunk-sha256","")
+            raw=bytearray()
+            async for part in req.stream():
+                raw.extend(part)
+                if len(raw)>CHUNK_BYTES:raise HTTPException(status_code=413,detail="Chunk too large")
+            return await asyncio.to_thread(LargeSourceTransfers(store.root).append,
+                                           who,uid,offset,bytes(raw),digest)
+        except (ValueError,TypeError):
+            raise HTTPException(status_code=409,detail="Invalid chunk or offset") from None
+
+    @api.post("/sources/transfers/{uid}/complete")
+    async def transfer_complete(req: Request,uid: str):
+        who=owner(req);same_origin(req)
+        from .source_large import LargeSourceTransfers
+        from .source_index import SourceIndex
+        scanner=None
+        import os
+        if os.environ.get("RIZZLER_DEPLOYMENT_MODE")=="production":
+            from .upload_scan import scan_clamd_file
+            host=os.environ.get("RIZZLER_CLAMD_HOST","")
+            port=int(os.environ.get("RIZZLER_CLAMD_PORT","3310"))
+            scanner=lambda path:scan_clamd_file(path,host,port)
+        try:
+            return await asyncio.to_thread(LargeSourceTransfers(store.root).finalize,
+                                           who,uid,SourceIndex(store.root),scanner)
+        except ScanUnavailable:
+            raise HTTPException(status_code=503,detail="Source malware scanning unavailable") from None
+        except (ValueError,UnicodeError,sqlite3.DatabaseError,zipfile.BadZipFile):
+            raise HTTPException(status_code=422,detail="Source integrity or indexing failed") from None
+
     @api.post("/sources/url",status_code=201)
     async def source_url_upload(req: Request):
         who=owner(req);same_origin(req)
