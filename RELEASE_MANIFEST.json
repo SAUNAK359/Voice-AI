@@ -363,6 +363,11 @@
       "git_blob_sha1": "98e8ddddb0d5be983056a509477ba9d09c59bec0"
     },
     {
+      "path": "docs/V13_QUALIFICATION.md",
+      "bytes": 5565,
+      "git_blob_sha1": "4562ad26ad2bd9cedad9f36c2e20070043f6b364"
+    },
+    {
       "path": "docs/VOICE_SUPERVISOR_V10.md",
       "bytes": 7230,
       "git_blob_sha1": "bf09e45edf5a0fd1ef68be4b47de09213865e542"
@@ -569,8 +574,8 @@
     },
     {
       "path": "src/rizzler/agent_runtime.py",
-      "bytes": 15581,
-      "git_blob_sha1": "9216b323b3f9b4d71cc62fac9bef9d3a6a51937b"
+      "bytes": 17797,
+      "git_blob_sha1": "e844bf7e515233b16ccee98190bfc275490640ee"
     },
     {
       "path": "src/rizzler/agent_skills/excel/SKILL.md",
@@ -789,13 +794,13 @@
     },
     {
       "path": "src/rizzler/voice.py",
-      "bytes": 15373,
-      "git_blob_sha1": "60bd539d6564064ab33e232d4877123d514160f0"
+      "bytes": 15452,
+      "git_blob_sha1": "9dde12db515510cb03f36d2871c2bed6ce670664"
     },
     {
       "path": "src/rizzler/web/app.js",
-      "bytes": 37783,
-      "git_blob_sha1": "afd648300459e04b3bb9700268c58fe36ce7ead8"
+      "bytes": 37900,
+      "git_blob_sha1": "787e29d2756146b77aab647dbbc4d6e768d3d60b"
     },
     {
       "path": "src/rizzler/web/capture.js",
@@ -814,8 +819,8 @@
     },
     {
       "path": "src/rizzler/web/studio.js",
-      "bytes": 14642,
-      "git_blob_sha1": "6280a0a00ce50256bf1c54f55b65d77c0d712497"
+      "bytes": 16348,
+      "git_blob_sha1": "672b95fcb54846522815b52388757a3a19f6cd09"
     },
     {
       "path": "src/rizzler/web/style.css",
@@ -1124,8 +1129,8 @@
     },
     {
       "path": "tests/test_v13_studio.py",
-      "bytes": 4979,
-      "git_blob_sha1": "0c68c437d20881490ff172029137dde74d5306c4"
+      "bytes": 6371,
+      "git_blob_sha1": "db368b1e6dda8d6a857ca049735023a78c42ae2f"
     },
     {
       "path": "tests/test_voice_core.cjs",
