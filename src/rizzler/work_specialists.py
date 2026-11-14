@@ -50,6 +50,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         context["objective"]=(payload["objective"][:3000]+
             "\n\nSource evidence ("+scope["coverage"]+"):\n"+scope["text"][:5000])
 
+    levels={step["id"]:step.get("thinking_level","medium") for step in (graph.get("steps",[]) if "graph" in locals() else [])}
     async def run_agent(spec):
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
         if saved is not None:
@@ -63,10 +64,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     "excel", "pdf_visual") else None
                 attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
                 attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
-                result = await asyncio.wait_for(invoke(spec, checkpoint, context, formats,
-                         payload, store, owner, composer, researcher,
-                         jid, worker_id, fence, attempt),
-                         timeout=spec.sla_seconds * 2)
+                from .work_reasoning import use
+                with use(levels.get(spec.name,"medium")):
+                    result = await asyncio.wait_for(invoke(spec, checkpoint, context, formats,
+                             payload, store, owner, composer, researcher,
+                             jid, worker_id, fence, attempt),
+                             timeout=spec.sla_seconds * 2)
                 qa = gate_agent(spec.name, result, formats)
                 for receipt in result_receipts(result):
                     if not verify_checkpoint(checkpoint / receipt.name, receipt):
@@ -112,6 +115,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         proposed = await generate({**payload,"objective":context["objective"]},
                                   WorkModelConfig.from_env())
         graph=store.install_dynamic_graph(owner,jid,worker_id,fence,proposed)
+    levels.update({step["id"]:step.get("thinking_level","medium") for step in graph["steps"]})
     if dynamic:
         from .work_agents import SPECS
         planned={node["id"]:SPECS[node["id"]] for node in graph["steps"]}
