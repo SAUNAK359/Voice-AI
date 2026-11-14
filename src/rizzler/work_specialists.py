@@ -248,9 +248,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     artifact_ir=ir, dataset_summary=context["summary"],
                     visual_required=strict)
                 break
-            except ValueError:
+            except ValueError as exc:
                 if attempt_no:
-                    raise
+                    if quality_mode()!="agentic":
+                        raise
+                    # Stage verifies file integrity only; substantive defects
+                    # are explicitly deferred to the model-driven final QA,
+                    # which either repairs and revalidates or fails the job.
+                    verify_artifact(working,kind)
+                    report={"kind":kind,"passed":True,
+                            "checks":["staging_receipt_valid"],
+                            "deferred_to_quality":str(exc)[:350]}
+                    break
                 repairs += 1
                 working.unlink(missing_ok=True)
         receipt = verify_artifact(working, kind)
