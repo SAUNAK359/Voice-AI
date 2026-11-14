@@ -30,17 +30,21 @@ unavailable, report the failure rather than claim a successful Live turn.
 - [x] Full extracted-text indexing with source offsets and searchable passages.
 - [x] FTS5 retrieval avoids a linear corpus read on each question.
 - [x] S3 object storage allows up to 200 MB per object.
-- [ ] True end-to-end complete-source Work analysis over every indexed passage,
-      with durable coverage attestations and hierarchical model reduction.
-- [ ] Cross-machine source-index hydration and replicated original source bytes.
+- [x] Model-selected complete-source Work coverage over every indexed text passage,
+      with checkpointed map/reduce and explicit auditable coverage receipts.
+- [ ] Real-provider quality, accuracy and cost qualification on 200 MB sources.
+- [x] Private S3 original-source publication and checksum-verified worker hydration.
+- [ ] Multi-host performance and S3 failure-injection qualification.
 - [ ] Semantic embeddings, multimodal diagrams, scanned PDFs, image-only documents.
 - [ ] Full-fidelity SQL analytics for uploaded SQLite databases.
 - [ ] 200 MB external URL fetch remains bounded separately.
 
-An index covering all extracted text is NOT proof the agent reasoned over every
-page or row. Source retrieval returns relevant excerpts with explicit
-`retrieved_excerpts_only` coverage. A full-corpus report must not claim
-comprehensive coverage until the Worker has auditable per-section evidence.
+Indexed sources support two Live-model-selected modes: targeted passage
+retrieval (`retrieved_excerpts_only`) and exhaustive text map/reduce
+(`all_indexed_text_passages`). A complete coverage receipt proves each
+indexed text passage was processed, not that the model understood the
+content correctly. Images, scanned pages and charts remain a separate
+multimodal validation gap.
 
 ## Phase 3 — Pixel-faithful previews
 
