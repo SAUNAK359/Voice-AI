@@ -237,6 +237,34 @@ def router(store: WorkStore, identity: Identity | None = None,
 
     # V13 source intake: indexed passages are not raw context pasted into prompts.
     # The source index is owner-scoped and shares the existing Work storage root.
+    @api.get("/artifacts/{aid}/pages")
+    async def artifact_pages(req: Request,aid: str):
+        from .preview_pages import page_info
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            return await asyncio.to_thread(page_info,store.root,who,path,info["sha256"],info["kind"])
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,RuntimeError,OSError):
+            raise HTTPException(status_code=422,detail="Page renderer unavailable for artifact") from None
+
+    @api.get("/artifacts/{aid}/pages/{page}")
+    async def artifact_page(req: Request,aid: str,page: int):
+        from .preview_pages import render_page
+        from fastapi.responses import Response
+        try:
+            who=owner(req)
+            path,info=store.artifact(who,aid)
+            data=await asyncio.to_thread(render_page,store.root,who,path,
+                                         info["sha256"],info["kind"],page)
+            return Response(content=data,media_type="image/png",
+                            headers={"Cache-Control":"private, max-age=120"})
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,RuntimeError,OSError):
+            raise HTTPException(status_code=422,detail="Page render failed") from None
+
     @api.get("/artifacts/{aid}/preview")
     def preview_artifact(req: Request,aid: str):
         from .artifact_preview import render
