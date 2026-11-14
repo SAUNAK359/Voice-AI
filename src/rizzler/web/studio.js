@@ -133,7 +133,10 @@ async function showPages(f,target){
  };
  prev.onclick=()=>update(current-1).catch(e=>report(e.message));
  next.onclick=()=>update(current+1).catch(e=>report(e.message));
- nav.append(prev,label,next);target.replaceChildren(nav,picture);
+ const pageWrap=document.createElement('div');pageWrap.className='studio-page-wrap';
+ pageWrap.append(picture);
+ nav.append(prev,label,next);target.replaceChildren(nav,pageWrap);
+ state.pageWrap=pageWrap;
  state.navigateSlide=update;
  const note=document.createElement('small');note.className='studio-preview-note';
  note.textContent='Rendered from the original file. Office font and pagination differences may occur.';
@@ -329,6 +332,33 @@ async function applyActions(actions){
    if(presentation&&state.artifact?.id!==presentation.id)await showArtifact(presentation);
    if(!state.navigateSlide?.(action.slide))report('Slide unavailable in this preview.');
   }else if(action.kind==='highlight'){
+   const selected=await api('/api/voice/jobs/'+encodeURIComponent(action.job_id)).then(r=>r.json());
+   const documents=(selected.artifacts||[]).filter(x=>['pdf','pptx','docx','xlsx'].includes(x.kind));
+   if(documents.length){
+    for(const f of documents){
+     try{
+      const found=await api('/api/work/artifacts/'+encodeURIComponent(f.id)+
+       '/locate?text='+encodeURIComponent(action.text)).then(r=>r.json());
+      if(!found.matched)continue;
+      if(state.artifact?.id!==f.id)await showArtifact(f);
+      if(f.kind==='xlsx'&&!state.navigateSlide){
+       const button=[...document.querySelectorAll('#studio-preview button')].find(b=>b.textContent==='Original pages');
+       if(button)await button.onclick();
+      }
+      await state.navigateSlide?.(found.page);
+      const container=state.pageWrap;
+      if(container){
+       container.querySelectorAll('.studio-text-highlight').forEach(n=>n.remove());
+       const overlay=document.createElement('div');overlay.className='studio-text-highlight';
+       Object.assign(overlay.style,{left:(found.x*100)+'%',top:(found.y*100)+'%',
+        width:(found.width*100)+'%',height:(found.height*100)+'%'});
+       container.append(overlay);container.scrollIntoView({block:'center'});
+      }
+      break;
+     }catch(e){report('Text location not available for '+f.kind)}
+    }
+    continue;
+   }
    const needle=String(action.text||'').trim().toLowerCase();
    if(!needle)continue;
    const walker=document.createTreeWalker($('studio-preview'),NodeFilter.SHOW_TEXT);
