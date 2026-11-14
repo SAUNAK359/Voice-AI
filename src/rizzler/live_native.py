@@ -54,6 +54,7 @@ def register_native_live(app,settings,sessions,identity,work):
             {"name":"preview_open","description":"Open an owned completed job artifact in the visual preview panel.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"}},"required":["job_id"]}},
             {"name":"preview_slide","description":"Navigate the user's visual preview to a specific slide number in an owned completed presentation.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"slide":{"type":"INTEGER"}},"required":["job_id","slide"]}},
             {"name":"preview_highlight","description":"Highlight exact text in the user's completed visual artifact.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"text":{"type":"STRING"}},"required":["job_id","text"]}},
+            {"name":"preview_dashboard","description":"Interactively configure a real dashboard made from the user's completed data artifact. Choose its chart, grouping, numeric metric and optional filter from the actual available columns rather than guessing values.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"group_by":{"type":"STRING"},"metric":{"type":"STRING"},"chart":{"type":"STRING"},"filter_column":{"type":"STRING"},"filter_value":{"type":"STRING"}},"required":["job_id","group_by","metric","chart","filter_column","filter_value"]}},
         ] if work else []
         async def execute(fc):
             args=fc.args or {}
@@ -88,7 +89,7 @@ def register_native_live(app,settings,sessions,identity,work):
                                             list(session.sources),coverage)
                 await ws.send_json({"type":"job","job":job})
                 return {"accepted":True,"job_id":job["id"],"status":"queued","not_finished":True}
-            if name in ("preview_open","preview_slide","preview_highlight"):
+            if name in ("preview_open","preview_slide","preview_highlight","preview_dashboard"):
                 jid=str(args.get("job_id",""))
                 job=await asyncio.to_thread(work.get,owner,jid)
                 if job["status"]!="completed":return {"error":"Project is not completed"}
@@ -101,6 +102,23 @@ def register_native_live(app,settings,sessions,identity,work):
                     slide=args.get("slide")
                     if type(slide) is not int or not 1<=slide<=500:return {"error":"Invalid slide"}
                     action["slide"]=slide
+                if name=="preview_dashboard":
+                    tabular=next((a for a in artifacts if a["kind"] in ("csv","xlsx")),None)
+                    if tabular is None:return {"error":"No compatible dataset in this project"}
+                    from .dashboard_data import data as dashboard_data
+                    source,_=await asyncio.to_thread(work.artifact,owner,tabular["id"])
+                    record=await asyncio.to_thread(dashboard_data,source,tabular["kind"])
+                    available=record["columns"]
+                    group=args.get("group_by");metric=args.get("metric")
+                    if group not in available or (metric!="Count" and metric not in available):
+                        return {"error":"Unknown dashboard column","available_columns":available}
+                    chart=args.get("chart")
+                    if chart not in ("bar","line","scatter"):return {"error":"Unsupported chart type"}
+                    filt=args.get("filter_column")
+                    if filt and filt not in available:return {"error":"Unknown filter field"}
+                    action.update({"kind":"dashboard","group_by":group,"metric":metric,
+                        "chart":chart,"filter_column":filt or "All",
+                        "filter_value":str(args.get("filter_value",""))[:120]})
                 if name=="preview_highlight":
                     raw=args.get("text")
                     if not isinstance(raw,str) or not raw.strip():return {"error":"Missing highlight text"}
