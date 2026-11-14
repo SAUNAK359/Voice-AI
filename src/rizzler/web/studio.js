@@ -113,14 +113,48 @@ function renderStructured(preview,target){
  const note=document.createElement('small');note.className='studio-preview-note';note.textContent='Structured content preview; native document layout may differ. Download to view the original formatting.';
  target.append(note);
 }
+async function showPages(f,target){
+ const record=await api('/api/work/artifacts/'+encodeURIComponent(f.id)+'/pages').then(r=>r.json());
+ const nav=document.createElement('div');nav.className='studio-artifact-list';
+ const prev=document.createElement('button'),next=document.createElement('button');
+ const label=document.createElement('span'),picture=document.createElement('img');
+ prev.textContent='Previous';next.textContent='Next';picture.alt='Rendered artifact page';
+ picture.style.cssText='width:100%;height:auto;max-height:none;object-fit:contain';
+ let current=1,activeUrl=null;
+ const update=async page=>{
+  if(page<1||page>record.pages)return false;
+  const response=await api('/api/work/artifacts/'+encodeURIComponent(f.id)+'/pages/'+page);
+  const url=URL.createObjectURL(await response.blob());
+  const old=activeUrl;activeUrl=url;picture.src=url;
+  if(old)URL.revokeObjectURL(old);
+  current=page;label.textContent=page+' / '+record.pages;
+  prev.disabled=current===1;next.disabled=current===record.pages;
+  return true;
+ };
+ prev.onclick=()=>update(current-1).catch(e=>report(e.message));
+ next.onclick=()=>update(current+1).catch(e=>report(e.message));
+ nav.append(prev,label,next);target.replaceChildren(nav,picture);
+ state.navigateSlide=update;
+ const note=document.createElement('small');note.className='studio-preview-note';
+ note.textContent='Rendered from the original file. Office font and pagination differences may occur.';
+ target.append(note);
+ await update(1);
+ return true;
+}
 async function showArtifact(f){
  state.artifact=f;state.navigateSlide=null;
  const target=$('studio-preview');target.replaceChildren();
  const loading=document.createElement('p');loading.textContent='Opening '+f.name+'…';target.append(loading);
  try{
-  if(['pptx','docx','xlsx'].includes(f.kind.toLowerCase())){
-   const record=await api('/api/work/artifacts/'+encodeURIComponent(f.id)+'/preview').then(r=>r.json());
-   renderStructured(record,target);
+  if(['pdf','pptx','docx','xlsx'].includes(f.kind.toLowerCase())){
+   try{
+    await showPages(f,target);
+   }catch(e){
+    if(f.kind.toLowerCase()==='pdf')throw e;
+    report('Visual renderer unavailable; using structured document preview.');
+    const record=await api('/api/work/artifacts/'+encodeURIComponent(f.id)+'/preview').then(r=>r.json());
+    renderStructured(record,target);
+   }
    for(const b of $('studio-artifact-list').querySelectorAll('button'))
     b.setAttribute('aria-pressed',String(b.textContent===f.kind.toUpperCase()));
    return;
