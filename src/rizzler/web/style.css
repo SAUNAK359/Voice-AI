@@ -108,3 +108,18 @@
 .studio-artifact-list button[aria-pressed="true"]{border-color:#61cbe8;background:#18455a}
 .studio-feedback{min-height:18px;font-size:11px;color:var(--muted);padding-top:8px}
 @media(max-width:900px){.studio-shell{display:flex;flex-direction:column;height:auto;min-height:calc(100dvh - 120px)}.left-workspace{height:67dvh;min-height:470px;flex-shrink:0}.studio-panel{min-height:480px;height:75dvh}.studio-preview iframe{min-height:320px}.shell{padding:12px}}
+
+/* Interactive artifact dashboard, rendered entirely from verified source records. */
+.dashboard-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.dashboard-top h3{margin:0;font-size:17px}.dashboard-metadata{font-size:11px;color:#657586}
+.dashboard-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin:12px 0}
+.dashboard-control{display:flex;flex-direction:column;gap:4px;color:#374151;font-size:11px}
+.dashboard-control select,.dashboard-controls input{border:1px solid #bcc8d1;border-radius:8px;color:#142435;background:#fff;padding:7px;font-size:12px;min-width:95px}
+.dashboard-chart{background:#fff;border:1px solid #d8e0e5;border-radius:12px;padding:12px;min-height:240px}
+.dashboard-chart svg{max-width:100%;overflow:visible}.dashboard-summary{display:flex;gap:15px;color:#526476;font-size:11px;padding:9px 2px}
+.dashboard-data{overflow:auto;max-height:340px;scrollbar-width:thin}
+.dashboard-data table{width:100%;border-collapse:collapse;font-size:12px}
+.dashboard-data th{position:sticky;top:0;background:#ecf2f5}
+.dashboard-data th,.dashboard-data td{padding:7px;border-bottom:1px solid #d8e0e5;white-space:nowrap}
+.dashboard-pagination{display:flex;gap:12px;align-items:center;padding:8px 0;font-size:12px}
+.dashboard-pagination button{border:1px solid #bfcbd6;background:#fff;color:#263e50;padding:6px 9px;border-radius:7px}
