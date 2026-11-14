@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import sqlite3
+import zipfile
 import asyncio
 from pathlib import Path
 from urllib.parse import urlparse
@@ -235,6 +236,17 @@ def router(store: WorkStore, identity: Identity | None = None,
 
     # V13 source intake: indexed passages are not raw context pasted into prompts.
     # The source index is owner-scoped and shares the existing Work storage root.
+    @api.get("/artifacts/{aid}/preview")
+    def preview_artifact(req: Request,aid: str):
+        from .artifact_preview import render
+        try:
+            path,meta=store.artifact(owner(req),aid)
+            return render(path,meta["kind"])
+        except Missing:
+            raise HTTPException(status_code=404,detail="Artifact unavailable") from None
+        except (ValueError,OSError,zipfile.BadZipFile):
+            raise HTTPException(status_code=422,detail="Safe structured preview unavailable") from None
+
     @api.post("/sources",status_code=201)
     async def source_upload(req: Request):
         who=owner(req);same_origin(req)
