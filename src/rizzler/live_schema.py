@@ -22,7 +22,7 @@ _ID = re.compile(r"[a-f0-9]{32}\Z")
 _LIMITS = {
     "work_list": {},
     "work_status": {"job_id": (32, 32)},
-    "work_submit": {"objective": (1, 5000)},
+    "work_submit": {"objective": (3, 5000)},
     "source_search": {"query": (1, 2000)},
     "preview_open": {"job_id": (32, 32)},
     "preview_slide": {"job_id": (32, 32)},
@@ -59,6 +59,8 @@ def validate_call(name: str, args, *, enabled: bool=True) -> dict:
                 raise ValueError("Invalid Work job ID")
             if "enum" in spec and value not in spec["enum"]:
                 raise ValueError("Unsupported enum value")
+            if name=="preview_dashboard" and key=="chart" and value not in ("bar","line","scatter"):
+                raise ValueError("Unsupported chart type")
         elif expected=="INTEGER":
             if type(value) is not int or not (1<=value<=500):
                 raise ValueError("Invalid slide index")
@@ -88,6 +90,7 @@ def public_schema(name: str):
             field["minimum"]=1
             field["maximum"]=500
         if "enum" in spec:field["enum"]=list(spec["enum"])
+        if name=="preview_dashboard" and key=="chart":field["enum"]=["bar","line","scatter"]
         if key=="deliverables":
             field.update({"items":{"type":"string","enum":sorted(DELIVERABLES)},
                           "minItems":1,"maxItems":12,"uniqueItems":True})
