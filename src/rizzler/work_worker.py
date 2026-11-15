@@ -56,7 +56,8 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
               "Objective and selected research evidence:\n" + objective[:16000] + "\n\nDataset summary:\n" +
               json.dumps(data_summary or {}, ensure_ascii=False)[:9000])
     try:
-        async with asyncio.timeout(min(90, cfg.request_timeout)):
+        from .work_async import wait_scope
+        async with wait_scope(min(90, cfg.request_timeout)):
             from .production_guard import reserve_provider_call
             reserve_provider_call('work')
             response=await client.aio.models.generate_content(
@@ -99,7 +100,8 @@ async def grounded_research(objective: str) -> dict:
     async def search(question: str, number: int):
         try:
             reserve_provider_call("research")
-            async with asyncio.timeout(min(65, cfg.request_timeout)):
+            from .work_async import wait_scope
+            async with wait_scope(min(65, cfg.request_timeout)):
                 response = await client.aio.models.generate_content(
                     model=cfg.gemini_model,
                     contents=(
