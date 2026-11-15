@@ -174,8 +174,8 @@
     },
     {
       "path": "pyproject.toml",
-      "bytes": 1168,
-      "sha256": "8905626c717b5145ba34dac6d86ff1f790f9ee8685022d28afd49b9c4167ac65"
+      "bytes": 1188,
+      "sha256": "d3885eaa41124fe15b1e5894134e4644148de959d038cd4b23165925c583b40f"
     },
     {
       "path": "README.md",
