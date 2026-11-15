@@ -942,8 +942,8 @@
     },
     {
       "path": "src/rizzler/work_dynamic.py",
-      "bytes": 13142,
-      "git_blob_sha1": "4603b34a4d90185ab9463a53cba6120cca3d93f7",
+      "bytes": 13333,
+      "git_blob_sha1": "2ddb52bc88400a70b871212b40da841cf6492479",
       "sha256": "67729b6fa603aa0fa58396748a6711dc05838307af7718128e2cc235fe17c60a"
     },
     {
@@ -997,8 +997,8 @@
     },
     {
       "path": "src/rizzler/work_repair.py",
-      "bytes": 11906,
-      "git_blob_sha1": "f045135bd40cb3d1ab15442bf935da54f34d0cb8"
+      "bytes": 11956,
+      "git_blob_sha1": "cb1d26481d8467a2f5654fde30931f7e786e2a65"
     },
     {
       "path": "src/rizzler/work_rich_docs.py",
