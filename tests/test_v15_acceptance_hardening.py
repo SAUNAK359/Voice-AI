@@ -216,7 +216,9 @@ class FullOfflineBundle(IsolatedAsyncioTestCase):
             self.assertTrue(await WorkWorker(store,composer=composer,
                                       researcher=unexpected_research).once())
             saved=store.get("owner_v15",job["id"])
-            self.assertEqual(saved["status"],"completed",saved["error_code"])
+            self.assertEqual(saved["status"],"completed",
+                {"error":saved["error_code"],"agents":store.agent_steps("owner_v15",job["id"]),
+                 "events":store.events("owner_v15",job["id"])})
             outputs=store.artifacts("owner_v15",job["id"])
             self.assertEqual(set(item["kind"] for item in outputs),
                              {"pptx","docx","xlsx","pdf","md"})
