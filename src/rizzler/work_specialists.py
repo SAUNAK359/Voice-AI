@@ -191,7 +191,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         unexpected = sorted(receipts.keys() - expected)
         from .work_quality import inspect_artifact
         from .work_visual import quality_mode
-        strict = quality_mode() == "strict"
+        strict = bool(payload.get("v15")) or quality_mode() == "strict"
         detailed_qa = {}
         bundle = {receipt.name: receipt for receipt in receipts.values() if receipt.kind != "zip"}
         for receipt in receipts.values():
@@ -223,7 +223,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
-                "artifact_qa_mode": quality_mode(),
+                "artifact_qa_mode": "strict" if strict else quality_mode(),
                 "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
                 "limits": "Structural and evidence QA; independent content review is not proof of factual or visual perfection",
@@ -235,7 +235,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
     inspections = {}
     from .work_quality import inspect_artifact
     from .work_visual import quality_mode
-    strict = quality_mode() == "strict"
+    strict = bool(payload.get("v15")) or quality_mode() == "strict"
     # One independent format-specific renderer, reusing the existing vetted
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
