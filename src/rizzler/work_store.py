@@ -84,6 +84,10 @@ class WorkStore:
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS cognitive_preflights(
+              job_id TEXT PRIMARY KEY, record_json TEXT NOT NULL,
+              sha256 TEXT NOT NULL, created REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE TABLE IF NOT EXISTS job_lineage(
               child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL,
               operation TEXT NOT NULL, created REAL NOT NULL,
@@ -220,6 +224,74 @@ class WorkStore:
             return [self._view(row) for row in c.execute(
                 "SELECT * FROM jobs WHERE owner=? ORDER BY created DESC LIMIT 50", (owner,))]
 
+    def cognitive_preflight(self, owner: str, jid: str) -> dict | None:
+        """Authenticated, hash-verified preflight; no chain of thought or secrets."""
+        with self._tx() as c:
+            row = c.execute("SELECT payload FROM jobs WHERE id=? AND owner=?",
+                            (jid, owner)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            stored = c.execute(
+                "SELECT record_json,sha256 FROM cognitive_preflights WHERE job_id=?",
+                (jid,)).fetchone()
+            if stored is None:
+                return None
+            raw = stored["record_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest() != stored["sha256"]:
+                raise ValueError("Stored cognitive preflight checksum failed")
+            from .work_preflight import verify_committed
+            return verify_committed(json.loads(raw), json.loads(row["payload"]))
+
+    def install_cognitive_preflight(self, owner: str, jid: str, worker: str,
+                                    fence: int, proposed: dict) -> dict:
+        """Fence and persist model-approved preflight before the execution graph.
+
+        An already committed preflight cannot be replaced by stale workers.
+        A crashed worker can recover the same approved graph without re-planning.
+        """
+        from .work_preflight import verify_committed
+        with self._tx() as c:
+            row = self._active(c, jid, worker, fence)
+            if row["owner"] != owner:
+                raise Missing("Job owner mismatch")
+            payload = json.loads(row["payload"])
+            doc = verify_committed(proposed, payload)
+            raw = json.dumps(doc, sort_keys=True, ensure_ascii=False,
+                             separators=(",", ":"), allow_nan=False)
+            if len(raw.encode("utf-8")) > 30000:
+                raise ValueError("Cognitive preflight exceeded storage budget")
+            stored = c.execute(
+                "SELECT record_json,sha256 FROM cognitive_preflights WHERE job_id=?",
+                (jid,)).fetchone()
+            if stored is not None:
+                if hashlib.sha256(stored["record_json"].encode("utf-8")).hexdigest() != stored["sha256"]:
+                    raise ValueError("Committed preflight checksum failed")
+                previous = verify_committed(json.loads(stored["record_json"]), payload)
+                if previous != doc:
+                    raise Conflict("Committed cognitive preflight cannot be replaced")
+                return previous
+            stamp = time.time()
+            c.execute("""INSERT INTO cognitive_preflights(job_id,record_json,sha256,created)
+                         VALUES(?,?,?,?)""",
+                      (jid, raw, hashlib.sha256(raw.encode("utf-8")).hexdigest(), stamp))
+            self._event(c, jid, "planning",
+                        "Cognitive preflight approved by independent model reviewer")
+            return doc
+
+    def _effective_plan_payload(self, c, jid: str, payload: dict) -> dict:
+        """Apply the preflight's more restrictive evidence policy on restart."""
+        stored = c.execute(
+            "SELECT record_json,sha256 FROM cognitive_preflights WHERE job_id=?",
+            (jid,)).fetchone()
+        if stored is None:
+            return payload
+        raw = stored["record_json"]
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest() != stored["sha256"]:
+            raise ValueError("Cognitive preflight failed integrity verification")
+        from .work_preflight import verify_committed
+        cognition = verify_committed(json.loads(raw), payload)
+        return {**payload, "evidence_scope": cognition["understanding"]["evidence_policy"]}
+
     def job_plan(self, owner: str, jid: str) -> dict:
         """Owner-scoped, checksum-protected immutable execution plan."""
         with self._tx() as c:
@@ -238,7 +310,7 @@ class WorkStore:
             result = json.loads(raw)
             if result.get("schema_version") == 2:
                 from .work_dynamic import validate
-                return validate(result,payload)
+                return validate(result,self._effective_plan_payload(c,jid,payload))
             # Old plans are immutable; no dynamic job can silently fall back.
             from .task_planning import execution_graph, validate_graph
             expected=execution_graph(payload)
@@ -259,7 +331,7 @@ class WorkStore:
             row=self._active(c,jid,worker,fence)
             if row["owner"]!=owner:raise Missing("Job owner mismatch")
             payload=json.loads(row["payload"])
-            validated=validate(proposed,payload)
+            validated=validate(proposed,self._effective_plan_payload(c,jid,payload))
             if validated["status"]!="ready":raise ValueError("Model plan not executable")
             saved=c.execute("SELECT plan_json,sha256 FROM job_plans WHERE job_id=?",
                             (jid,)).fetchone()
