@@ -61,8 +61,22 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
             objective, formats=data.get("objective"),data.get("deliverables")
             uploads=data.get("uploads",[])
             if not isinstance(objective,str):raise ValueError("Objective must be text")
+            from .v15_agentic import enabled, plan, V15Unavailable
+            mode = data.get("execution_mode")
+            if mode not in (None, "legacy", "v15"):
+                raise ValueError("Unsupported execution mode")
+            if mode == "v15" and not enabled("v15"):
+                raise HTTPException(status_code=503, detail="V15 is disabled")
+            use_v15 = enabled(mode) and mode != "legacy"
+            decision = None
+            if use_v15:
+                try:
+                    decision = await plan(objective, formats, uploads)
+                except (V15Unavailable, TimeoutError, OSError):
+                    raise HTTPException(status_code=503,
+                        detail="V15 planning unavailable; legacy execution was not substituted") from None
             return store.submit(who,objective,formats,
-                req.headers.get("idempotency-key",""),uploads)
+                req.headers.get("idempotency-key",""),uploads, v15=decision)
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError) as exc:
             raise HTTPException(status_code=400,detail="Invalid job request") from None
         except Conflict:
