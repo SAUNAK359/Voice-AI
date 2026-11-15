@@ -94,6 +94,16 @@ class ScopeAndFinanceTests(TestCase):
         with self.assertRaisesRegex(ValueError,"reconcile"):
             financial_profile(HEADERS,rows)
 
+    def test_rendered_markdown_retains_actual_heading_markers(self):
+        from rizzler.work_skills import render_one
+        with TemporaryDirectory() as root:
+            p=Path(root)/"brief.md"
+            render_one("md",p,"Business briefing",NARRATIVE,None,[])
+            report=p.read_text()
+            self.assertTrue(report.startswith("# Business briefing"))
+            self.assertIn("## Regional comparisons",report)
+            self.assertIn("| --- | ---: | ---: |",report)
+
     def test_markdown_blocks_not_literal_text(self):
         parsed=blocks([("Main","### Regional results\n"
                        "| Group | Profit |\n| --- | --- |\n| North | 1600 |\n"
