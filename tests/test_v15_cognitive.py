@@ -174,6 +174,60 @@ class CognitiveIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["passed"])
         self.assertIn("Write strategic recommendations",mock.await_args.args[0])
 
+    async def test_complete_research_to_editable_powerpoint_through_real_workstore(self):
+        from rizzler.work_worker import WorkWorker
+        from rizzler.work_store import WorkStore
+        from pptx import Presentation
+        graph={"schema_version":2,"status":"ready","steps":[
+            {"id":"research","tool":"research","depends_on":[],"thinking_level":"high"},
+            {"id":"orchestrator","tool":"orchestrator",
+             "depends_on":["research"],"thinking_level":"high"},
+            {"id":"powerpoint","tool":"powerpoint",
+             "depends_on":["orchestrator"],"thinking_level":"high"},
+            {"id":"quality","tool":"quality",
+             "depends_on":["research","orchestrator","powerpoint"],"thinking_level":"high"}]}
+        used=[]
+        async def research(_objective):
+            return {"text":("Official operational figures include 120 units and "
+                    "an analysis of supply-chain performance that requires "
+                    "careful decision-making and transparent qualifications."),
+                    "sources":[URL]}
+        async def compose(objective,_summary):
+            used.append(objective)
+            return ("# Supply chain evidence\n\n## Stakeholder analysis\n"
+                    "Operational statistics show 120 units. The report differentiates "
+                    "verified source records from editorial interpretation.\n\n"
+                    "## Recommendations\nPrioritize source verification and "
+                    "incremental response planning.")
+        async def plan(_payload,_cfg):
+            return graph
+        with tempfile.TemporaryDirectory() as root,\
+             patch.dict("os.environ",{
+                "RIZZLER_AGENTIC_ENABLED":"1",
+                "RIZZLER_ARTIFACT_QA":"structural",
+                "RIZZLER_V15_PRESENTATION":"1",
+                "RIZZLER_V15_RECOVERY":"0"}),\
+             patch("rizzler.work_dynamic.generate",new=plan),\
+             patch("rizzler.work_dynamic.WorkModelConfig.from_env",
+                   return_value=SimpleNamespace(gemini_api_key="mock",
+                                                gemini_model="mock",
+                                                request_timeout=40)),\
+             patch("rizzler.work_presentation.compose_storyboard",
+                   new=AsyncMock(return_value=STORY)):
+            store=WorkStore(root)
+            job=store.submit("owner","Produce an executive supply chain presentation",
+                 ["pptx"],"full_v15_presentation_0001",[])
+            self.assertTrue(await WorkWorker(store,composer=compose,researcher=research).once())
+            saved=store.get("owner",job["id"])
+            self.assertEqual(saved["status"],"completed",saved.get("error_code"))
+            self.assertIn("120 units",used[0])
+            files=store.artifacts("owner",job["id"])
+            self.assertEqual([x["kind"] for x in files],["pptx"])
+            path,_=store.artifact("owner",files[0]["id"])
+            self.assertEqual(len(Presentation(path).slides),3)
+            qa=store.quality_report("owner",job["id"])
+            self.assertTrue(qa["quality"]["passed"])
+
     async def test_model_directed_recovery_retries_only_the_failed_specialist(self):
         from rizzler.work_worker import WorkWorker
         from rizzler.work_store import WorkStore
