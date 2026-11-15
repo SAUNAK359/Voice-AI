@@ -91,6 +91,21 @@ def router(store: WorkStore, identity: Identity | None = None,
         except ValueError:
             raise HTTPException(status_code=503,detail="Work plan integrity unavailable") from None
 
+    @api.get("/jobs/{jid}/cognitive-preflight")
+    def cognitive_preflight(req: Request, jid: str):
+        """Owner-scoped, read-only explanation of decisions, not hidden reasoning."""
+        who=owner(req)
+        try:
+            record=store.cognitive_preflight(who,jid)
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+        except ValueError:
+            raise HTTPException(status_code=503,detail="Cognitive preflight integrity unavailable") from None
+        if record is None:
+            return {"job_id":jid,"status":"pending"}
+        from .work_preflight import safe_summary
+        return {"job_id":jid, **safe_summary(record)}
+
     @api.get("/jobs/{jid}/agents")
     def agent_statuses(req: Request, jid: str):
         who = owner(req)
