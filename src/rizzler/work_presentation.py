@@ -61,7 +61,7 @@ def validate_storyboard(story: dict, source_urls: list[str], *,
         raise CognitiveDecisionError("Invalid presentation title")
     if type(slides) is not list or not 3<=len(slides)<=32:
         raise CognitiveDecisionError("Invalid presentation slide count")
-    if slides[0].get("layout")!="cover":
+    if type(slides[0]) is not dict or slides[0].get("layout")!="cover":
         raise CognitiveDecisionError("Storyboard must begin with an editable cover")
     if source_urls and not any(s.get("layout")=="sources" for s in slides):
         raise CognitiveDecisionError("Source-backed presentation needs a sources slide")
@@ -97,9 +97,18 @@ def validate_storyboard(story: dict, source_urls: list[str], *,
                 raise CognitiveDecisionError("Malformed metric card")
             # A model must not manufacture unsupported quantitative facts.
             # A textual match is provenance screening, NOT fact verification.
-            if metric["value"] and metric["value"] not in content and (
-                not table or metric["value"] not in json.dumps(table,default=str)):
+            value=metric["value"]
+            exists_in_evidence=(value in content or
+                bool(table and value in json.dumps(table,default=str)))
+            if value and re.search(r"\d",value):
+                # Avoid matching '2' inside '2026' as evidence for a value of 2.
+                boundary=r"(?<![A-Za-z0-9])"+re.escape(value)+r"(?![A-Za-z0-9])"
+                exists_in_evidence=bool(re.search(boundary,content)) or bool(
+                    table and re.search(boundary,json.dumps(table,default=str)))
+            if value and not exists_in_evidence:
                 raise CognitiveDecisionError("Metric value not present in selected evidence")
+        if metrics and source_urls and not table and not slide["citations"]:
+            raise CognitiveDecisionError("Source-derived metric slide needs attributed citations")
         if slide["layout"]=="chart":
             if not table:
                 raise CognitiveDecisionError("Native chart requires a supplied verified table")
