@@ -679,8 +679,8 @@
     },
     {
       "path": "src/rizzler/live_schema.py",
-      "bytes": 6630,
-      "git_blob_sha1": "f6286cc306296d2ff85f67e41dddf0a3c05b14ea"
+      "bytes": 6730,
+      "git_blob_sha1": "83a7a089c06b18e833fd6695bcffd0a521f4db1c"
     },
     {
       "path": "src/rizzler/math_engine.py",
@@ -1214,8 +1214,8 @@
     },
     {
       "path": "tests/test_v14_live_schema.py",
-      "bytes": 3355,
-      "git_blob_sha1": "f82900e4a7d7b8fd434a31320e7f4599cbd4cecf"
+      "bytes": 4723,
+      "git_blob_sha1": "065ed866e90aec04cf036bc949bf16a5085e9ee6"
     },
     {
       "path": "tests/test_v14_planning_recovery.py",
