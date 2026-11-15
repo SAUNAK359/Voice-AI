@@ -92,7 +92,8 @@ def validate(graph: dict, payload: dict) -> dict:
     if payload.get("evidence_scope","auto")=="uploaded_only" and "research" in payload["deliverables"]:
         raise ValueError("Research deliverable incompatible with uploaded-only evidence scope")
     needs_narrative=bool(set(payload["deliverables"]) & {"md","docx","pdf","pptx","html","txt"})
-    if needs_narrative and "orchestrator" not in by_name:
+    if (needs_narrative and payload.get("evidence_scope")=="uploaded_only"
+            and "orchestrator" not in by_name):
         raise ValueError("Narrative deliverables require evidence-aware content synthesis")
     if "research" in payload["deliverables"] and "research" not in by_name:
         raise ValueError("Requested grounded research is missing")
