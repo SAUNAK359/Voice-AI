@@ -94,6 +94,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 context["receipts"][receipt.kind] = receipt
         return result
 
+    if payload.get("v15"):
+        from .v15_agentic import improve_draft
+        from .v15_research import research as verified_research
+        async def researcher_v15(objective):
+            return await verified_research(objective, researcher)
+        researcher = researcher_v15
     planned = {spec.name: spec for spec in plan(payload)}
     graph = store.job_plan(owner, jid)
     dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
@@ -137,6 +143,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         context["text"] = (context["text"] or "# Verified data analysis\n"
                            "This report contains independently computed dataset statistics.") + (
                            "\n\n## Verified dataset evidence\n" + proof)
+    if payload.get("v15"):
+        from .v15_agentic import improve_draft
+        if context["text"]:
+            context["text"], context["content_review"] = await improve_draft(
+                payload["objective"], context["text"], context["sources"], context["summary"])
     context["artifact_ir"] = compile_ir(payload["objective"][:120],
         context["text"] or "# Dataset analysis\nVerified dataset statistics",
         context["sources"], context["summary"])
@@ -214,7 +225,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 "artifact_qa_mode": quality_mode(),
                 "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
-                "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
+                "limits": "Structural and evidence QA; independent content review is not proof of factual or visual perfection",
+                "content_review": context.get("content_review")}
     if name not in ("powerpoint", "word", "excel", "pdf_visual"):
         raise ValueError("Unknown specialist")
     requested = sorted(formats.intersection(spec.formats))
