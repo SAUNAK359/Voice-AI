@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import ReactFlow, { Background, Controls } from '@xyflow/react';
+import { ReactFlow, Background, Controls } from '@xyflow/react';
 import { Activity, ArrowUpRight, BrainCircuit, CheckCircle2, CircleAlert,
          Download, FileText, Mic2, Plus, RefreshCw, ShieldCheck } from 'lucide-react';
 import { WorkApi, type Auth, type Artifact, type Job, type Plan, type Agent } from './api';
