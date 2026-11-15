@@ -338,7 +338,12 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
             dashboard["A1"] = "Source-derived numeric overview"
             dashboard["A1"].font = Font(size=16, color=NAVY, bold=True)
             dashboard.append(["Column","Mean"])
-            for h in [headers[i] for i in sorted(numeric)][:10]:
+            from .work_finance import financial_profile
+            finance_overview=financial_profile(headers,records)
+            fields=[headers[i] for i in sorted(numeric)]
+            if finance_overview:
+                fields=[h for h in fields if h.endswith("_"+finance_overview["currency"])]
+            for h in fields[:10]:
                 dashboard.append([h, profile["numeric"][h]["mean"]])
             for cell in dashboard[2]:
                 cell.fill = PatternFill("solid", fgColor=NAVY)
@@ -348,7 +353,8 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
             if dashboard.max_row >= 3:
                 chart = BarChart()
                 chart.type = "col"
-                chart.title = "Field means (different units may not be comparable)"
+                chart.title = (("Mean monetary values ("+finance_overview["currency"]+")")
+                               if finance_overview else "Field means (different units may not be comparable)")
                 chart.y_axis.title = "Source-derived mean"
                 chart.add_data(Reference(dashboard,min_col=2,min_row=2,max_row=dashboard.max_row),
                                titles_from_data=True)
