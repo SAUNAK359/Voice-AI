@@ -355,6 +355,51 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
                 chart.set_categories(Reference(dashboard,min_col=1,min_row=3,max_row=dashboard.max_row))
                 chart.width, chart.height = 18, 9
                 dashboard.add_chart(chart, "D3")
+        # Business-unit specific analytics: never mix money and units on a chart.
+        from .work_finance import financial_profile
+        finance=financial_profile(headers,records)
+        if finance:
+            insights=wb.create_sheet("Financial Insights",1)
+            insights["A1"]="Financial performance — verified source totals"
+            insights["A1"].font=Font(name="Aptos Display",size=18,bold=True,color=NAVY)
+            insights["A2"]="Currency";insights["B2"]=finance["currency"]
+            for row,(label,key) in enumerate((
+                ("Total revenue","revenue"),("Total cost","cost"),
+                ("Gross profit","gross_profit"),("Gross margin (%)","gross_margin_pct"),
+                ("Units","units")),4):
+                if finance["total"][key] is not None:
+                    insights.cell(row,1,label)
+                    insights.cell(row,2,finance["total"][key])
+            head=11
+            for group_name,items in finance["groups"].items():
+                insights.cell(head,1,group_name+" — source-grounded breakdown")
+                insights.cell(head,1).font=Font(size=13,bold=True,color=NAVY)
+                cols=["Group","Revenue ("+finance["currency"]+")",
+                      "Cost ("+finance["currency"]+")",
+                      "Gross profit ("+finance["currency"]+")","Margin (%)"]
+                for col,label in enumerate(cols,1):
+                    cell=insights.cell(head+1,col,label)
+                    cell.fill=PatternFill("solid",fgColor=NAVY)
+                    cell.font=Font(bold=True,color="FFFFFF")
+                for index,(name,amounts) in enumerate(items.items(),head+2):
+                    insights.cell(index,1,_safe_cell(name))
+                    for col,key in enumerate(("revenue","cost","gross_profit","gross_margin_pct"),2):
+                        insights.cell(index,col,amounts[key])
+                if items:
+                    chart=BarChart()
+                    chart.type="col"
+                    chart.title=group_name+" — gross profit ("+finance["currency"]+")"
+                    chart.y_axis.title=finance["currency"]
+                    chart.add_data(Reference(insights,min_col=4,min_row=head+1,
+                        max_row=head+1+len(items)),titles_from_data=True)
+                    chart.set_categories(Reference(insights,min_col=1,min_row=head+2,
+                        max_row=head+1+len(items)))
+                    chart.width=17;chart.height=8
+                    insights.add_chart(chart,"G"+str(head+1))
+                head+=max(10,len(items)+5)
+            insights.freeze_panes="B4"
+            for col,width in {"A":28,"B":24,"C":24,"D":27,"E":20}.items():
+                insights.column_dimensions[col].width=width
     if sources:
         sheet = wb.create_sheet("Sources")
         sheet.column_dimensions["A"].width = 100
