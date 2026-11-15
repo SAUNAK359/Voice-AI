@@ -213,8 +213,10 @@ class FullOfflineBundle(IsolatedAsyncioTestCase):
                     ["pptx","docx","xlsx","pdf","md","data_analysis"],
                     "acceptance_bundle_001",[upload["id"]],
                     evidence_scope="uploaded_only")
-            self.assertTrue(await WorkWorker(store,composer=composer,
-                                      researcher=unexpected_research).once())
+            from rizzler.work_specialists import execute_specialists
+            worker_id="test_acceptance_worker"
+            claimed=store.claim(worker_id,lease_seconds=120)
+            await execute_specialists(store,claimed,worker_id,composer,unexpected_research)
             saved=store.get("owner_v15",job["id"])
             self.assertEqual(saved["status"],"completed",
                 {"error":saved["error_code"],"agents":store.agent_steps("owner_v15",job["id"]),
