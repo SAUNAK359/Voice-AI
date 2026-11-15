@@ -219,9 +219,16 @@ def inspect_artifact(path: Path, kind: str, *,
                 actual_sources = ([r[0] for r in wb["Sources"].iter_rows(values_only=True)]
                                   if "Sources" in wb else [])
                 cells = list(wb["Summary"].iter_rows(min_row=3,min_col=2,max_col=2,values_only=True))
-                valid = (present == headings and actual_sources == sources
-                         and all((cell[0] == body or cell[0] == "'"+body)
-                                 for cell,(_,body) in zip(cells,artifact_ir.sections)))
+                matches=[cell[0] in (body, "'"+body)
+                         for cell,(_,body) in zip(cells,artifact_ir.sections)]
+                valid=(present==headings and actual_sources==sources
+                       and len(cells)==len(artifact_ir.sections) and all(matches))
+                if not valid:
+                    raise ValueError("XLSX input IR contract mismatch: "
+                        "headings="+str(present==headings)+
+                        ", sources="+str(actual_sources==sources)+
+                        ", counts="+str((len(present),len(headings),len(cells)))+
+                        ", wrong_section_indices="+str([i for i,m in enumerate(matches) if not m][:10]))
             finally:
                 wb.close()
         elif kind == "json":
