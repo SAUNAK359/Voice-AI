@@ -163,7 +163,8 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
         raise ValueError("Missing required output")
     # Cognitively approved jobs receive independent semantic acceptance even
     # when structural rendering QA is selected, preserving all numeric gates.
-    cognitive = store.cognitive_preflight(claim["owner"], claim["id"])
+    cognitive = (store.cognitive_preflight(claim["owner"], claim["id"])
+                 if store is not None else None)
     semantic_required = bool(cognitive) or quality_mode()=="agentic"
     history=[]
     max_revisions=2 if semantic_required else 0
