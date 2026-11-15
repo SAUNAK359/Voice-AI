@@ -216,7 +216,8 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
                 last_problem+"). Choose a corrected DAG; never add unsupported tools "
                 "or omit required dependencies.")
             reserve_provider_call("work")
-            async with asyncio.timeout(min(28,settings.request_timeout)):
+            from .work_async import wait_scope
+            async with wait_scope(min(28,settings.request_timeout)):
                 response=await client.aio.models.generate_content(
                     model=settings.gemini_model,contents=instruction+feedback,
                     config=types.GenerateContentConfig(
