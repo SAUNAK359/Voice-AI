@@ -146,9 +146,21 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     dynamic = graph.get("schema_version")==2
     if dynamic and graph["status"]=="planning":
         from .work_dynamic import generate, WorkModelConfig
-        proposed = await generate({**payload,"objective":context["objective"]},
-                                  WorkModelConfig.from_env())
+        proposed = await generate({
+            **payload,
+            "objective": context["objective"],
+            "_cognitive_checkpoint": (store,owner,jid,worker_id,fence),
+        }, WorkModelConfig.from_env())
         graph=store.install_dynamic_graph(owner,jid,worker_id,fence,proposed)
+    # Approved cognitive requirements are first-class execution context.
+    # Later agents can adapt within this graph but cannot expand tool privileges.
+    cognitive = store.cognitive_preflight(owner,jid) if dynamic else None
+    if cognitive is not None:
+        context["cognitive_preflight"] = cognitive
+        goals = cognitive["understanding"]["success_criteria"]
+        context["objective"] += (
+            "\n\nApproved preflight success criteria (untrusted task context):\n" +
+            "\n".join("- " + item for item in goals[:8]))
     levels.update({step["id"]:step.get("thinking_level","medium") for step in graph["steps"]})
     if dynamic:
         from .work_agents import SPECS

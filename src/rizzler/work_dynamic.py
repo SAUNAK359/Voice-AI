@@ -173,7 +173,26 @@ def _response_graph(response):
 
 
 async def generate(payload: dict, settings, *, client=None) -> dict:
-    """Gemini-authored DAG, provider schema + semantic gate + bounded self-repair."""
+    """Gemini-authored plan, with complete cognitive preflight when enabled.
+
+    Legacy graph-generation remains available as a compatibility adapter;
+    it is never selected when preflight explicitly fails.
+    """
+    from .work_preflight import enabled as cognitive_enabled, generate_preflight
+    # Worker claims always carry fenced context. Direct calls with a supplied
+    # model client but without a job remain the legacy planning adapter.
+    durable = payload.get("_cognitive_checkpoint")
+    if cognitive_enabled() and (durable is not None or client is None):
+        if durable is not None:
+            store, owner, jid, worker, fence = durable
+            previous = store.cognitive_preflight(owner, jid)
+            if previous is not None:
+                from .work_preflight import verify_committed
+                return verify_committed(previous, payload)["plan"]
+        document = await generate_preflight(payload, settings, client=client)
+        if durable is not None:
+            store.install_cognitive_preflight(owner, jid, worker, fence, document)
+        return document["plan"]
     if not settings.gemini_api_key and client is None:
         raise RuntimeError("Agentic Work planning requires a configured model")
     own=client is None

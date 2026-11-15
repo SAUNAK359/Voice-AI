@@ -161,21 +161,32 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
         raise ValueError("No substantive evidence to publish")
     if set(context["receipts"])!=(set(payload["deliverables"]) & FILE_FORMATS):
         raise ValueError("Missing required output")
+    # Cognitively approved jobs receive independent semantic acceptance even
+    # when structural rendering QA is selected, preserving all numeric gates.
+    cognitive = (store.cognitive_preflight(claim["owner"], claim["id"])
+                 if store is not None else None)
+    semantic_required = bool(cognitive) or quality_mode()=="agentic"
     history=[]
-    max_revisions=2 if quality_mode()=="agentic" else 0
+    max_revisions=2 if semantic_required else 0
     for iteration in range(max_revisions+1):
         reports,defects=await _verify_bundle(store,claim["owner"],checkpoint,context,payload)
         cognitive_qa=(
-            quality_mode()=="agentic" and
-            os.environ.get("RIZZLER_V15_COGNITIVE_QA",
-                "1" if os.environ.get("GEMINI_API_KEY") else "0")=="1"
+            bool(cognitive) or
+            (quality_mode()=="agentic" and
+             os.environ.get("RIZZLER_V15_COGNITIVE_QA",
+                 "1" if os.environ.get("GEMINI_API_KEY") else "0")=="1")
         )
         semantic=None
         if cognitive_qa:
             from .work_cognition import review_semantics
             from .work_dynamic import WorkModelConfig
+            acceptance=payload["objective"]
+            if cognitive:
+                acceptance += ("\nApproved success criteria for independent QA:\n" +
+                    "\n".join("- "+x for x in
+                              cognitive["understanding"]["success_criteria"]))
             semantic=await review_semantics(
-                payload["objective"],context["artifact_ir"].content,
+                acceptance,context["artifact_ir"].content,
                 list(context["artifact_ir"].sources),
                 list(payload["deliverables"]),reports,WorkModelConfig.from_env())
             if not semantic["passed"]:
@@ -187,6 +198,9 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
             return {"passed":True,"missing":[],"artifacts":sorted(context["receipts"]),
                     "artifact_ir_schema":ir.schema_version,"artifact_ir_sha256":ir.sha256,
                     "artifact_quality":reports,"artifact_qa_mode":quality_mode(),
+                    "cognitive_preflight": ("approved_independent_semantic_qa"
+                        if cognitive and semantic and semantic.get("passed")
+                        else "not_applicable"),
                     "repairs":history,"revision_count":len(history),
                     "source_coverage":context.get("source_coverage"),
                     "evidence":{"grounded_urls":len(context["sources"]),
