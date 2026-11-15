@@ -129,7 +129,8 @@ async def research(objective: str, discovery, *, model: Model | None = None,
         async with semaphore:
             try:
                 return await fetcher(url)
-            except (OSError, TimeoutError, ValueError, RuntimeError):
+            except Exception:
+                # One inaccessible page must not discard independently verified peers.
                 return None
 
     docs = [d for d in await asyncio.gather(*(one(url) for url in urls)) if d]
