@@ -126,7 +126,16 @@ def render_one(kind: str, output: Path, title: str, content: str,
     lines=[title,""]+[f"{h}\n{body}\n" for h,body in sections]
     if source_urls: lines+=["Sources"]+source_urls
     prose="\n".join(lines)
-    if kind in ("txt","md"):
+    if kind=="md":
+        # Preserve real Markdown structure; earlier versions serialized titles
+        # without heading markers, hiding semantic quality defects.
+        report="# "+title+"\n\n"+"\n\n".join(
+            "## "+heading+"\n\n"+body for heading,body in sections)
+        if source_urls:
+            report+="\n\n## Source references\n\n"+ "\n".join(
+                "- "+url for url in source_urls)
+        output.write_text(report+"\n",encoding="utf-8")
+    elif kind=="txt":
         output.write_text(prose,encoding="utf-8")
     elif kind=="json":
         output.write_text(json.dumps({"schema_version":1,"title":title,
