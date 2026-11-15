@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3653,
-      "git_blob_sha1": "8557ee8fb5cffb1344057723a8f4d67f51a5dcc3",
+      "bytes": 3682,
+      "git_blob_sha1": "0e0eafee26ed6218547cdd828f6436a4875c0385",
       "sha256": "c47f9ff542162e99238baabc8cce1702460324b582e2ea10debc659f5000dfa0"
     },
     {
@@ -820,8 +820,8 @@
     },
     {
       "path": "src/rizzler/visual_agentic_qa.py",
-      "bytes": 5008,
-      "git_blob_sha1": "782f184843163bc89aa052b29a75415c6f92f802"
+      "bytes": 5054,
+      "git_blob_sha1": "e9e191e62c187039b7a0f4812050adf768e368c5"
     },
     {
       "path": "src/rizzler/visual_intelligence.py",
@@ -910,19 +910,24 @@
       "sha256": "f39813b182cd0336f601297650310473bb734b3b47b300aeccab8c5ad91258a6"
     },
     {
+      "path": "src/rizzler/work_async.py",
+      "git_blob_sha1": "6de9d3e4fbe424f993163a3902730d3ad051b064",
+      "bytes": 1216
+    },
+    {
       "path": "src/rizzler/work_auth.py",
       "bytes": 2502,
       "git_blob_sha1": "3c150adf9973ef7031346562c83327d23dabf23f"
     },
     {
       "path": "src/rizzler/work_cognition.py",
-      "bytes": 13440,
-      "git_blob_sha1": "b9b1087a3aed3060a5ccae4536aad9cdaaf3eb14"
+      "bytes": 13478,
+      "git_blob_sha1": "668b124e28ad0a5ca053fbd656392baccd61651d"
     },
     {
       "path": "src/rizzler/work_corpus.py",
-      "bytes": 9089,
-      "git_blob_sha1": "bb6ca92ffee4cc8bd07d07d6370d48004f8a2228"
+      "bytes": 9123,
+      "git_blob_sha1": "f8755f9bef53b16e80971a836da5fcceeaab4a54"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -932,8 +937,8 @@
     },
     {
       "path": "src/rizzler/work_dynamic.py",
-      "bytes": 12266,
-      "git_blob_sha1": "b2abc13bd93ea8599d21defe39ca2500df8690a1",
+      "bytes": 12308,
+      "git_blob_sha1": "10f178948e69e113c1a1622a3cde80f6edde47b6",
       "sha256": "67729b6fa603aa0fa58396748a6711dc05838307af7718128e2cc235fe17c60a"
     },
     {
@@ -982,8 +987,8 @@
     },
     {
       "path": "src/rizzler/work_repair.py",
-      "bytes": 11068,
-      "git_blob_sha1": "d40b5f18613c98bc0bd46801156ce69ba6df0f4d"
+      "bytes": 11110,
+      "git_blob_sha1": "163d62a98c70f9029b8d238749d0e00c9be91909"
     },
     {
       "path": "src/rizzler/work_rich_docs.py",
@@ -999,8 +1004,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 18095,
-      "git_blob_sha1": "313692dbeaf6a5367738c796c0fbcc006582a92b",
+      "bytes": 18172,
+      "git_blob_sha1": "3a9d768a491a05a365902f70cd8bbe8ab787fd1e",
       "sha256": "0a0a3441e9ee18d3a1007b0275e628682a1ed7400710e0ae2955cd1e955ade6d"
     },
     {
@@ -1022,8 +1027,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 13611,
-      "git_blob_sha1": "d8892804cd3f5f7a8b8df31600e0e066088a386a",
+      "bytes": 13691,
+      "git_blob_sha1": "48e09516da922ddfe0f37b7d237771eef9a0ce10",
       "sha256": "50f9b1d212981bc167c89dab00793e94d25095ef2423b2f88fbcf7990bb421b3"
     },
     {
@@ -1276,6 +1281,11 @@
       "bytes": 12137,
       "sha256": "dc54a937b3486658cf317b72644f0c239b21eda9631e2a89c42b9c08de27fbd9",
       "git_blob_sha1": "5588421c14734d73a5e197c0d8c80cf338cf9238"
+    },
+    {
+      "path": "tests/test_v15_async_wait.py",
+      "git_blob_sha1": "84509b09b2243fccb63770086df8007a7ac8c22a",
+      "bytes": 2534
     },
     {
       "path": "tests/test_v15_cognitive.py",
