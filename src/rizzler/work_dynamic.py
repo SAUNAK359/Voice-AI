@@ -87,6 +87,13 @@ def validate(graph: dict, payload: dict) -> dict:
         raise ValueError("Source dataset must be analyzed; no imaginary dataset")
     if "data_analysis" in payload["deliverables"] and not uploads:
         raise ValueError("Analysis requires an uploaded dataset")
+    if payload.get("evidence_scope","auto")=="uploaded_only" and "research" in by_name:
+        raise ValueError("Uploaded-only evidence scope forbids external research")
+    if payload.get("evidence_scope","auto")=="uploaded_only" and "research" in payload["deliverables"]:
+        raise ValueError("Research deliverable incompatible with uploaded-only evidence scope")
+    needs_narrative=bool(set(payload["deliverables"]) & {"md","docx","pdf","pptx","html","txt"})
+    if needs_narrative and "orchestrator" not in by_name:
+        raise ValueError("Narrative deliverables require evidence-aware content synthesis")
     if "research" in payload["deliverables"] and "research" not in by_name:
         raise ValueError("Requested grounded research is missing")
     if not CONTENT.intersection(by_name) and not uploads:
@@ -180,6 +187,12 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
         "Use registered capabilities only and select the necessary ones, not a fixed recipe. "
         "External research is appropriate only if independent current evidence is needed. "
         "A dataset must be analyzed when one is attached. "
+        "If evidence_scope is uploaded_only, do not use external research under any circumstance; "
+        "the supplied data is the only authorized evidence. If it is auto, reason "
+        "from the user's full objective and explicit prohibitions; do not infer "
+        "the need for web evidence merely from report complexity. "
+        "Narrative deliverables (Markdown, Word, PDF, PowerPoint, text, HTML) "
+        "require an orchestrator to turn analysis into a substantive report. "
         "The id and tool values of each step must be the same registered capability. "
         "Every capability can appear at most once. Dependency edges refer only to "
         "earlier steps. The final quality step is mandatory and depends on all others. "
@@ -190,6 +203,7 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
         "Produce only the requested structured graph. "
         "Available capabilities: "+json.dumps(tools,separators=(",",":"))+
         "\nRequested deliverables: "+json.dumps(payload["deliverables"])+
+        "\nEvidence scope: "+json.dumps(payload.get("evidence_scope","auto"))+
         "\nDataset attached: "+str(bool(payload.get("uploads")))+
         "\nUntrusted user objective: "+json.dumps(payload["objective"][:8000]))
     schema=_graph_json_schema()
