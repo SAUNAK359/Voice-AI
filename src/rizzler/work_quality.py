@@ -106,7 +106,7 @@ def inspect_artifact(path: Path, kind: str, *,
         if kind=="md" and dataset_summary and dataset_summary.get("financial"):
             import re
             groups=dataset_summary["financial"]["groups"]
-            headers=len(re.findall(r"(?m)^#{1,3}\\s+\\S",content))
+            headers=len(re.findall(r"(?m)^#{1,3}\s+\S",content))
             if headers<4 or not all(any(label in content for label in items)
                                     for items in groups.values() if items):
                 raise ValueError("Financial Markdown report lacks analytical sections or group comparisons")
