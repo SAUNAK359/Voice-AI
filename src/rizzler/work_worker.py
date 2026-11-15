@@ -34,11 +34,11 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
               "Use concise headings and avoid filler, invented sources, fabricated "
               "statistics, unsupported certainty and confidence claims. "
               "For dataset metrics, preserve units and numeric precision. "
-              ("Match the depth, specificity, audience and output requirements expressed " 
+              "Match the depth, specificity, audience and output requirements expressed "
               "in the objective. For presentations, build a substantial story with " 
               "clear executive messages, quantitative context, source qualifications " 
               "and specific conclusions, not generic bullets. " 
-              "Do not invent source-backed statistics. ") 
+              "Do not invent source-backed statistics. "
               "Never invent external sources, statistics, user data or tool results. "
               "Express uncertainty and limitations. The following dataset metrics are "
               "computed independently; quote only what they substantiate.\n\n"
