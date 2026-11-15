@@ -52,7 +52,7 @@ class _Tx:
             self.connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                 ("uploads:" + str(parameters[0]),))
-        if stripped.startswith("SELECT * FROM jobs WHERE status='queued' OR"):
+        if stripped.startswith("SELECT * FROM jobs WHERE (status='queued' AND lease_until <= ?"):
             sql += " FOR UPDATE SKIP LOCKED"
         elif stripped.startswith("SELECT p.*,j.payload,j.fingerprint FROM proposals"):
             sql += " FOR UPDATE OF p SKIP LOCKED"

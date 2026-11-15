@@ -49,13 +49,13 @@ def plan(payload: dict[str, Any]) -> list[AgentSpec]:
     if not isinstance(uploads, list) or len(uploads) > 1:
         raise ValueError("The current SQL agent supports one uploaded dataset per job")
     tasks: list[str] = []
-    if "research" in formats:
+    if "research" in formats or payload.get("v15", {}).get("research"):
         tasks.append("research")
     if uploads:
         tasks.append("sql_analytics")
     if not uploads and "data_analysis" in formats:
         raise ValueError("Data analysis requires a source dataset")
-    if not ("research" in formats):
+    if "research" not in tasks:
         tasks.append("orchestrator")
     for agent in ("powerpoint", "word", "excel", "pdf_visual"):
         if formats.intersection(SPECS[agent].formats):
@@ -86,8 +86,8 @@ def gate_agent(name: str, result: dict, required: set[str]) -> dict:
         if evidence is not None:
             if not isinstance(evidence,list) or len(evidence)>24 or any(
                 not isinstance(item,dict) or item.get("url") not in urls
-                or item.get("content_verified") is not False
-                or item.get("attribution") != "provider_grounding"
+                or (item.get("attribution"), item.get("content_verified")) not in (
+                    ("provider_grounding", False), ("verified_fetch", True))
                 for item in evidence):
                 raise ValueError("Research provenance does not match provider evidence")
         checks = ["nonempty_grounded_https_sources", "substantive_findings",

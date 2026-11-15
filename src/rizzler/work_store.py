@@ -109,7 +109,8 @@ class WorkStore:
                   (jid, stage, message[:180], time.time()))
 
     def submit(self, owner: str, objective: str, formats: list[str],
-               idem: str, uploads: list[str] | None = None) -> dict:
+               idem: str, uploads: list[str] | None = None,
+               v15: dict | None = None) -> dict:
         if not isinstance(idem, str) or not KEY_RE.fullmatch(idem):
             raise ValueError("Idempotency-Key must be 8-96 safe characters")
         if not isinstance(formats, list) or not all(isinstance(f, str) for f in formats):
@@ -118,14 +119,20 @@ class WorkStore:
                 deliverables=tuple(formats)).validate()
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
-        payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
+        user_payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
+        if v15 is not None:
+            from .v15_agentic import validate_decision
+            v15 = validate_decision(v15, uploads)
+        payload = {**user_payload, **({"v15": v15} if v15 is not None else {})}
         from .work_agents import plan
         planned = plan(payload)
         from .task_planning import execution_graph
         graph = execution_graph(payload)
         plan_json = json.dumps(graph, sort_keys=True, separators=(",", ":"))
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        # Repeated idempotency keys remain stable even when the model's plan differs.
+        fingerprint = hashlib.sha256(json.dumps(user_payload, sort_keys=True,
+            separators=(",", ":")).encode()).hexdigest()
         jid, t = secrets.token_hex(16), time.time()
         with self._tx() as c:
             existing = c.execute("SELECT * FROM jobs WHERE owner=? AND idem=?",
@@ -228,9 +235,9 @@ class WorkStore:
         now = time.time()
         with self._tx() as c:
             while True:
-                row = c.execute("""SELECT * FROM jobs WHERE status='queued' OR
+                row = c.execute("""SELECT * FROM jobs WHERE (status='queued' AND lease_until <= ?) OR
                     (status='running' AND lease_until < ?) ORDER BY created LIMIT 1""",
-                    (now,)).fetchone()
+                    (now, now)).fetchone()
                 if row is None:
                     return None
                 jid = row["id"]
@@ -463,6 +470,25 @@ class WorkStore:
         c.execute("""UPDATE agent_steps SET status=?,updated=?,finished=?,
                      error_code=? WHERE job_id=? AND status='running'""",
                   (terminal,now,now,"parent_"+terminal,jid))
+
+    def retry(self, jid, worker, fence, error_code="v15_transient"):
+        """Release a fenced lease with backoff; preserve committed checkpoints."""
+        with self._tx() as c:
+            row = self._active(c, jid, worker, fence)
+            if row["attempts"] >= 3:
+                c.execute("""UPDATE jobs SET status='failed',stage='failed',
+                    error_code='v15_retry_exhausted',lease_owner=NULL,lease_until=0,
+                    updated=? WHERE id=?""", (time.time(),jid))
+                self._settle_agents(c,jid,"failed")
+                self._event(c,jid,"failed","V15 transient retry budget exhausted")
+                return False
+            delay = min(30, 2 ** row["attempts"])
+            now=time.time()
+            c.execute("""UPDATE jobs SET status='queued',stage='retrying',
+                error_code=?,lease_owner=NULL,lease_until=?,updated=?
+                WHERE id=? AND fence=?""", (error_code,now+delay,now,jid,fence))
+            self._event(c,jid,"retrying","Recoverable failure; preserving checkpoints")
+            return True
 
     def fail(self,jid,worker,fence,error_code="execution_error"):
         with self._tx() as c:
