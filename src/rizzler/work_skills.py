@@ -152,10 +152,18 @@ def render_one(kind: str, output: Path, title: str, content: str,
             w.writerow([csv_escape(x) for x in table[0]])
             w.writerows([[csv_escape(x) for x in row] for row in table[1]])
     elif kind in ("docx","pptx","xlsx","pdf"):
-        from .work_design import render_docx, render_pptx, render_xlsx, render_pdf
-        {"docx": render_docx, "pptx": render_pptx,
-         "xlsx": render_xlsx, "pdf": render_pdf}[kind](
-            output, title, sections, table, source_urls)
+        import os
+        agentic = os.environ.get("RIZZLER_AGENTIC_ENABLED") == "1"
+        rich = agentic and os.environ.get("RIZZLER_V15_RICH_DOCS","1")=="1"
+        if rich and kind in ("docx","pdf"):
+            from .work_rich_docs import render_docx, render_pdf
+            {"docx": render_docx, "pdf": render_pdf}[kind](
+                output, title, sections, table, source_urls)
+        else:
+            from .work_design import render_docx, render_pptx, render_xlsx, render_pdf
+            {"docx": render_docx, "pptx": render_pptx,
+             "xlsx": render_xlsx, "pdf": render_pdf}[kind](
+                output, title, sections, table, source_urls)
     elif kind in ("png","svg"):
         if not table: raise ValueError("Charts require real uploaded data")
         metrics=analyze(*table)["numeric"]
