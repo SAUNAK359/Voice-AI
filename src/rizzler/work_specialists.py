@@ -146,8 +146,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     dynamic = graph.get("schema_version")==2
     if dynamic and graph["status"]=="planning":
         from .work_dynamic import generate, WorkModelConfig
-        proposed = await generate({**payload,"objective":context["objective"]},
-                                  WorkModelConfig.from_env())
+        proposed = await generate({
+            **payload,
+            "objective": context["objective"],
+            "_cognitive_checkpoint": (store,owner,jid,worker_id,fence),
+        }, WorkModelConfig.from_env())
         graph=store.install_dynamic_graph(owner,jid,worker_id,fence,proposed)
     levels.update({step["id"]:step.get("thinking_level","medium") for step in graph["steps"]})
     if dynamic:
