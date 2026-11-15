@@ -46,19 +46,11 @@ def register_native_live(app,settings,sessions,identity,work):
             await ws.close(code=1008)
             return
         source_index=SourceIndex(work.root) if work else None
-        tools=[
-            {"name":"work_list","description":"List my owned queued, active and completed projects.","parameters":{"type":"OBJECT","properties":{}}},
-            {"name":"work_status","description":"Get the actual saved status and verified artifacts of my project.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"}},"required":["job_id"]}},
-            {"name":"work_submit","description":"Queue substantial autonomous work for the Work Engine; respond immediately with a job receipt. Construct a complete objective, success criteria and expected output formats.","parameters":{"type":"OBJECT","properties":{"objective":{"type":"STRING"},"deliverables":{"type":"ARRAY","items":{"type":"STRING"}},"source_coverage":{"type":"STRING","enum":["targeted","complete"]}},"required":["objective","deliverables","source_coverage"]}},
-            {"name":"source_search","description":"Retrieve grounded excerpts from my selected indexed attachments, with source and passage references.","parameters":{"type":"OBJECT","properties":{"query":{"type":"STRING"}},"required":["query"]}},
-            {"name":"preview_open","description":"Open an owned completed job artifact in the visual preview panel.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"}},"required":["job_id"]}},
-            {"name":"preview_slide","description":"Navigate the user's visual preview to a specific slide number in an owned completed presentation.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"slide":{"type":"INTEGER"}},"required":["job_id","slide"]}},
-            {"name":"preview_highlight","description":"Highlight exact text in the user's completed visual artifact.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"text":{"type":"STRING"}},"required":["job_id","text"]}},
-            {"name":"preview_dashboard","description":"Interactively configure a real dashboard made from the user's completed data artifact. Choose its chart, grouping, numeric metric and optional filter from the actual available columns rather than guessing values.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"group_by":{"type":"STRING"},"metric":{"type":"STRING"},"chart":{"type":"STRING"},"filter_column":{"type":"STRING"},"filter_value":{"type":"STRING"}},"required":["job_id","group_by","metric","chart","filter_column","filter_value"]}},
-        ] if work else []
+        from .live_schema import DECLARATIONS, validate_call
+        tools=DECLARATIONS if work else []
         async def execute(fc):
-            args=fc.args or {}
             name=fc.name
+            args=validate_call(name,fc.args if fc.args is not None else {},enabled=bool(work))
             session=sessions.get(owner)
             if name=="source_search":
                 if not source_index or not session.sources:return {"error":"No selected indexed sources"}
