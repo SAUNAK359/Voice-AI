@@ -1,0 +1,31 @@
+name: Rizzler V15 React Work Studio
+on:
+  pull_request:
+    paths:
+      - 'web-v15/**'
+      - '.github/workflows/v15-ui-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web-v15/**'
+permissions:
+  contents: read
+jobs:
+  ui:
+    name: React 19 TypeScript / Browser Graph Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install versioned V15 frontend dependencies
+        working-directory: web-v15
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run React Flow contract tests
+        working-directory: web-v15
+        run: npm test
+      - name: Type check and build React Work Studio
+        working-directory: web-v15
+        run: npm run build

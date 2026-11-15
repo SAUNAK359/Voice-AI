@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3586,
-      "git_blob_sha1": "67711dbeeecf49618a94006307746509920308e0"
+      "bytes": 3614,
+      "git_blob_sha1": "4cd4b8164bed9370c65c189607ecca8e5c57a76d"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -46,6 +46,11 @@
       "path": ".github/workflows/production-ci.yml",
       "bytes": 2905,
       "git_blob_sha1": "28efb0149219ce2df59bb9e60d79289c0ff7c3b2"
+    },
+    {
+      "path": ".github/workflows/v15-ui-ci.yml",
+      "bytes": 836,
+      "git_blob_sha1": "5c90458d2c6ed51a497f82c4eebaf30459f05a46"
     },
     {
       "path": ".gitignore",
@@ -371,6 +376,11 @@
       "path": "docs/V14_RELEASE_GATES.md",
       "bytes": 5944,
       "git_blob_sha1": "a42db7b1091f7c2aadf0053c370d055e236ee1d6"
+    },
+    {
+      "path": "docs/V15_COGNITIVE_WORK_ARCHITECTURE.md",
+      "bytes": 10358,
+      "git_blob_sha1": "6e05346b3184d7deebdce9f346afc8256bac83ca"
     },
     {
       "path": "docs/VOICE_SUPERVISOR_V10.md",
@@ -903,6 +913,11 @@
       "git_blob_sha1": "3c150adf9973ef7031346562c83327d23dabf23f"
     },
     {
+      "path": "src/rizzler/work_cognition.py",
+      "bytes": 13097,
+      "git_blob_sha1": "5ae3e9f750a6da6d6279e8cae50740ed13aae038"
+    },
+    {
       "path": "src/rizzler/work_corpus.py",
       "bytes": 9089,
       "git_blob_sha1": "bb6ca92ffee4cc8bd07d07d6370d48004f8a2228"
@@ -938,9 +953,14 @@
       "git_blob_sha1": "66f562710117527dbc27b65a542247680e667818"
     },
     {
+      "path": "src/rizzler/work_presentation.py",
+      "bytes": 14719,
+      "git_blob_sha1": "395b93bdc3f24a2c191bd1fc0a6e165bf1b058c5"
+    },
+    {
       "path": "src/rizzler/work_quality.py",
-      "bytes": 11226,
-      "git_blob_sha1": "5ad57df6bcdc7d56b8ac73691facb47a0264b25e"
+      "bytes": 11796,
+      "git_blob_sha1": "1e2382b17a4458fe46dea3615a0b4f9c34c21ee7"
     },
     {
       "path": "src/rizzler/work_reasoning.py",
@@ -949,8 +969,8 @@
     },
     {
       "path": "src/rizzler/work_repair.py",
-      "bytes": 9838,
-      "git_blob_sha1": "bccb9f375aed817efa7b7cb4f777f9cd96928b93"
+      "bytes": 11068,
+      "git_blob_sha1": "d40b5f18613c98bc0bd46801156ce69ba6df0f4d"
     },
     {
       "path": "src/rizzler/work_skills.py",
@@ -959,8 +979,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 14849,
-      "git_blob_sha1": "6c3c754a036ce5ffbe437a05f0530e70b60d1ffc"
+      "bytes": 17816,
+      "git_blob_sha1": "bd1feefe197aa22d6ef0c1b1001848853e333570"
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -979,8 +999,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 9518,
-      "git_blob_sha1": "f47bcc9ea99c793c0ce00b2f354401c8f4dee11c"
+      "bytes": 12706,
+      "git_blob_sha1": "df887e8e062d4bcc7dffda1d2e4e0a8bed9f9543"
     },
     {
       "path": "stack_site.html",
@@ -1228,6 +1248,11 @@
       "git_blob_sha1": "58c18c265a9ca17b04f80154d9dc58fec39d87ee"
     },
     {
+      "path": "tests/test_v15_cognitive.py",
+      "bytes": 21060,
+      "git_blob_sha1": "2f598df0195067236d38c7c00829244cd32e9806"
+    },
+    {
       "path": "tests/test_voice_core.cjs",
       "bytes": 2714,
       "git_blob_sha1": "a3658b9621d4998bd55b37f90a070ea4650ec2fa"
@@ -1236,6 +1261,61 @@
       "path": "tests/test_voice_phase3.cjs",
       "bytes": 2493,
       "git_blob_sha1": "3647cf6409b09f517edb25fcb0234e9a74e9d4cd"
+    },
+    {
+      "path": "web-v15/index.html",
+      "bytes": 316,
+      "git_blob_sha1": "bc2595172d58d28db1756489cfdfdddbd2edd662"
+    },
+    {
+      "path": "web-v15/package.json",
+      "bytes": 682,
+      "git_blob_sha1": "db617cbeaabf18610c1b2bf34193b8130d488f46"
+    },
+    {
+      "path": "web-v15/README.md",
+      "bytes": 1909,
+      "git_blob_sha1": "ce004812ff946be32c6323b76c252d391e049ebc"
+    },
+    {
+      "path": "web-v15/src/api.ts",
+      "bytes": 3746,
+      "git_blob_sha1": "f87e87cddd5074d68d13003af8acc829a7d94111"
+    },
+    {
+      "path": "web-v15/src/App.tsx",
+      "bytes": 13456,
+      "git_blob_sha1": "cd906e22d5b4b325aa3cd686235cb4db994fe419"
+    },
+    {
+      "path": "web-v15/src/graph.test.ts",
+      "bytes": 1637,
+      "git_blob_sha1": "a3a342e41db54028e2660e3738196ce193fd1487"
+    },
+    {
+      "path": "web-v15/src/graph.ts",
+      "bytes": 1942,
+      "git_blob_sha1": "0e2002465c9bb726dfbdd15a5479eba402f068e5"
+    },
+    {
+      "path": "web-v15/src/main.tsx",
+      "bytes": 521,
+      "git_blob_sha1": "b56b33ce8c5455be8c92a3eb5383d76a23f9bff4"
+    },
+    {
+      "path": "web-v15/src/styles.css",
+      "bytes": 8541,
+      "git_blob_sha1": "fa266ba5ea3f88b32e1452af06eeb7060e1f1bb3"
+    },
+    {
+      "path": "web-v15/tsconfig.json",
+      "bytes": 436,
+      "git_blob_sha1": "52baf3beb356793024f0f44e6e08127325a0b26c"
+    },
+    {
+      "path": "web-v15/vite.config.ts",
+      "bytes": 306,
+      "git_blob_sha1": "6bf35f8a62225e59706f7de5a0ec732efe0d36d3"
     },
     {
       "path": "web/app.js",
