@@ -120,8 +120,15 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
     for kind,receipt in context["receipts"].items():
         if kind=="zip":continue
         path=attempt/(kind+"."+kind)
-        await asyncio.to_thread(render_one,kind,path,ir.title,ir.content,
-                                table,list(ir.sources))
+        use_v15=(kind=="pptx" and os.environ.get("RIZZLER_V15_PRESENTATION",
+                   "1" if os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
+                   and os.environ.get("GEMINI_API_KEY") else "0")=="1")
+        if use_v15:
+            from .work_presentation import make_presentation
+            await make_presentation(path,payload["objective"],ir,table=table)
+        else:
+            await asyncio.to_thread(render_one,kind,path,ir.title,ir.content,
+                                    table,list(ir.sources))
         new_receipt=verify_artifact(path,kind)
         await asyncio.to_thread(inspect_artifact,path,kind,
             dataset_rows=context["summary"]["rows"] if context["summary"] else None,
@@ -157,6 +164,23 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
     max_revisions=2 if quality_mode()=="agentic" else 0
     for iteration in range(max_revisions+1):
         reports,defects=await _verify_bundle(store,claim["owner"],checkpoint,context,payload)
+        cognitive_qa=(
+            quality_mode()=="agentic" and
+            os.environ.get("RIZZLER_V15_COGNITIVE_QA",
+                "1" if os.environ.get("GEMINI_API_KEY") else "0")=="1"
+        )
+        semantic=None
+        if cognitive_qa:
+            from .work_cognition import review_semantics
+            from .work_dynamic import WorkModelConfig
+            semantic=await review_semantics(
+                payload["objective"],context["artifact_ir"].content,
+                list(context["artifact_ir"].sources),
+                list(payload["deliverables"]),reports,WorkModelConfig.from_env())
+            if not semantic["passed"]:
+                defects.extend(semantic["findings"])
+            # Integrity checks remain independent of subjective LLM feedback.
+            reports["semantic_review"]=semantic
         if not defects:
             ir=context["artifact_ir"]
             return {"passed":True,"missing":[],"artifacts":sorted(context["receipts"]),
