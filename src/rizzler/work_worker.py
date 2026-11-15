@@ -154,9 +154,16 @@ class WorkWorker:
             # Never silently mark a interrupted worker's job as successful.
             self.store.fail(jid, self.identity, fence, "worker_interrupted")
             raise
-        except Exception:
-            # Error strings could include user prompts and provider secrets.
-            self.store.fail(jid, self.identity, fence, "execution_error")
+        except Exception as exc:
+            # Preserve private exception details on the server only, not in job state.
+            if claim["payload"].get("v15"):
+                from .v15_agentic import recoverable, error_code
+                if recoverable(exc):
+                    self.store.retry(jid, self.identity, fence, error_code(exc))
+                else:
+                    self.store.fail(jid, self.identity, fence, error_code(exc))
+            else:
+                self.store.fail(jid, self.identity, fence, "execution_error")
         finally:
             guard.cancel()
             await asyncio.gather(guard, return_exceptions=True)
