@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3520,
-      "git_blob_sha1": "2c9bbc5098a260f9ce680b8f979ffcd415d0d46d"
+      "bytes": 3556,
+      "git_blob_sha1": "eb74a2b3f444c66f4f1b2864c02ef87fdafb6f77"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -829,8 +829,8 @@
     },
     {
       "path": "src/rizzler/web/app.js",
-      "bytes": 38221,
-      "git_blob_sha1": "faf13c9177911dbfd9d0cea0551d37619e10772e"
+      "bytes": 38214,
+      "git_blob_sha1": "33daf2adc08d3e9fb6b39260c897375ed478ccc3"
     },
     {
       "path": "src/rizzler/web/capture.js",
@@ -909,8 +909,8 @@
     },
     {
       "path": "src/rizzler/work_dynamic.py",
-      "bytes": 8755,
-      "git_blob_sha1": "44ac80848239c310c7b9fe9ebd196fca5c96594c"
+      "bytes": 11011,
+      "git_blob_sha1": "8aeebbc9c846b6089dfe1b091a3197a6264876ee"
     },
     {
       "path": "src/rizzler/work_formula.py",
@@ -974,8 +974,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 9089,
-      "git_blob_sha1": "11cba50219f70e8ccb69fecc8e4014a23eb7058f"
+      "bytes": 9518,
+      "git_blob_sha1": "f47bcc9ea99c793c0ce00b2f354401c8f4dee11c"
     },
     {
       "path": "stack_site.html",
@@ -1206,6 +1206,11 @@
       "path": "tests/test_v14_large_sources.py",
       "bytes": 4265,
       "git_blob_sha1": "efb4717d8daca2e8cf12084b3df956de356da29c"
+    },
+    {
+      "path": "tests/test_v14_planning_recovery.py",
+      "bytes": 2887,
+      "git_blob_sha1": "eb1309939fe241bd4d003ccc45f7d579c38a9077"
     },
     {
       "path": "tests/test_v14_rendering.py",
