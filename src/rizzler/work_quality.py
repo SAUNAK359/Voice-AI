@@ -139,10 +139,27 @@ def inspect_artifact(path: Path, kind: str, *,
             doc = __import__("docx").Document(path)
             present = [p.text for p in doc.paragraphs]
             actual_sources = [p.text for p in doc.paragraphs if p.text in sources]
-            valid = all(h in present for h in headings) and actual_sources == sources
-            valid = valid and all(
-                " ".join(body.split()) in " ".join(" ".join(present).split())
-                for _,body in artifact_ir.sections if body.strip())
+            if doc.core_properties.subject == "Rizzler V15 native structured document":
+                from .work_rich_docs import blocks, clean
+                from docx.opc.constants import RELATIONSHIP_TYPE
+                hyperlinks={rel.target_ref for rel in doc.part.rels.values()
+                    if rel.reltype==RELATIONSHIP_TYPE.HYPERLINK}
+                rendered=" ".join(present+[cell.text for t in doc.tables
+                    for row in t.rows for cell in row.cells])
+                expected_blocks=blocks(artifact_ir.sections)
+                valid=all(h in present for h in headings) and set(sources).issubset(hyperlinks)
+                valid=valid and all(
+                    (clean(value) in rendered if kind=="paragraph" else
+                     value in rendered if kind=="bullet" else
+                     value[1] in rendered if kind=="heading" else
+                     all(cell in rendered for row in value for cell in row)
+                     if kind=="table" else True)
+                    for kind,value in expected_blocks)
+            else:
+                valid = all(h in present for h in headings) and actual_sources == sources
+                valid = valid and all(
+                    " ".join(body.split()) in " ".join(" ".join(present).split())
+                    for _,body in artifact_ir.sections if body.strip())
         elif kind == "pptx":
             from pptx import Presentation
             deck = Presentation(path)
