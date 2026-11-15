@@ -92,6 +92,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     can_recover=(
                         retries<1 and spec.name!="quality"
                         and not isinstance(exc,(PermissionError,InterruptedError))
+                        and category not in ("provider_budget_exhausted",
+                                             "permission_denied","worker_lease_stale")
                         and os.environ.get("RIZZLER_V15_RECOVERY",
                             "1" if os.environ.get("GEMINI_API_KEY")
                             and os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
