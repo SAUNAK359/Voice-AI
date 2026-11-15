@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -14,6 +15,8 @@ from .artifacts import verify_artifact
 from .contracts import FILE_FORMATS
 from .work_store import WorkStore, StaleLease
 from .work_skills import SKILLS, FORMATS, read_dataset, analyze, render_one
+
+logger=logging.getLogger("rizzler.work.worker")
 
 
 async def compose_work(objective: str, data_summary: dict | None, *, max_chars=18000) -> str:
@@ -156,9 +159,15 @@ class WorkWorker:
             # Never silently mark a interrupted worker's job as successful.
             self.store.fail(jid, self.identity, fence, "worker_interrupted")
             raise
-        except Exception:
-            # Error strings could include user prompts and provider secrets.
-            self.store.fail(jid, self.identity, fence, "execution_error")
+        except Exception as exc:
+            # Log only the exception class and a stable category. Raw provider
+            # errors can contain prompts, credentials, and user document text.
+            from .work_dynamic import PlanningOutputError
+            code=("planning_output_invalid" if isinstance(exc,PlanningOutputError)
+                  else "execution_error")
+            logger.error("Work job %s failed: %s (%s)",
+                         jid,code,type(exc).__name__)
+            self.store.fail(jid,self.identity,fence,code)
         finally:
             guard.cancel()
             await asyncio.gather(guard, return_exceptions=True)
