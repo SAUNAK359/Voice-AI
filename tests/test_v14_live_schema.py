@@ -36,6 +36,35 @@ class LiveCallContractTests(unittest.TestCase):
                 bad[field]=None
                 with self.subTest(name=name,null=field):
                     with self.assertRaises(ValueError):validate_call(name,bad)
+    def test_public_json_schema_matches_runtime_on_all_tools(self):
+        try:
+            from jsonschema import Draft202012Validator
+        except ImportError:
+            self.skipTest("Optional jsonschema library not installed")
+        for name,valid in GOOD.items():
+            schema=public_schema(name)
+            Draft202012Validator.check_schema(schema)
+            cases=[valid,None,True,0,[],"string",{**valid,"unknown":True}]
+            for key,field in schema["properties"].items():
+                for incorrect in (None,[],{},True,42," "):
+                    sample=copy.deepcopy(valid)
+                    sample[key]=incorrect
+                    cases.append(sample)
+                if field["type"]=="string":
+                    for value in ("", " ", "  x  ", "a"*8001):
+                        sample=copy.deepcopy(valid)
+                        sample[key]=value
+                        cases.append(sample)
+            for test in cases:
+                with self.subTest(tool=name,payload=repr(test)[:90]):
+                    actual=Draft202012Validator(schema).is_valid(test)
+                    try:
+                        validate_call(name,test)
+                        accepted=True
+                    except (ValueError,TypeError):
+                        accepted=False
+                    self.assertEqual(actual,accepted)
+
     def test_semantic_boundaries(self):
         invalid=[
             ("work_status",{"job_id":"not-owned"}),
