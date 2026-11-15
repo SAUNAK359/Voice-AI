@@ -159,8 +159,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         context["cognitive_preflight"] = cognitive
         goals = cognitive["understanding"]["success_criteria"]
         context["objective"] += (
-            "\n\nApproved preflight success criteria (untrusted task context):
-" +
+            "\n\nApproved preflight success criteria (untrusted task context):\n" +
             "\n".join("- " + item for item in goals[:8]))
     levels.update({step["id"]:step.get("thinking_level","medium") for step in graph["steps"]})
     if dynamic:
