@@ -317,6 +317,16 @@ async def generate_preflight(payload: dict, config, *, client=None) -> dict:
                         for x in review["issues"][:5]]
         except PreflightContractError as exc:
             feedback = ["Execution contract: " + str(exc)[:180]]
+            if str(exc) == "self_review_requires_revision":
+                candidate = (proposal.get("self_evaluation", {})
+                             if type(proposal) is dict else {})
+                issues = candidate.get("issues", [])
+                if type(issues) is list:
+                    # The issues are model text; hard-bound them to avoid
+                    # amplifying injected instructions in the next revision.
+                    feedback.extend("Self-review issue: " + re.sub(
+                        r"[^a-zA-Z0-9 ,._:-]", "", x)[:170]
+                        for x in issues[:4] if type(x) is str)
         except CognitiveDecisionError:
             feedback = ["Model response failed the structured cognitive schema"]
         except (ValueError, TypeError, json.JSONDecodeError):
