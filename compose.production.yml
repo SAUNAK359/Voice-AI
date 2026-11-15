@@ -86,6 +86,11 @@ services:
   antivirus:
     image: clamav/clamav:stable
     restart: unless-stopped
+    environment:
+      CLAMD_CONF_StreamMaxLength: "210M"
+      CLAMD_CONF_MaxFileSize: "210M"
+      CLAMD_CONF_MaxScanSize: "1G"
+      CLAMD_CONF_ReadTimeout: "300"
     volumes:
       - antivirus_defs:/var/lib/clamav
     networks: [private]

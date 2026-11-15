@@ -71,6 +71,7 @@ class Session:
     nonce: str = field(default_factory=lambda: secrets.token_hex(16))
     history: list[dict] = field(default_factory=list)
     uploads: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
     visuals: list[str] = field(default_factory=list)
     visual_analysis: dict | None = None
     visual_generation: int = 0

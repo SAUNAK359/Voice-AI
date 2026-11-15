@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
-"""Refresh legacy integrity inventory after changes; ignores generated runtime files."""
+"""Regenerate the complete tracked-source inventory after reviewing changes."""
 from __future__ import annotations
 import hashlib
 import json
+import subprocess
 from pathlib import Path
-ROOT = Path(__file__).resolve().parents[1]
-manifest = ROOT / 'RELEASE_MANIFEST.json'
-ignore = {'.git', '.venv', '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
-          'logs', 'build', 'dist', 'rizzler_voice_intelligence.egg-info'}
-rows = []
-for path in sorted(ROOT.rglob('*')):
-    if not path.is_file() or path == manifest or any(part in ignore for part in path.relative_to(ROOT).parts):
-        continue
-    if path.suffix in ('.pyc', '.pyo'):
-        continue
-    if path.name in ('.env', 'install.log'):
-        continue
-    relative = path.relative_to(ROOT).as_posix()
-    # Historical benchmark evidence belongs in the existing repo, not source ZIP.
-    raw = path.read_bytes()
-    rows.append({'path': relative, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()})
-manifest.write_text(json.dumps({'schema_version': 1,
-    'description': 'Source checkout integrity inventory (not a cryptographic signature)',
-    'files': rows}, indent=2) + '\n', encoding='utf-8')
-print(f'Updated {len(rows)} entries: {manifest}')
+
+ROOT=Path(__file__).resolve().parents[1]
+raw=subprocess.check_output(["git","ls-files","-z"],cwd=ROOT)
+paths=sorted(p.decode() for p in raw.split(b"\0") if p and p!=b"RELEASE_MANIFEST.json")
+rows=[]
+for rel in paths:
+    path=ROOT/rel
+    if not path.is_file() or path.is_symlink():raise ValueError("Unsafe tracked source: "+rel)
+    data=path.read_bytes()
+    rows.append({"path":rel,"bytes":len(data),
+                 "git_blob_sha1":hashlib.sha1(b"blob "+str(len(data)).encode()+b"\0"+data).hexdigest()})
+out={"schema_version":2,"description":"Tracked-source Git blob integrity inventory; not a signed artifact","files":rows}
+(ROOT/"RELEASE_MANIFEST.json").write_text(json.dumps(out,indent=2)+"\n",encoding="utf-8")
+print(f"Updated release inventory: {len(rows)} files")

@@ -177,7 +177,7 @@ class VoiceTools:
             line="I couldn't complete that memory request. No success is claimed."
             return {"tool":intent,"text":line,"spoken":line,"verified":False}
 
-    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None, history: list[dict] | None = None)->dict|None:
+    async def execute(self,text:str,owner:str,sequence:int=0,uploads: list[str] | None = None, nonce: str = '', visuals: list[str] | None = None, pdf_document: str | None = None, history: list[dict] | None = None, sources: list[str] | None = None)->dict|None:
         if self.agent is not None:
             # Explicit confirmation is an authorization protocol, not intent routing.
             match=re.fullmatch(r"\s*confirm action\s+([a-f0-9]{32})\s*[.!]?\s*",text,re.I)
@@ -196,7 +196,7 @@ class VoiceTools:
                             "text":"The confirmation was invalid, expired or unauthorized.",
                             "spoken":"That action could not be confirmed."}
             return await self.agent.run(text,owner,history=history,uploads=uploads,
-                                        visuals=visuals,nonce=nonce,sequence=sequence)
+                                        visuals=visuals,nonce=nonce,sequence=sequence,source_ids=sources)
         memory_intent=self.memory_intent(text)
         if memory_intent is not None:
             return self._memory_command(memory_intent,text,owner)

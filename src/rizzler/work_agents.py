@@ -37,7 +37,7 @@ SPECS: dict[str, AgentSpec] = {
     "excel": AgentSpec("excel", "Workbook and tabular deliverables", 120, ("xlsx", "csv")),
     "pdf_visual": AgentSpec("pdf_visual", "PDF, charts, web and packaged deliverables",
                             120, ("pdf", "png", "svg", "json", "md", "html", "txt", "zip")),
-    "quality": AgentSpec("quality", "Independent deterministic delivery gates", 45),
+    "quality": AgentSpec("quality", "Independent structural and model visual delivery gates", 1800),
 }
 SPECIALISTS = ("research", "sql_analytics", "powerpoint", "word", "excel", "pdf_visual")
 SPECIALIST_FORMATS = frozenset(fmt for name in SPECIALISTS for fmt in SPECS[name].formats)

@@ -50,8 +50,12 @@ def test_postgres_concurrent_claims_do_not_duplicate_work(store):
         return worker.claim("w" + str(i), lease_seconds=30)
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
         claims = list(pool.map(claim, range(5)))
-    assert {item["id"] for item in claims} == ids
-    assert len({item["fence"] for item in claims}) == 1
+    # V13 executes at most one project per owner across concurrent workers.
+    active=[item for item in claims if item is not None]
+    assert len(active)==1
+    assert active[0]["id"] in ids
+    assert len([j for j in store.list_jobs("owner_1") if j["status"]=="queued"])==4
+    assert len([j for j in store.list_jobs("owner_1") if j["status"]=="running"])==1
 
 
 def test_postgres_verified_artifact_commit_and_owner_isolation(store, tmp_path):

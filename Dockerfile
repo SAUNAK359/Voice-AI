@@ -11,6 +11,6 @@ RUN pip install --no-cache-dir -e ".[voice,work]" -r requirements-identity.txt \
     && mkdir -p /var/lib/rizzler /home/rizzler/.cache \
     && chown -R rizzler:rizzler /var/lib/rizzler /home/rizzler/.cache
 USER rizzler
-ENV RIZZLER_HOST=0.0.0.0 RIZZLER_PORT=8000
+ENV RIZZLER_HOST=0.0.0.0 RIZZLER_PORT=8000 RIZZLER_ARTIFACT_QA=agentic
 EXPOSE 8000
 CMD ["python", "-m", "rizzler"]

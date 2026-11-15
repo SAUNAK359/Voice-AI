@@ -7,7 +7,7 @@ const s={ws:null,mode:'offline',key:'',production:false,session:false,muted:fals
  request:null,history:new Map(),gate:null,fence:new TurnFence(),ledger:new TimingLedger(),
  allowSeq:0,done:false,epoch:0,reconnecting:false,reconnectTimer:null,reconnectAttempts:0,
  protocol:1,frames:null,budget:new PlaybackBudget(),deviceListener:null,
- memoryEnabled:false,workEnabled:false,agentEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
+ memoryEnabled:false,workEnabled:false,agentEnabled:false,nativeEnabled:false,visualEnabled:false,visualIDs:[],visualAnalysis:null,pdfDocs:[],pdfSelected:null,pdfPoll:null,visualSeq:100000,sessionId:(crypto.randomUUID?.()||String(Date.now())).replaceAll('-','').slice(0,48)};
 const now=()=>performance.now();
 const csrf=()=>document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))?.split('=').slice(1).join('=')||'';
 const headers=()=>s.production?{'x-csrf-token':decodeURIComponent(csrf())}:
@@ -30,7 +30,7 @@ function server(msg){const seq=Number(msg.generation??s.fence.generation);
  case'interim_transcript':if(s.recording)status('listening','Provisional: '+String(msg.text||'').slice(0,100));break;
  case'transcript':message('user',msg.text,seq);break;
  case'assistant_text':message('assistant',msg.text,seq,msg.final===true);break;
- case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job)refreshWork();showAgentApprovals(msg.approvals||[]);break;
+ case'tool_result':if(msg.tool)toolNotice(msg);if(msg.job){refreshWork();window.RizzlerStudio?.refresh(msg.job.id);}window.RizzlerStudio?.applyActions(msg.ui_actions||[]);showAgentApprovals(msg.approvals||[]);break;
  case'audio_begin':s.allowSeq=seq;s.done=false;break;
  case'metrics':{const m=msg.data||{};
  $('metrics').textContent=`ASR ${m.asr_ms??'—'} ms · ${m.tool?('Tool '+m.tool+' '+(m.tool_ms??'—')+' ms'):('Gemini first text '+(m.llm_first_text_ms??'—')+' ms')} · Server first PCM ${m.post_pause_first_audio_ms??'—'} ms · Total server ${m.total_server_ms??'—'} ms`;
@@ -203,6 +203,7 @@ async function openMic(){
  }
 }
 async function disconnect(){clearTimeout(s.pdfPoll);s.pdfSelected=null;s.pdfDocs=[];s.visualIDs=[];renderVisuals();s.session=false;s.recording=false;clearTimeout(s.reconnectTimer);s.reconnecting=false;
+ if(s.mode==='native')await window.RizzlerNative?.disconnect();
  stopAudio();s.ledger.cancel(s.fence.generation);s.request?.abort();s.ws?.close();s.media?.getTracks().forEach(t=>t.stop());
  if(s.deviceListener){navigator.mediaDevices?.removeEventListener?.('devicechange',s.deviceListener);s.deviceListener=null;}
  await s.ctx?.close();s.ctx=null;s.mode='offline';$('connection').textContent='Disconnected';status('offline','Session ended');
@@ -215,8 +216,13 @@ async function connectSession(){
      if(!r.ok)throw Error('Invalid access key');
    }
    if(!window.isSecureContext)throw Error('Microphone requires HTTPS or localhost');
-   await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
-   s.session=true;$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
+   if(s.nativeEnabled){
+     await window.RizzlerNative.connect(s.key,s.sessionId,s.production);
+     s.mode='native';
+   }else{
+     await openMic();try{await connectWs();s.mode='ws'}catch(_){setFallback('HTTPS fallback')}
+   }
+   s.session=true;window.RizzlerStudio?.setAuth({key:s.key,sessionId:s.sessionId,production:s.production});$('modal').classList.add('hidden');$('connect').textContent='Disconnect';
    for(const id of ['mute','send','reset'])$(id).disabled=false;
    status('listening','Ready. Speak naturally.');noteLatency();
    refreshToolCatalog();if(s.workEnabled)refreshWork();if(s.visualEnabled)refreshPDFDocs();
@@ -234,6 +240,7 @@ async function enableTextOnly(){
    }
    if(!s.agentEnabled)throw Error('The V12 agent runtime is not enabled');
    s.session=true;
+   window.RizzlerStudio?.setAuth({key:s.key,sessionId:s.sessionId,production:s.production});
    $('modal').classList.add('hidden');
    $('connection').textContent='Private text session';
    status('listening','Text and Work available. Microphone is optional.');
@@ -482,7 +489,7 @@ document.addEventListener('pointerdown',()=>{
  if(s.session&&s.ctx?.state==='suspended')s.ctx.resume().catch(()=>{});
 },{passive:true});
 $('unlock').addEventListener('submit',async e=>{e.preventDefault();s.key=$('key').value;await connectSession()});
-$('connect').addEventListener('click',()=>s.session&&s.ctx?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
+$('connect').addEventListener('click',()=>s.session?disconnect():s.production?connectSession():$('modal').classList.remove('hidden'));
 $('logout').addEventListener('click',async()=>{
   await disconnect();
   if(!s.production){$('modal').classList.remove('hidden');return}
@@ -494,7 +501,7 @@ $('logout').addEventListener('click',async()=>{
   const r=await fetch('/api/runtime');if(!r.ok)throw Error('Runtime unavailable');
   const d=await r.json();s.production=d.mode==='production';
   s.workEnabled=!!d.work_enabled;$('work-panel').hidden=!s.workEnabled;
-  s.agentEnabled=!!d.agentic_enabled;$('agent-chat').hidden=!s.agentEnabled;
+  s.agentEnabled=!!d.agentic_enabled;s.nativeEnabled=!!d.native_live_enabled;$('agent-chat').hidden=!s.agentEnabled;
   s.visualEnabled=!!d.multimodal_enabled;$('visual-panel').hidden=!s.visualEnabled;
   s.memoryEnabled=!!d.encrypted_memory_enabled;$('memory-open').hidden=!s.memoryEnabled;
   $('logout').hidden=!s.production;
@@ -572,7 +579,8 @@ $('agent-chat')?.addEventListener('submit',async e=>{
    input.value='';
    feedback.textContent=result.approvals?.length?'Explicit approval required for the proposed change.':
      result.job?'Work accepted; track progress below.':'Agent response ready.';
-   if(result.job)refreshWork();
+   if(result.job){refreshWork();window.RizzlerStudio?.refresh(result.job.id);}
+   window.RizzlerStudio?.applyActions(result.ui_actions||[]);
    showAgentApprovals(result.approvals||[]);
  }catch(error){feedback.textContent=error.message}
  finally{send.disabled=false}
@@ -623,45 +631,11 @@ function toolNotice(msg){
    (Number.isFinite(msg.elapsed_ms)?' · '+Math.round(msg.elapsed_ms)+' ms':'');
 }
 async function refreshWork(){
- if(!s.workEnabled||(!s.key&&!s.production))return;
- try{
- const response=await fetch('/api/voice/jobs',{headers:headers()});
- if(!response.ok)return;
- const {jobs}=await response.json(),target=$('work-jobs');target.replaceChildren();
- for(const job of jobs.slice(0,6)){
-  const card=document.createElement('article');card.className='job-card';
-  const heading=document.createElement('strong');heading.textContent='Job '+job.id.slice(0,8)+' · '+job.status;
-  const subtitle=document.createElement('p');subtitle.textContent='Stage: '+job.stage+' · '+job.attempts+' worker attempts';
-  card.append(heading,subtitle);
-  if(['queued','running','completed','failed','cancelled'].includes(job.status)){
-    const res=await fetch('/api/voice/jobs/'+encodeURIComponent(job.id),{headers:headers()});
-    if(res.ok){
-     const detail=await res.json();
-     if(detail.plan?.steps?.length){
-       const flow=document.createElement('p');flow.className='job-workflow';
-       flow.textContent='Plan: '+detail.plan.steps.map(n=>n.tool.replaceAll('_',' ')).join(' · ');
-       card.append(flow);
-     }
-     const agents=document.createElement('p');agents.className='job-agents';
-     agents.textContent=detail.agents.map(a=>a.agent.replaceAll('_',' ')+': '+a.status).join(' · ');
-     card.append(agents);
-     for(const file of detail.artifacts){
-      const btn=document.createElement('button');btn.textContent='Download '+file.kind.toUpperCase();
-      btn.addEventListener('click',async()=>{
-       try{const result=await fetch('/api/voice/artifacts/'+encodeURIComponent(file.id),{headers:headers()});
-        if(!result.ok)throw Error('Download unavailable');
-        const blob=await result.blob(),url=URL.createObjectURL(blob);
-        const a=document.createElement('a');a.href=url;a.download=file.name;a.click();
-        setTimeout(()=>URL.revokeObjectURL(url),30000);
-       }catch(e){$('upload-feedback').textContent=e.message;}
-      });card.append(btn);
-     }
-    }
-  }
-  target.append(card);
- }
- }catch(_){/* An offline dashboard must not interrupt the microphone. */}
+ // The V13 Project Canvas consumes persisted job state and does not duplicate
+ // the hidden V12 dashboard's six sequential detail requests.
+ window.RizzlerStudio?.refresh();
 }
+
 const uploadField=$('data-upload');
 uploadField?.addEventListener('change',async()=>{
  const file=uploadField.files?.[0];if(!file)return;
@@ -674,7 +648,7 @@ uploadField?.addEventListener('change',async()=>{
 });
 setInterval(()=>{if(!document.hidden&&s.session&&s.workEnabled)refreshWork()},8000);
 
-$('mute').addEventListener('click',()=>{s.muted=!s.muted;$('mute').textContent=s.muted?'Unmute':'Mute';
+$('mute').addEventListener('click',()=>{s.muted=!s.muted;if(s.mode==='native')window.RizzlerNative?.setMuted(s.muted);$('mute').textContent=s.muted?'Unmute':'Mute';
  if(s.muted){interrupt();s.recording=false;s.gate.reset();status('muted','Microphone muted')}else status('listening','Speak naturally')});
 $('send').addEventListener('click',()=>{if(s.recording){finish();return}if(s.recentBytes<s.rate*2*.35)return;
  start(true);finish()});
