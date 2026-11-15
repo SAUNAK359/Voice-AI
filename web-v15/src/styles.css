@@ -1,8 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
-:root{font-family:'DM Sans',system-ui,sans-serif;color:#eaf2fc;background:#0d1321;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+:root{font-family:'Segoe UI',system-ui,sans-serif;color:#eaf2fc;background:#0d1321;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box}body{margin:0}button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.5}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #43c8af;outline-offset:3px}
-h1,h2,h3,p{margin-top:0}h1,h2{font-family:Manrope,system-ui,sans-serif;letter-spacing:-.045em}h1{font-size:clamp(1.7rem,2vw,2.4rem)}h2{font-size:1.1rem;margin-bottom:0}p{line-height:1.6}
+h1,h2,h3,p{margin-top:0}h1,h2{font-family:'Segoe UI',system-ui,sans-serif;letter-spacing:-.045em}h1{font-size:clamp(1.7rem,2vw,2.4rem)}h2{font-size:1.1rem;margin-bottom:0}p{line-height:1.6}
 .muted{color:#9baabc}.eyebrow{font-size:.7rem;font-weight:800;letter-spacing:.13em;color:#69d2bf;margin-bottom:8px}
 .logo{display:flex;align-items:center;gap:10px;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:.085em;font-size:1.18rem;color:#f6fbff}
 .logo svg{color:#6bdbc9}.logo span{font-size:.67rem;letter-spacing:0;color:#87a0bf;border:1px solid #33455f;border-radius:6px;padding:2px 5px}
