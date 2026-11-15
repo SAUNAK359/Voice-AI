@@ -70,10 +70,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
                     from .work_reasoning import use
                     with use(levels.get(spec.name,"medium")):
+                        from .work_async import stage_timeout
                         result=await asyncio.wait_for(
                             invoke(spec,checkpoint,context,formats,payload,store,owner,
                                    composer,researcher,jid,worker_id,fence,attempt),
-                            timeout=spec.sla_seconds*2)
+                            timeout=stage_timeout(spec.sla_seconds*2))
                     qa=gate_agent(spec.name,result,formats)
                     for receipt in result_receipts(result):
                         if not verify_checkpoint(checkpoint/receipt.name,receipt):
