@@ -58,13 +58,14 @@ def router(store: WorkStore, identity: Identity | None = None,
             raw=await req.body()
             if len(raw)>15000: raise ValueError("Request too large")
             data=json.loads(raw)
-            if not isinstance(data,dict) or set(data)-{"objective","deliverables","uploads"}:
+            if not isinstance(data,dict) or set(data)-{"objective","deliverables","uploads","evidence_scope"}:
                 raise ValueError("Invalid or unknown job document fields")
             objective, formats=data.get("objective"),data.get("deliverables")
             uploads=data.get("uploads",[])
             if not isinstance(objective,str):raise ValueError("Objective must be text")
             return store.submit(who,objective,formats,
-                req.headers.get("idempotency-key",""),uploads)
+                req.headers.get("idempotency-key",""),uploads,
+                evidence_scope=data.get("evidence_scope","auto"))
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError) as exc:
             raise HTTPException(status_code=400,detail="Invalid job request") from None
         except Conflict:

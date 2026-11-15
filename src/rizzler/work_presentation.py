@@ -118,6 +118,32 @@ def validate_storyboard(story: dict, source_urls: list[str], *,
     return story
 
 
+def complete_source_lineage(story: dict, urls: list[str]) -> dict:
+    """Append only missing approved source citations, never invented evidence."""
+    cited={url for slide in story["slides"] for url in slide["citations"]}
+    missing=[url for url in urls if url not in cited]
+    if not missing:
+        return story
+    grouped=[]
+    current=[]
+    length=0
+    for url in missing:
+        if current and (len(current)==5 or length+len(url)>1700):
+            grouped.append(current);current=[];length=0
+        current.append(url);length+=len(url)
+    if current:grouped.append(current)
+    if len(story["slides"])+len(grouped)>32:
+        raise CognitiveDecisionError("Storyboard exceeds slide budget after full-source attribution")
+    for group in grouped:
+        story["slides"].append({
+            "title":"Source references — continued", "layout":"sources",
+            "headline":"Provider attributions; publisher content not independently verified",
+            "points":[], "secondary":[], "metrics":[], "citations":group,
+            "notes":"Source links are provider attributions, not independently verified claims.",
+            "chart_x":"", "chart_y":""})
+    return story
+
+
 async def compose_storyboard(objective: str, ir, table=None, *, client=None):
     cfg=WorkModelConfig.from_env()
     header=table[0] if table else []
@@ -134,6 +160,10 @@ async def compose_storyboard(objective: str, ir, table=None, *, client=None):
         "Use sources layout at the end if source URLs are present. "
         "Citations must be selected ONLY from the approved URL list. "
         "Never invent numerical values, rankings or supporting sources. "
+        "For revised official releases, clearly mark the latest applicable "
+        "version and distinguish earlier preliminary values; never mix time "
+        "periods or monetary units. Treat grounding redirect URLs as attributed "
+        "links rather than publisher-verified evidence. "
         "Metric card values must appear literally in the supplied evidence; "
         "this is an evidence trace, not independent fact verification. "
         "Use chart ONLY for a supplied data table; chart_x and chart_y must "
@@ -159,8 +189,10 @@ async def compose_storyboard(objective: str, ir, table=None, *, client=None):
             return validate_storyboard(result,list(ir.sources),
                                        content=ir.content,table=table)
         except (CognitiveDecisionError,ValueError,TypeError) as exc:
-            last_error=type(exc).__name__
-    raise CognitiveDecisionError("Model storyboard failed bounded validation attempts")
+            # The reviewer must receive a specific constraint, not just an
+            # exception class. This is a bounded internal validation error.
+            last_error=(type(exc).__name__+": "+str(exc))[:240]
+    raise CognitiveDecisionError("Storyboard contract rejected after three targeted revisions: "+last_error)
 
 
 def render_storyboard(path: Path, story: dict, *, table=None):
@@ -254,7 +286,13 @@ def render_storyboard(path: Path, story: dict, *, table=None):
             txt(slide,"“"+quote+"”",1.5,3.46,10.3,1.42,25,True,"navy")
         elif layout=="sources":
             for j,url in enumerate(spec["citations"][:7]):
-                link=txt(slide,url[:102],1.03,3.05+j*.48,10.9,.39,13,False,"teal")
+                from urllib.parse import urlsplit
+                host=urlsplit(url).hostname or "Source"
+                if "grounding-api-redirect" in url:
+                    host="Provider-grounded redirect (publisher unverified)"
+                display=(url if len(url)<=105 and "grounding-api-redirect" not in url
+                         else f"[{j+1}] {host}")
+                link=txt(slide,display,1.03,3.05+j*.48,10.9,.39,13,False,"teal")
                 link.text_frame.paragraphs[0].runs[0].hyperlink.address=url
         elif layout=="section":
             for j,p in enumerate(points[:3]):
@@ -269,7 +307,7 @@ def render_storyboard(path: Path, story: dict, *, table=None):
         txt(slide,f"{n:02d}  /  {len(story['slides']):02d}",11.52,7.08,1.1,.22,9,
             False,foot_color)
         notes=spec["notes"]+"\n\n"+ "\n".join(spec["citations"])
-        try:slide.notes_slide.notes_text_frame.text=notes[:2500]
+        try:slide.notes_slide.notes_text_frame.text=notes[:15000]
         except (AttributeError,ValueError):pass
     prs.core_properties.title=story["title"]
     prs.core_properties.author="Rizzler V15 Cognitive Work Studio"
@@ -282,4 +320,6 @@ def render_storyboard(path: Path, story: dict, *, table=None):
 async def make_presentation(path: Path, objective: str, ir, *, table=None,
                             client=None):
     storyboard=await compose_storyboard(objective,ir,table,client=client)
+    storyboard=complete_source_lineage(storyboard,list(ir.sources))
+    validate_storyboard(storyboard,list(ir.sources),content=ir.content,table=table)
     return await asyncio.to_thread(render_storyboard,path,storyboard,table=table)

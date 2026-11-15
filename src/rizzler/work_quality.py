@@ -31,7 +31,16 @@ def inspect_artifact(path: Path, kind: str, *,
         paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
         if not paragraphs or len("".join(paragraphs)) < 40:
             raise ValueError("Word document lacks substantive text")
+        if doc.core_properties.subject == "Rizzler V15 native structured document":
+            if any(("**" in p or p.startswith("### ") or p.startswith("| ---"))
+                   for p in paragraphs):
+                raise ValueError("Native Word output contains raw Markdown syntax")
+            if artifact_ir is not None and any("| ---" in body or "|---" in body
+                                                for _,body in artifact_ir.sections) and not doc.tables:
+                raise ValueError("Structured Word table was rendered as plain text")
+            checks.append("native_markdown_blocks_rendered")
         details["paragraphs"] = len(paragraphs)
+        details["native_tables"] = len(doc.tables)
         checks.append("readable_docx_paragraphs")
     elif kind == "pptx":
         from pptx import Presentation
@@ -91,8 +100,19 @@ def inspect_artifact(path: Path, kind: str, *,
             raise ValueError("Generated JSON lacks structured sections")
         checks.append("nonempty_structured_sections")
     elif kind in ("md", "txt"):
-        if len(path.read_text(encoding="utf-8").strip()) < 40:
+        content=path.read_text(encoding="utf-8")
+        if len(content.strip()) < 40:
             raise ValueError("Text report lacks substantive content")
+        if kind=="md" and dataset_summary and dataset_summary.get("financial"):
+            import re
+            groups=dataset_summary["financial"]["groups"]
+            headers=len(re.findall(r"(?m)^#{1,3}\s+\S",content))
+            if headers<4 or not all(any(label in content for label in items)
+                                    for items in groups.values() if items):
+                raise ValueError("Financial Markdown report lacks analytical sections or group comparisons")
+            if "| ---" not in content and "|---" not in content:
+                raise ValueError("Financial Markdown report lacks structured comparison table")
+            checks.append("financial_report_semantic_coverage")
         checks.append("substantive_report_text")
     elif kind == "html":
         if "<section>" not in path.read_text(encoding="utf-8"):
@@ -139,10 +159,27 @@ def inspect_artifact(path: Path, kind: str, *,
             doc = __import__("docx").Document(path)
             present = [p.text for p in doc.paragraphs]
             actual_sources = [p.text for p in doc.paragraphs if p.text in sources]
-            valid = all(h in present for h in headings) and actual_sources == sources
-            valid = valid and all(
-                " ".join(body.split()) in " ".join(" ".join(present).split())
-                for _,body in artifact_ir.sections if body.strip())
+            if doc.core_properties.subject == "Rizzler V15 native structured document":
+                from .work_rich_docs import blocks, clean
+                from docx.opc.constants import RELATIONSHIP_TYPE
+                hyperlinks={rel.target_ref for rel in doc.part.rels.values()
+                    if rel.reltype==RELATIONSHIP_TYPE.HYPERLINK}
+                rendered=" ".join(present+[cell.text for t in doc.tables
+                    for row in t.rows for cell in row.cells])
+                expected_blocks=blocks(artifact_ir.sections)
+                valid=all(h in present for h in headings) and set(sources).issubset(hyperlinks)
+                valid=valid and all(
+                    (clean(value) in rendered if kind=="paragraph" else
+                     value in rendered if kind=="bullet" else
+                     value[1] in rendered if kind=="heading" else
+                     all(cell in rendered for row in value for cell in row)
+                     if kind=="table" else True)
+                    for kind,value in expected_blocks)
+            else:
+                valid = all(h in present for h in headings) and actual_sources == sources
+                valid = valid and all(
+                    " ".join(body.split()) in " ".join(" ".join(present).split())
+                    for _,body in artifact_ir.sections if body.strip())
         elif kind == "pptx":
             from pptx import Presentation
             deck = Presentation(path)
@@ -182,9 +219,17 @@ def inspect_artifact(path: Path, kind: str, *,
                 actual_sources = ([r[0] for r in wb["Sources"].iter_rows(values_only=True)]
                                   if "Sources" in wb else [])
                 cells = list(wb["Summary"].iter_rows(min_row=3,min_col=2,max_col=2,values_only=True))
-                valid = (present == headings and actual_sources == sources
-                         and all((cell[0] == body or cell[0] == "'"+body)
-                                 for cell,(_,body) in zip(cells,artifact_ir.sections)))
+                matches=[cell[0] in (body, "'"+body)
+                         or (not body and cell[0] in (None,""))
+                         for cell,(_,body) in zip(cells,artifact_ir.sections)]
+                valid=(present==headings and actual_sources==sources
+                       and len(cells)==len(artifact_ir.sections) and all(matches))
+                if not valid:
+                    raise ValueError("XLSX input IR contract mismatch: "
+                        "headings="+str(present==headings)+
+                        ", sources="+str(actual_sources==sources)+
+                        ", counts="+str((len(present),len(headings),len(cells)))+
+                        ", wrong_section_indices="+str([i for i,m in enumerate(matches) if not m][:10]))
             finally:
                 wb.close()
         elif kind == "json":

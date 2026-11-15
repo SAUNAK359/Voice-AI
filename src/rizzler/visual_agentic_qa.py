@@ -46,7 +46,8 @@ async def review(root,owner,path,kind,sha,objective):
                     parts.extend([types.Part.from_text(text="Rendered page "+str(p)),
                                   types.Part.from_bytes(data=png,mime_type="image/png")])
                 reserve_provider_call("work")
-                async with asyncio.timeout(min(120,cfg.request_timeout*3)):
+                from .work_async import wait_scope
+                async with wait_scope(min(120,cfg.request_timeout*3)):
                     response=await client.aio.models.generate_content(
                         model=model,
                         contents=[types.Content(role="user",parts=parts)],

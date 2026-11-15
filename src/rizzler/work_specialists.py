@@ -70,10 +70,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
                     from .work_reasoning import use
                     with use(levels.get(spec.name,"medium")):
+                        from .work_async import stage_timeout
                         result=await asyncio.wait_for(
                             invoke(spec,checkpoint,context,formats,payload,store,owner,
                                    composer,researcher,jid,worker_id,fence,attempt),
-                            timeout=spec.sla_seconds*2)
+                            timeout=stage_timeout(spec.sla_seconds*2))
                     qa=gate_agent(spec.name,result,formats)
                     for receipt in result_receipts(result):
                         if not verify_checkpoint(checkpoint/receipt.name,receipt):
@@ -187,6 +188,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 [f"{name}: count {stats['count']}, mean {stats['mean']}, "
                  f"min {stats['min']}, max {stats['max']}."
                  for name,stats in numeric[:10]])
+            finance = summary.get("financial")
+            if finance:
+                import json as _json
+                proof += "\nFinancial totals and regional/product groups:\n" + _json.dumps(
+                    finance, ensure_ascii=False, separators=(",", ":"))[:6500]
             context["text"]=(context["text"] or
                 "# Dataset observations\nIndependent numeric analysis") + (
                 "\n\n## Verified dataset evidence\n"+proof)

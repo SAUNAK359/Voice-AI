@@ -52,6 +52,17 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 if observed is None or stats["count"] != observed["count"] or any(
                     not _close(stats[name], observed[name]) for name in ("mean","min","max")):
                     raise ValueError("Workbook numeric values differ from independent SQL evidence")
+        if "Financial Insights" in wb.sheetnames:
+            from .work_finance import financial_profile
+            finances=financial_profile(headers,rows)
+            if finances is None:
+                raise ValueError("Finance dashboard has no source-grounded financial schema")
+            sheet=wb["Financial Insights"]
+            for row,key in ((4,"revenue"),(5,"cost"),(6,"gross_profit"),(7,"gross_margin_pct")):
+                if not _close(sheet.cell(row,2).value,finances["total"][key]):
+                    raise ValueError("Financial dashboard headline KPI differs from source")
+            if sheet["B2"].value != finances["currency"]:
+                raise ValueError("Financial dashboard currency disagrees with source")
         check = list(wb["Checks"].iter_rows(values_only=True))
         if len(check) < 2 or check[0][0] != "Metric":
             raise ValueError("Workbook formula contract malformed")

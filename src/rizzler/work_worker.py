@@ -34,6 +34,17 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
               "Use concise headings and avoid filler, invented sources, fabricated "
               "statistics, unsupported certainty and confidence claims. "
               "For dataset metrics, preserve units and numeric precision. "
+              "When a verified financial dataset includes grouped totals, produce "
+              "an executive summary, source methodology, total revenue/cost/profit, "
+              "gross margin, regional and product comparisons in Markdown tables, "
+              "interpretations, limitations and actionable recommendations. "
+              "Never compare measures with different units on one axis. "
+              "If multiple publications describe the same period, preserve each "
+              "publication date, identify preliminary versus revised statistics, "
+              "prefer the latest applicable primary-source revision and explain "
+              "remaining contradictions rather than silently choosing a number. "
+              "Provider-grounding URLs alone do not prove page contents were fetched. "
+              "For missing evidence, explicitly state what cannot be concluded. "
               "Match the depth, specificity, audience and output requirements expressed "
               "in the objective. For presentations, build a substantial story with " 
               "clear executive messages, quantitative context, source qualifications " 
@@ -45,7 +56,8 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
               "Objective and selected research evidence:\n" + objective[:16000] + "\n\nDataset summary:\n" +
               json.dumps(data_summary or {}, ensure_ascii=False)[:9000])
     try:
-        async with asyncio.timeout(min(90, cfg.request_timeout)):
+        from .work_async import wait_scope
+        async with wait_scope(min(90, cfg.request_timeout)):
             from .production_guard import reserve_provider_call
             reserve_provider_call('work')
             response=await client.aio.models.generate_content(
@@ -88,7 +100,8 @@ async def grounded_research(objective: str) -> dict:
     async def search(question: str, number: int):
         try:
             reserve_provider_call("research")
-            async with asyncio.timeout(min(65, cfg.request_timeout)):
+            from .work_async import wait_scope
+            async with wait_scope(min(65, cfg.request_timeout)):
                 response = await client.aio.models.generate_content(
                     model=cfg.gemini_model,
                     contents=(

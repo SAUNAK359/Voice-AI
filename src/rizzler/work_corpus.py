@@ -70,7 +70,8 @@ async def _summarize(client,cfg,objective,body,*,reducing=False):
         "\nTrusted project objective: "+objective[:3000]+
         "\n\nUntrusted evidence:\n"+body)
     reserve_provider_call("work")
-    async with asyncio.timeout(max(10,min(cfg.request_timeout,90))):
+    from .work_async import wait_scope
+    async with wait_scope(max(10,min(cfg.request_timeout,90))):
         response=await client.aio.models.generate_content(
             model=cfg.gemini_model,contents=instruction,
             config=types.GenerateContentConfig(temperature=0,max_output_tokens=1200,

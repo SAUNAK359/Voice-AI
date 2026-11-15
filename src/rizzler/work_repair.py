@@ -46,7 +46,8 @@ async def _revision(ir, objective, defects, dataset_summary, attempt_number):
     try:
         reserve_provider_call("work")
         with use("high"):
-            async with asyncio.timeout(min(cfg.request_timeout,95)):
+            from .work_async import wait_scope
+            async with wait_scope(min(cfg.request_timeout,95)):
                 response=await client.aio.models.generate_content(
                     model=cfg.gemini_model,contents=prompt,
                     config=types.GenerateContentConfig(temperature=0.2,

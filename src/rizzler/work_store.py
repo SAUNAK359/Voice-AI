@@ -124,7 +124,7 @@ class WorkStore:
     def submit(self, owner: str, objective: str, formats: list[str],
                idem: str, uploads: list[str] | None = None,
                source_ids: list[str] | None = None,
-               source_coverage: str = "targeted") -> dict:
+               source_coverage: str = "targeted", evidence_scope: str = "auto") -> dict:
         if not isinstance(idem, str) or not KEY_RE.fullmatch(idem):
             raise ValueError("Idempotency-Key must be 8-96 safe characters")
         if not isinstance(formats, list) or not all(isinstance(f, str) for f in formats):
@@ -137,7 +137,8 @@ class WorkStore:
         if (not isinstance(source_ids,list) or len(source_ids)>8 or
             any(type(uid) is not str for uid in source_ids) or
             len(set(source_ids))!=len(source_ids) or
-            source_coverage not in ("targeted","complete")):
+            source_coverage not in ("targeted","complete") or
+            evidence_scope not in ("auto","uploaded_only","external_allowed")):
             raise ValueError("Invalid source scope")
         source_refs=[]
         if source_ids:
@@ -150,7 +151,8 @@ class WorkStore:
                          for uid in source_ids]
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads,
                    "source_ids": source_ids, "source_refs": source_refs,
-                   "source_coverage": source_coverage}
+                   "source_coverage": source_coverage,
+                   "evidence_scope": evidence_scope}
         # New agentic submissions do not select specialists until the worker
         # obtains an authenticated job lease and requests a model-authored plan.
         import os
