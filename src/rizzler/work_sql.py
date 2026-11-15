@@ -59,8 +59,11 @@ def analyze_sql(source):
                 abs(avg - metrics["mean"]) > 0.00001):
                 raise ValueError("Independent SQL aggregation differs from deterministic profiling")
             verified[name] = {"count": count, "mean": round(avg, 6)}
+    from .work_finance import financial_profile
+    finance = financial_profile(header, rows)
     return {"summary": {**numeric, "sql_row_count": sql_rows,
-                         "sql_numeric_columns_verified": len(verified)},
+                         "sql_numeric_columns_verified": len(verified),
+                         **({"financial": finance} if finance else {})},
             "sql_verified_metrics": verified, "source_columns": header,
             "column_aliases": [f"c{i}" for i in range(len(header))],
             "execution": "sqlite_readonly_in_memory",
