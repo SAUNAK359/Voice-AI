@@ -53,7 +53,8 @@ def validate_call(name: str, args, *, enabled: bool=True) -> dict:
         if expected=="STRING":
             if type(value) is not str or (
                 key in _LIMITS[name] and not (
-                    _LIMITS[name][key][0]<=len(value.strip())<=_LIMITS[name][key][1])):
+                    len(value)<=_LIMITS[name][key][1] and
+                    len(value.strip())>=_LIMITS[name][key][0])):
                 raise ValueError("Invalid tool string")
             if key=="job_id" and not _ID.fullmatch(value):
                 raise ValueError("Invalid Work job ID")
@@ -85,7 +86,8 @@ def public_schema(name: str):
             low,high=_LIMITS[name][key]
             field["minLength"]=low
             field["maxLength"]=high
-            if low>0 and field["type"]=="string":field["pattern"]=r"\S"
+            if low>0 and field["type"]=="string":
+                field["pattern"]=(r"\S" if low==1 else r"\S[\s\S]{"+str(low-2)+r",}\S")
         if key=="job_id":field["pattern"]="^[a-f0-9]{32}$"
         if key=="slide":
             field["minimum"]=1
