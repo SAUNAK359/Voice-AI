@@ -5,7 +5,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-import pytest
+import unittest
 
 from rizzler.v15_agentic import (
     V15Unavailable, V15QualityError, enabled, plan, improve_draft,
@@ -48,7 +48,7 @@ def test_v15_llm_scope_not_keyword_based():
 
 
 def test_v15_scope_rejects_unauthorized_analysis():
-    with pytest.raises(V15Unavailable):
+    with unittest.TestCase().assertRaises(V15Unavailable):
         validate_decision({"research":True, "analysis":True,
                            "reason":"Please analyze a nonexistent upload."}, [])
 
@@ -71,7 +71,7 @@ def test_independent_critique_revisions_are_bounded():
 def test_independent_critique_rejection_fails_closed():
     stub = StubModel([{"verdict":"reject",
                        "feedback":"Unverifiable figures cannot be published."}])
-    with pytest.raises(V15QualityError):
+    with unittest.TestCase().assertRaises(V15QualityError):
         asyncio.run(improve_draft("Report", "Invented evidence", [], None,
                                   model=stub))
     assert error_code(V15QualityError("bad")) == "v15_quality_rejected"
