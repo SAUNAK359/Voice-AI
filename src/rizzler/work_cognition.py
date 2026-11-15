@@ -36,7 +36,8 @@ async def structured_decision(
     from google.genai import types
     try:
         reserve_provider_call(service)
-        async with asyncio.timeout(min(35, cfg.request_timeout)):
+        from .work_async import wait_scope
+        async with wait_scope(min(35, cfg.request_timeout)):
             response = await client.aio.models.generate_content(
                 model=cfg.gemini_model, contents=prompt,
                 config=types.GenerateContentConfig(
