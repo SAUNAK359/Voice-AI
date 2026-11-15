@@ -48,6 +48,11 @@
       "git_blob_sha1": "28efb0149219ce2df59bb9e60d79289c0ff7c3b2"
     },
     {
+      "path": ".github/workflows/v15-ui-ci.yml",
+      "bytes": 836,
+      "git_blob_sha1": "5c90458d2c6ed51a497f82c4eebaf30459f05a46"
+    },
+    {
       "path": ".gitignore",
       "bytes": 334,
       "git_blob_sha1": "dc30b8e1a9605fb60e3011cf77b4b9a132c9fc40"
@@ -949,13 +954,13 @@
     },
     {
       "path": "src/rizzler/work_presentation.py",
-      "bytes": 14091,
-      "git_blob_sha1": "b8f0d780d8890fb2c4ddd25b6a3b0760cd65a02d"
+      "bytes": 14719,
+      "git_blob_sha1": "395b93bdc3f24a2c191bd1fc0a6e165bf1b058c5"
     },
     {
       "path": "src/rizzler/work_quality.py",
-      "bytes": 11226,
-      "git_blob_sha1": "5ad57df6bcdc7d56b8ac73691facb47a0264b25e"
+      "bytes": 11796,
+      "git_blob_sha1": "1e2382b17a4458fe46dea3615a0b4f9c34c21ee7"
     },
     {
       "path": "src/rizzler/work_reasoning.py",
@@ -1244,8 +1249,8 @@
     },
     {
       "path": "tests/test_v15_cognitive.py",
-      "bytes": 17107,
-      "git_blob_sha1": "7a0000841137f543367faeb592e39c166a0e0dfd"
+      "bytes": 20273,
+      "git_blob_sha1": "ea229538ea4260d1000eb46cc152fdc4b69cabba"
     },
     {
       "path": "tests/test_voice_core.cjs",
@@ -1256,6 +1261,61 @@
       "path": "tests/test_voice_phase3.cjs",
       "bytes": 2493,
       "git_blob_sha1": "3647cf6409b09f517edb25fcb0234e9a74e9d4cd"
+    },
+    {
+      "path": "web-v15/index.html",
+      "bytes": 316,
+      "git_blob_sha1": "bc2595172d58d28db1756489cfdfdddbd2edd662"
+    },
+    {
+      "path": "web-v15/package.json",
+      "bytes": 682,
+      "git_blob_sha1": "db617cbeaabf18610c1b2bf34193b8130d488f46"
+    },
+    {
+      "path": "web-v15/README.md",
+      "bytes": 1909,
+      "git_blob_sha1": "ce004812ff946be32c6323b76c252d391e049ebc"
+    },
+    {
+      "path": "web-v15/src/api.ts",
+      "bytes": 3746,
+      "git_blob_sha1": "f87e87cddd5074d68d13003af8acc829a7d94111"
+    },
+    {
+      "path": "web-v15/src/App.tsx",
+      "bytes": 13456,
+      "git_blob_sha1": "cd906e22d5b4b325aa3cd686235cb4db994fe419"
+    },
+    {
+      "path": "web-v15/src/graph.test.ts",
+      "bytes": 1637,
+      "git_blob_sha1": "a3a342e41db54028e2660e3738196ce193fd1487"
+    },
+    {
+      "path": "web-v15/src/graph.ts",
+      "bytes": 1942,
+      "git_blob_sha1": "0e2002465c9bb726dfbdd15a5479eba402f068e5"
+    },
+    {
+      "path": "web-v15/src/main.tsx",
+      "bytes": 521,
+      "git_blob_sha1": "b56b33ce8c5455be8c92a3eb5383d76a23f9bff4"
+    },
+    {
+      "path": "web-v15/src/styles.css",
+      "bytes": 8541,
+      "git_blob_sha1": "fa266ba5ea3f88b32e1452af06eeb7060e1f1bb3"
+    },
+    {
+      "path": "web-v15/tsconfig.json",
+      "bytes": 436,
+      "git_blob_sha1": "52baf3beb356793024f0f44e6e08127325a0b26c"
+    },
+    {
+      "path": "web-v15/vite.config.ts",
+      "bytes": 306,
+      "git_blob_sha1": "6bf35f8a62225e59706f7de5a0ec732efe0d36d3"
     },
     {
       "path": "web/app.js",
