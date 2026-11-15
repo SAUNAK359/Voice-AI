@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3586,
-      "git_blob_sha1": "67711dbeeecf49618a94006307746509920308e0"
+      "bytes": 3614,
+      "git_blob_sha1": "4cd4b8164bed9370c65c189607ecca8e5c57a76d"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -371,6 +371,11 @@
       "path": "docs/V14_RELEASE_GATES.md",
       "bytes": 5944,
       "git_blob_sha1": "a42db7b1091f7c2aadf0053c370d055e236ee1d6"
+    },
+    {
+      "path": "docs/V15_COGNITIVE_WORK_ARCHITECTURE.md",
+      "bytes": 10358,
+      "git_blob_sha1": "6e05346b3184d7deebdce9f346afc8256bac83ca"
     },
     {
       "path": "docs/VOICE_SUPERVISOR_V10.md",
@@ -903,6 +908,11 @@
       "git_blob_sha1": "3c150adf9973ef7031346562c83327d23dabf23f"
     },
     {
+      "path": "src/rizzler/work_cognition.py",
+      "bytes": 13097,
+      "git_blob_sha1": "5ae3e9f750a6da6d6279e8cae50740ed13aae038"
+    },
+    {
       "path": "src/rizzler/work_corpus.py",
       "bytes": 9089,
       "git_blob_sha1": "bb6ca92ffee4cc8bd07d07d6370d48004f8a2228"
@@ -938,6 +948,11 @@
       "git_blob_sha1": "66f562710117527dbc27b65a542247680e667818"
     },
     {
+      "path": "src/rizzler/work_presentation.py",
+      "bytes": 14091,
+      "git_blob_sha1": "b8f0d780d8890fb2c4ddd25b6a3b0760cd65a02d"
+    },
+    {
       "path": "src/rizzler/work_quality.py",
       "bytes": 11226,
       "git_blob_sha1": "5ad57df6bcdc7d56b8ac73691facb47a0264b25e"
@@ -949,8 +964,8 @@
     },
     {
       "path": "src/rizzler/work_repair.py",
-      "bytes": 9838,
-      "git_blob_sha1": "bccb9f375aed817efa7b7cb4f777f9cd96928b93"
+      "bytes": 11068,
+      "git_blob_sha1": "d40b5f18613c98bc0bd46801156ce69ba6df0f4d"
     },
     {
       "path": "src/rizzler/work_skills.py",
@@ -959,8 +974,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 14849,
-      "git_blob_sha1": "6c3c754a036ce5ffbe437a05f0530e70b60d1ffc"
+      "bytes": 17816,
+      "git_blob_sha1": "bd1feefe197aa22d6ef0c1b1001848853e333570"
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -979,8 +994,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 9518,
-      "git_blob_sha1": "f47bcc9ea99c793c0ce00b2f354401c8f4dee11c"
+      "bytes": 12706,
+      "git_blob_sha1": "df887e8e062d4bcc7dffda1d2e4e0a8bed9f9543"
     },
     {
       "path": "stack_site.html",
@@ -1226,6 +1241,11 @@
       "path": "tests/test_v14_rendering.py",
       "bytes": 2093,
       "git_blob_sha1": "58c18c265a9ca17b04f80154d9dc58fec39d87ee"
+    },
+    {
+      "path": "tests/test_v15_cognitive.py",
+      "bytes": 17107,
+      "git_blob_sha1": "7a0000841137f543367faeb592e39c166a0e0dfd"
     },
     {
       "path": "tests/test_voice_core.cjs",
