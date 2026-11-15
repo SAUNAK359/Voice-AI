@@ -97,8 +97,9 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     if payload.get("v15"):
         from .v15_agentic import improve_draft
         from .v15_research import research as verified_research
+        discovery = researcher
         async def researcher_v15(objective):
-            return await verified_research(objective, researcher)
+            return await verified_research(objective, discovery)
         researcher = researcher_v15
     planned = {spec.name: spec for spec in plan(payload)}
     graph = store.job_plan(owner, jid)
