@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "description": "Tracked-source Git blob integrity inventory; not a signed artifact",
+  "description": "Source checkout integrity inventory (not a cryptographic signature)",
   "files": [
     {
       "path": ".dockerignore",
@@ -29,8 +29,9 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3614,
-      "git_blob_sha1": "4cd4b8164bed9370c65c189607ecca8e5c57a76d"
+      "bytes": 3653,
+      "git_blob_sha1": "4cd4b8164bed9370c65c189607ecca8e5c57a76d",
+      "sha256": "c47f9ff542162e99238baabc8cce1702460324b582e2ea10debc659f5000dfa0"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -904,8 +905,9 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "bytes": 25327,
-      "git_blob_sha1": "3cd4d43c0dfd5b95df9a6c835e085e9a550ea35b"
+      "bytes": 25410,
+      "git_blob_sha1": "3cd4d43c0dfd5b95df9a6c835e085e9a550ea35b",
+      "sha256": "f39813b182cd0336f601297650310473bb734b3b47b300aeccab8c5ad91258a6"
     },
     {
       "path": "src/rizzler/work_auth.py",
@@ -924,18 +926,26 @@
     },
     {
       "path": "src/rizzler/work_design.py",
-      "bytes": 19766,
-      "git_blob_sha1": "79fe4f0be4547db8835e9125fc900dec887fd2b8"
+      "bytes": 22524,
+      "git_blob_sha1": "79fe4f0be4547db8835e9125fc900dec887fd2b8",
+      "sha256": "4e144d3d49f2affbcde439105bbf21d0b286062045aca2456f37316b3a907ae6"
     },
     {
       "path": "src/rizzler/work_dynamic.py",
-      "bytes": 11011,
-      "git_blob_sha1": "8aeebbc9c846b6089dfe1b091a3197a6264876ee"
+      "bytes": 12201,
+      "git_blob_sha1": "8aeebbc9c846b6089dfe1b091a3197a6264876ee",
+      "sha256": "ab88473525f64bd9f90224d971a4f3cadcd792b3ecd4c8c9fb57ad84fbdf475f"
+    },
+    {
+      "path": "src/rizzler/work_finance.py",
+      "bytes": 3631,
+      "sha256": "872684ebd7477fe969fac20852afe64c517946939a6998fef3c75b03d6297247"
     },
     {
       "path": "src/rizzler/work_formula.py",
-      "bytes": 6466,
-      "git_blob_sha1": "77737c53906bf5fa73859beba8e7c5d7e18c91a1"
+      "bytes": 7209,
+      "git_blob_sha1": "77737c53906bf5fa73859beba8e7c5d7e18c91a1",
+      "sha256": "826d031e1e4194977dfc3397120491a9f7fc1f2f19a994afe47276075ab0dff8"
     },
     {
       "path": "src/rizzler/work_ir.py",
@@ -954,13 +964,15 @@
     },
     {
       "path": "src/rizzler/work_presentation.py",
-      "bytes": 14719,
-      "git_blob_sha1": "395b93bdc3f24a2c191bd1fc0a6e165bf1b058c5"
+      "bytes": 16508,
+      "git_blob_sha1": "395b93bdc3f24a2c191bd1fc0a6e165bf1b058c5",
+      "sha256": "4378b60da2c150eccc3d99532e783b4e905b735ffc08822a17a801c43915495f"
     },
     {
       "path": "src/rizzler/work_quality.py",
-      "bytes": 11796,
-      "git_blob_sha1": "1e2382b17a4458fe46dea3615a0b4f9c34c21ee7"
+      "bytes": 14299,
+      "git_blob_sha1": "1e2382b17a4458fe46dea3615a0b4f9c34c21ee7",
+      "sha256": "2aba7ec3aa40bc4377e612e1a081686f3a3db097515bfbd229580f4d26026878"
     },
     {
       "path": "src/rizzler/work_reasoning.py",
@@ -973,24 +985,33 @@
       "git_blob_sha1": "d40b5f18613c98bc0bd46801156ce69ba6df0f4d"
     },
     {
+      "path": "src/rizzler/work_rich_docs.py",
+      "bytes": 8954,
+      "sha256": "6d3c83fa322ab81503207197b23231d7a9b0e467e23b73b9f1ea7ee613e68106"
+    },
+    {
       "path": "src/rizzler/work_skills.py",
-      "bytes": 7709,
-      "git_blob_sha1": "96c9e0045ba3f942f3d2c4d85ea9a05deb0cb609"
+      "bytes": 8129,
+      "git_blob_sha1": "96c9e0045ba3f942f3d2c4d85ea9a05deb0cb609",
+      "sha256": "155d5ac54e756eb7fe92faa76d6dc386e4dc69a733182024d031d7f227dbff78"
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 17816,
-      "git_blob_sha1": "bd1feefe197aa22d6ef0c1b1001848853e333570"
+      "bytes": 18095,
+      "git_blob_sha1": "bd1feefe197aa22d6ef0c1b1001848853e333570",
+      "sha256": "0a0a3441e9ee18d3a1007b0275e628682a1ed7400710e0ae2955cd1e955ade6d"
     },
     {
       "path": "src/rizzler/work_sql.py",
-      "bytes": 4156,
-      "git_blob_sha1": "9f35b169b3ca1f51035293455bfcb01c5ab0c6da"
+      "bytes": 4322,
+      "git_blob_sha1": "9f35b169b3ca1f51035293455bfcb01c5ab0c6da",
+      "sha256": "969c66bb1b5c6eeb4aea8c822f578442806ea1e2a06e0c5531aafe8659c856b2"
     },
     {
       "path": "src/rizzler/work_store.py",
-      "bytes": 49094,
-      "git_blob_sha1": "1cb90d6ce73fbb97059b0385dabbdc6c23ff80fa"
+      "bytes": 49258,
+      "git_blob_sha1": "1cb90d6ce73fbb97059b0385dabbdc6c23ff80fa",
+      "sha256": "6a8299c9afb9f672fc1db0ae20775b1a526474f6cded801dde763e87355e0699"
     },
     {
       "path": "src/rizzler/work_visual.py",
@@ -999,8 +1020,9 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 12706,
-      "git_blob_sha1": "df887e8e062d4bcc7dffda1d2e4e0a8bed9f9543"
+      "bytes": 13194,
+      "git_blob_sha1": "df887e8e062d4bcc7dffda1d2e4e0a8bed9f9543",
+      "sha256": "50f9b1d212981bc167c89dab00793e94d25095ef2423b2f88fbcf7990bb421b3"
     },
     {
       "path": "stack_site.html",
@@ -1246,6 +1268,11 @@
       "path": "tests/test_v14_rendering.py",
       "bytes": 2093,
       "git_blob_sha1": "58c18c265a9ca17b04f80154d9dc58fec39d87ee"
+    },
+    {
+      "path": "tests/test_v15_acceptance_hardening.py",
+      "bytes": 11386,
+      "sha256": "37d8c2bb03cf77ba17b4516c304fcaf0f68c915e5834e104bde49d1e64abf6d1"
     },
     {
       "path": "tests/test_v15_cognitive.py",
