@@ -85,6 +85,7 @@ def public_schema(name: str):
             low,high=_LIMITS[name][key]
             field["minLength"]=low
             field["maxLength"]=high
+            if low>0 and field["type"]=="string":field["pattern"]=r"\\S"
         if key=="job_id":field["pattern"]="^[a-f0-9]{32}$"
         if key=="slide":
             field["minimum"]=1
