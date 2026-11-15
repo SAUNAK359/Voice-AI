@@ -679,8 +679,8 @@
     },
     {
       "path": "src/rizzler/live_schema.py",
-      "bytes": 6557,
-      "git_blob_sha1": "4d9c9c08778dc8b53adfeff6d394e363b2a04aa9"
+      "bytes": 6630,
+      "git_blob_sha1": "f6286cc306296d2ff85f67e41dddf0a3c05b14ea"
     },
     {
       "path": "src/rizzler/math_engine.py",
@@ -894,8 +894,8 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "bytes": 25241,
-      "git_blob_sha1": "de82e2781caab4fbcde245e86d67bdb380d2a29a"
+      "bytes": 25327,
+      "git_blob_sha1": "3cd4d43c0dfd5b95df9a6c835e085e9a550ea35b"
     },
     {
       "path": "src/rizzler/work_auth.py",
