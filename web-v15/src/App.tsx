@@ -6,7 +6,7 @@ import { Activity, ArrowUpRight, BrainCircuit, CheckCircle2, CircleAlert,
 import { WorkApi, type Auth, type Artifact, type Job, type Plan, type Agent } from './api';
 import { executionGraph } from './graph';
 
-const FORMATS = ['pptx','pdf','docx','xlsx','csv','md','json','html','png','svg','txt','zip','research','data_analysis'];
+const FORMATS = ['pptx','pdf','docx','xlsx','md','json','html','txt','zip','research'];
 const visible = (value: unknown) => value instanceof Error ? value.message : 'Unable to complete request';
 
 function Login({onConnect}: {onConnect: (value: Auth) => Promise<void>}) {
@@ -46,11 +46,12 @@ function NewTask({api,onCreated}: {api: WorkApi;onCreated:(job:Job)=>void}) {
   const [formats,setFormats]=useState<string[]>(['pptx']);
   const submit=useMutation({mutationFn:()=>api.submit(objective.trim(),formats),
                            onSuccess:job=>{setObjective('');onCreated(job);}});
+  const ready=objective.trim().length>=3 && formats.length>0 && !(formats.length===1 && formats[0]==="zip");
   const toggle=(item:string)=>setFormats(prev=>prev.includes(item)?
      prev.filter(x=>x!==item):[...prev,item]);
   return <section className="panel new-task">
     <div className="section-title"><div><div className="eyebrow">AUTONOMOUS WORK</div><h2>What should Rizzler create?</h2></div><Plus size={22}/></div>
-    <form onSubmit={e=>{e.preventDefault();if(objective.trim().length>=3&&formats.length)submit.mutate();}}>
+    <form onSubmit={e=>{e.preventDefault();if(ready)submit.mutate();}}>
       <textarea value={objective} onChange={e=>setObjective(e.target.value)} maxLength={7900}
         placeholder="Describe the objective, intended audience, evidence requirements and expected result. Gemini will plan the workflow…"
         aria-label="Work objective" rows={4}/>
@@ -60,8 +61,8 @@ function NewTask({api,onCreated}: {api: WorkApi;onCreated:(job:Job)=>void}) {
       </div>
       {submit.isError && <p className="notice bad" role="alert">{visible(submit.error)}</p>}
       <div className="action-row">
-        <span className="muted">Model-authored plan · Independent release QA</span>
-        <button className="primary" type="submit" disabled={submit.isPending || objective.trim().length<3 || !formats.length}>
+        <span className="muted">Model-authored plan · Independent QA · Dataset-only formats use the existing source uploader</span>
+        <button className="primary" type="submit" disabled={submit.isPending || !ready}>
           {submit.isPending?'Submitting…':'Create work'} <ArrowUpRight size={16}/>
         </button>
       </div>
