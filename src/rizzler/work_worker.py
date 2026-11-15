@@ -42,7 +42,7 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
               "Never invent external sources, statistics, user data or tool results. "
               "Express uncertainty and limitations. The following dataset metrics are "
               "computed independently; quote only what they substantiate.\n\n"
-              "Objective:\n" + objective[:8000] + "\n\nDataset summary:\n" +
+              "Objective and selected research evidence:\n" + objective[:16000] + "\n\nDataset summary:\n" +
               json.dumps(data_summary or {}, ensure_ascii=False)[:9000])
     try:
         async with asyncio.timeout(min(90, cfg.request_timeout)):
