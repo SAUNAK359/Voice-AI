@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3556,
-      "git_blob_sha1": "eb74a2b3f444c66f4f1b2864c02ef87fdafb6f77"
+      "bytes": 3586,
+      "git_blob_sha1": "67711dbeeecf49618a94006307746509920308e0"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -674,8 +674,13 @@
     },
     {
       "path": "src/rizzler/live_native.py",
-      "bytes": 15827,
-      "git_blob_sha1": "a63672025da08a2402d28fdbc8dc9e6c0c86cc84"
+      "bytes": 13541,
+      "git_blob_sha1": "e7261c0dd704fe956719cf5525deb6e2fab33fc3"
+    },
+    {
+      "path": "src/rizzler/live_schema.py",
+      "bytes": 6557,
+      "git_blob_sha1": "4d9c9c08778dc8b53adfeff6d394e363b2a04aa9"
     },
     {
       "path": "src/rizzler/math_engine.py",
@@ -1206,6 +1211,11 @@
       "path": "tests/test_v14_large_sources.py",
       "bytes": 4265,
       "git_blob_sha1": "efb4717d8daca2e8cf12084b3df956de356da29c"
+    },
+    {
+      "path": "tests/test_v14_live_schema.py",
+      "bytes": 3355,
+      "git_blob_sha1": "f82900e4a7d7b8fd434a31320e7f4599cbd4cecf"
     },
     {
       "path": "tests/test_v14_planning_recovery.py",
