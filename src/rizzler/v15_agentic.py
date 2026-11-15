@@ -163,6 +163,8 @@ async def improve_draft(objective: str, draft: str, source_urls: list[str],
 
 def recoverable(exc: BaseException) -> bool:
     """Trusted transient transport/resource boundary, never LLM-selected security bypass."""
+    if isinstance(exc, BaseExceptionGroup):
+        return bool(exc.exceptions) and all(recoverable(child) for child in exc.exceptions)
     if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
         return True
     status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
