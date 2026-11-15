@@ -216,9 +216,8 @@ class WorkWorker:
         except Exception as exc:
             # Log only the exception class and a stable category. Raw provider
             # errors can contain prompts, credentials, and user document text.
-            from .work_dynamic import PlanningOutputError
-            code=("planning_output_invalid" if isinstance(exc,PlanningOutputError)
-                  else "execution_error")
+            from .work_cognition import failure_code
+            code=failure_code(exc)
             logger.error("Work job %s failed: %s (%s)",
                          jid,code,type(exc).__name__)
             self.store.fail(jid,self.identity,fence,code)
