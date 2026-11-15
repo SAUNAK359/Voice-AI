@@ -165,7 +165,7 @@ class PreflightModelCalls(IsolatedAsyncioTestCase):
         with patch("rizzler.work_preflight.structured_decision",new=mock):
             with self.assertRaises(PreflightRejected):
                 await generate_preflight(PAYLOAD,cfg)
-        assert mock.await_count==3
+        assert mock.await_count==6
 
     async def test_owner_scoped_fenced_restart_reuses_approved_preflight(self):
         from rizzler import work_dynamic
