@@ -220,6 +220,7 @@ def inspect_artifact(path: Path, kind: str, *,
                                   if "Sources" in wb else [])
                 cells = list(wb["Summary"].iter_rows(min_row=3,min_col=2,max_col=2,values_only=True))
                 matches=[cell[0] in (body, "'"+body)
+                         or (not body and cell[0] in (None,""))
                          for cell,(_,body) in zip(cells,artifact_ir.sections)]
                 valid=(present==headings and actual_sources==sources
                        and len(cells)==len(artifact_ir.sections) and all(matches))
