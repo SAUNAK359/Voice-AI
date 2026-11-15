@@ -926,8 +926,8 @@
     },
     {
       "path": "src/rizzler/work_design.py",
-      "bytes": 22524,
-      "git_blob_sha1": "7488ee537bdcfcfd588dc6bb7e4d597a46da6657",
+      "bytes": 22912,
+      "git_blob_sha1": "a52585c1a48ed076afd3b73211e297fdcf7abdae",
       "sha256": "4e144d3d49f2affbcde439105bbf21d0b286062045aca2456f37316b3a907ae6"
     },
     {
@@ -1273,9 +1273,9 @@
     },
     {
       "path": "tests/test_v15_acceptance_hardening.py",
-      "bytes": 11647,
+      "bytes": 12137,
       "sha256": "dc54a937b3486658cf317b72644f0c239b21eda9631e2a89c42b9c08de27fbd9",
-      "git_blob_sha1": "9194c3df39f2c087b878e2ff40bd4b2f488462b6"
+      "git_blob_sha1": "5588421c14734d73a5e197c0d8c80cf338cf9238"
     },
     {
       "path": "tests/test_v15_cognitive.py",
