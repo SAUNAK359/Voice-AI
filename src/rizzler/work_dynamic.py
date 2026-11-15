@@ -179,8 +179,10 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
     it is never selected when preflight explicitly fails.
     """
     from .work_preflight import enabled as cognitive_enabled, generate_preflight
-    if cognitive_enabled():
-        durable = payload.get("_cognitive_checkpoint")
+    # Worker claims always carry fenced context. Direct calls with a supplied
+    # model client but without a job remain the legacy planning adapter.
+    durable = payload.get("_cognitive_checkpoint")
+    if cognitive_enabled() and (durable is not None or client is None):
         if durable is not None:
             store, owner, jid, worker, fence = durable
             previous = store.cognitive_preflight(owner, jid)
