@@ -31,7 +31,16 @@ def inspect_artifact(path: Path, kind: str, *,
         paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
         if not paragraphs or len("".join(paragraphs)) < 40:
             raise ValueError("Word document lacks substantive text")
+        if doc.core_properties.subject == "Rizzler V15 native structured document":
+            if any(("**" in p or p.startswith("### ") or p.startswith("| ---"))
+                   for p in paragraphs):
+                raise ValueError("Native Word output contains raw Markdown syntax")
+            if artifact_ir is not None and any("| ---" in body or "|---" in body
+                                                for _,body in artifact_ir.sections) and not doc.tables:
+                raise ValueError("Structured Word table was rendered as plain text")
+            checks.append("native_markdown_blocks_rendered")
         details["paragraphs"] = len(paragraphs)
+        details["native_tables"] = len(doc.tables)
         checks.append("readable_docx_paragraphs")
     elif kind == "pptx":
         from pptx import Presentation
@@ -91,8 +100,19 @@ def inspect_artifact(path: Path, kind: str, *,
             raise ValueError("Generated JSON lacks structured sections")
         checks.append("nonempty_structured_sections")
     elif kind in ("md", "txt"):
-        if len(path.read_text(encoding="utf-8").strip()) < 40:
+        content=path.read_text(encoding="utf-8")
+        if len(content.strip()) < 40:
             raise ValueError("Text report lacks substantive content")
+        if kind=="md" and dataset_summary and dataset_summary.get("financial"):
+            import re
+            groups=dataset_summary["financial"]["groups"]
+            headers=len(re.findall(r"(?m)^#{1,3}\\s+\\S",content))
+            if headers<4 or not all(any(label in content for label in items)
+                                    for items in groups.values() if items):
+                raise ValueError("Financial Markdown report lacks analytical sections or group comparisons")
+            if "| ---" not in content and "|---" not in content:
+                raise ValueError("Financial Markdown report lacks structured comparison table")
+            checks.append("financial_report_semantic_coverage")
         checks.append("substantive_report_text")
     elif kind == "html":
         if "<section>" not in path.read_text(encoding="utf-8"):
