@@ -932,9 +932,9 @@
     },
     {
       "path": "src/rizzler/work_dynamic.py",
-      "bytes": 12201,
+      "bytes": 12266,
       "git_blob_sha1": "8aeebbc9c846b6089dfe1b091a3197a6264876ee",
-      "sha256": "ab88473525f64bd9f90224d971a4f3cadcd792b3ecd4c8c9fb57ad84fbdf475f"
+      "sha256": "67729b6fa603aa0fa58396748a6711dc05838307af7718128e2cc235fe17c60a"
     },
     {
       "path": "src/rizzler/work_finance.py",
@@ -964,9 +964,9 @@
     },
     {
       "path": "src/rizzler/work_presentation.py",
-      "bytes": 16508,
+      "bytes": 16633,
       "git_blob_sha1": "395b93bdc3f24a2c191bd1fc0a6e165bf1b058c5",
-      "sha256": "4378b60da2c150eccc3d99532e783b4e905b735ffc08822a17a801c43915495f"
+      "sha256": "f5172be8daccfc98a397d43408363bab9d35fbcfa30dc388a94bc79ae9cd92aa"
     },
     {
       "path": "src/rizzler/work_quality.py",
@@ -1271,8 +1271,8 @@
     },
     {
       "path": "tests/test_v15_acceptance_hardening.py",
-      "bytes": 11386,
-      "sha256": "37d8c2bb03cf77ba17b4516c304fcaf0f68c915e5834e104bde49d1e64abf6d1"
+      "bytes": 11526,
+      "sha256": "dc54a937b3486658cf317b72644f0c239b21eda9631e2a89c42b9c08de27fbd9"
     },
     {
       "path": "tests/test_v15_cognitive.py",
