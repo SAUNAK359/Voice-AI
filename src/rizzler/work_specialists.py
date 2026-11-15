@@ -56,32 +56,63 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         if saved is not None:
             result = _valid_cached(spec, saved, checkpoint, formats)
         else:
-            store.agent_begin(jid, worker_id, fence, spec.name, spec.sla_seconds)
-            try:
-                # Only curated, trusted specialist playbooks are loaded.
-                read_skill(spec.name) if spec.name in (
-                    "research", "sql_analytics", "powerpoint", "word",
-                    "excel", "pdf_visual") else None
-                attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
-                attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
-                from .work_reasoning import use
-                with use(levels.get(spec.name,"medium")):
-                    result = await asyncio.wait_for(invoke(spec, checkpoint, context, formats,
-                             payload, store, owner, composer, researcher,
-                             jid, worker_id, fence, attempt),
-                             timeout=spec.sla_seconds * 2)
-                qa = gate_agent(spec.name, result, formats)
-                for receipt in result_receipts(result):
-                    if not verify_checkpoint(checkpoint / receipt.name, receipt):
-                        raise ValueError("Specialist artifact disappeared before checkpoint commit")
-                store.agent_complete(jid, worker_id, fence, spec.name, result, qa)
-            except (asyncio.CancelledError, Exception):
-                # Preserve the first error category without exposing private model output.
+            # V15: LLM supervises recoverable specialist failures. The model
+            # may retry only the same registered skill; the ledger owns each
+            # fenced attempt, deadlines, integrity and publication permissions.
+            retries=0
+            while True:
+                store.agent_begin(jid, worker_id, fence, spec.name, spec.sla_seconds)
                 try:
-                    store.agent_error(jid, worker_id, fence, spec.name)
-                except Exception:
-                    pass
-                raise
+                    read_skill(spec.name) if spec.name in (
+                        "research", "sql_analytics", "powerpoint", "word",
+                        "excel", "pdf_visual") else None
+                    attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
+                    attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
+                    from .work_reasoning import use
+                    with use(levels.get(spec.name,"medium")):
+                        result=await asyncio.wait_for(
+                            invoke(spec,checkpoint,context,formats,payload,store,owner,
+                                   composer,researcher,jid,worker_id,fence,attempt),
+                            timeout=spec.sla_seconds*2)
+                    qa=gate_agent(spec.name,result,formats)
+                    for receipt in result_receipts(result):
+                        if not verify_checkpoint(checkpoint/receipt.name,receipt):
+                            raise ValueError("Specialist artifact vanished before checkpoint commit")
+                    store.agent_complete(jid,worker_id,fence,spec.name,result,qa)
+                    break
+                except asyncio.CancelledError:
+                    try:store.agent_error(jid,worker_id,fence,spec.name,"worker_interrupted")
+                    except Exception:pass
+                    raise
+                except Exception as exc:
+                    from .work_cognition import failure_code
+                    category=failure_code(exc)
+                    try:store.agent_error(jid,worker_id,fence,spec.name,category)
+                    except Exception:pass
+                    can_recover=(
+                        retries<1 and spec.name!="quality"
+                        and not isinstance(exc,(PermissionError,InterruptedError))
+                        and os.environ.get("RIZZLER_V15_RECOVERY",
+                            "1" if os.environ.get("GEMINI_API_KEY")
+                            and os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
+                            else "0")=="1"
+                    )
+                    if not can_recover:
+                        raise
+                    from .work_cognition import decide_stage_recovery
+                    from .work_dynamic import WorkModelConfig
+                    try:
+                        advice=await decide_stage_recovery(
+                            spec.name,spec.role,category,1-retries,
+                            payload["objective"],WorkModelConfig.from_env())
+                    except Exception:
+                        # A failed model recovery decision never authorizes a
+                        # silent retry, alternate tool, or fabricated success.
+                        raise exc
+                    if advice["action"]!="retry":
+                        raise
+                    levels[spec.name]=advice["thinking_level"]
+                    retries+=1
         if spec.name == "research":
             context["text"], context["sources"] = result["text"], result["sources"]
         elif spec.name == "sql_analytics":
