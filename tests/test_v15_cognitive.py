@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 from pathlib import Path
 import tempfile
@@ -87,6 +88,8 @@ class DirectionContractTests(unittest.TestCase):
 
 class PresentationTests(unittest.TestCase):
     def test_native_editable_slide_layouts_and_sources(self):
+        if importlib.util.find_spec('pptx') is None:
+            self.skipTest('Optional python-pptx not installed in no-deps CI')
         story=validate_storyboard(STORY,[URL],content=IR.content)
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/"executive.pptx"
@@ -119,6 +122,8 @@ class PresentationTests(unittest.TestCase):
                     validate_storyboard(mutated,[URL],content=IR.content)
 
     def test_dataset_chart_must_use_actual_columns(self):
+        if importlib.util.find_spec('pptx') is None:
+            self.skipTest('Optional python-pptx not installed in no-deps CI')
         table=(["Category","Amount"],[["Engineering",35],["Electronics",48]])
         proposed={**STORY,"slides":[STORY["slides"][0],
             {**STORY["slides"][1],"layout":"chart",
@@ -175,6 +180,8 @@ class CognitiveIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Write strategic recommendations",mock.await_args.args[0])
 
     async def test_complete_research_to_editable_powerpoint_through_real_workstore(self):
+        if importlib.util.find_spec('pptx') is None:
+            self.skipTest('Optional python-pptx not installed in no-deps CI')
         from rizzler.work_worker import WorkWorker
         from rizzler.work_store import WorkStore
         from pptx import Presentation
@@ -313,6 +320,8 @@ class CognitiveIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(store.artifacts("owner",job["id"]),[])
 
     async def test_grounded_research_chosen_by_model(self):
+        if importlib.util.find_spec('google') is None or importlib.util.find_spec('google.genai') is None:
+            self.skipTest('Optional google-genai not installed in no-deps CI')
         from google import genai
         from rizzler.work_cognition import ResearchDirection
         response=SimpleNamespace(
@@ -338,6 +347,8 @@ class CognitiveIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mock_client.aio.models.generate_content.await_count,1)
 
     async def test_unavailable_grounding_blocks_without_fabricated_sources(self):
+        if importlib.util.find_spec('google') is None or importlib.util.find_spec('google.genai') is None:
+            self.skipTest('Optional google-genai not installed in no-deps CI')
         from google import genai
         from rizzler.work_cognition import ResearchDirection
         mock_client=SimpleNamespace(aio=SimpleNamespace(
