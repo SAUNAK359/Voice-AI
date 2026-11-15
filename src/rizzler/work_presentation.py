@@ -286,7 +286,9 @@ def render_storyboard(path: Path, story: dict, *, table=None):
                 host=urlsplit(url).hostname or "Source"
                 if "grounding-api-redirect" in url:
                     host="Provider-grounded redirect (publisher unverified)"
-                link=txt(slide,f"[{j+1}] {host}",1.03,3.05+j*.48,10.9,.39,13,False,"teal")
+                display=(url if len(url)<=105 and "grounding-api-redirect" not in url
+                         else f"[{j+1}] {host}")
+                link=txt(slide,display,1.03,3.05+j*.48,10.9,.39,13,False,"teal")
                 link.text_frame.paragraphs[0].runs[0].hyperlink.address=url
         elif layout=="section":
             for j,p in enumerate(points[:3]):
