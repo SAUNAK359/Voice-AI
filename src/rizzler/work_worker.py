@@ -83,6 +83,7 @@ async def grounded_research(objective: str) -> dict:
     observations, evidence, sections = [], {}, []
     MAX_ROUNDS = 3
     MAX_QUERIES = 6
+    coverage_accepted = False
 
     async def search(question: str, number: int):
         try:
@@ -133,6 +134,7 @@ async def grounded_research(objective: str) -> dict:
             if decision.action == "block":
                 raise ResearchEvidenceUnavailable("Model-directed research blocked by evidence limitations")
             if decision.action == "finish":
+                coverage_accepted = True
                 break
             # Run independent model-selected questions concurrently; no hardcoded
             # primary/challenge search phrases and no arbitrary URL fetching.
@@ -162,6 +164,7 @@ async def grounded_research(objective: str) -> dict:
         audit=evidence_summary(records)
         audit["research_rounds"]=min(MAX_ROUNDS,round_number+1)
         audit["grounded_queries"]=len(sections)
+        audit["model_coverage_accepted"]=coverage_accepted
         audit["attempts"]=[{k:v for k,v in o.items() if k!="reason"} for o in observations]
         urls=[rec["url"] for rec in records]
         limitations=(
@@ -173,8 +176,9 @@ async def grounded_research(objective: str) -> dict:
                 "\n\n".join(sections) + limitations,
                 "sources":urls,"evidence":records,
                 "evidence_summary":audit,
-                "partial":bool(any(x.get("status")!="grounded"
-                                  for x in observations if "query_id" in x))}
+                "partial":not coverage_accepted or bool(any(
+                    x.get("status")!="grounded" for x in observations
+                    if "query_id" in x))}
     finally:
         await client.aio.aclose()
 
