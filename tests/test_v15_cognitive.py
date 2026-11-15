@@ -174,6 +174,90 @@ class CognitiveIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["passed"])
         self.assertIn("Write strategic recommendations",mock.await_args.args[0])
 
+    async def test_model_directed_recovery_retries_only_the_failed_specialist(self):
+        from rizzler.work_worker import WorkWorker
+        from rizzler.work_store import WorkStore
+        graph={"schema_version":2,"status":"ready","steps":[
+            {"id":"orchestrator","tool":"orchestrator","depends_on":[],"thinking_level":"high"},
+            {"id":"pdf_visual","tool":"pdf_visual",
+             "depends_on":["orchestrator"],"thinking_level":"high"},
+            {"id":"quality","tool":"quality",
+             "depends_on":["orchestrator","pdf_visual"],"thinking_level":"high"}]}
+        state={"calls":0}
+        async def composer(_objective,_summary):
+            state["calls"]+=1
+            if state["calls"]==1:
+                raise TimeoutError("simulated transient model outage")
+            return ("# Recovery succeeded\n\n## Findings\n"
+                    "The model-supervised retry produced a substantive operational "
+                    "report with relevant findings and explicit limitations.")
+        async def research(_objective):
+            raise AssertionError("Research was not selected")
+        async def generate(_payload,_cfg):
+            return graph
+        advice=AsyncMock(return_value={
+            "action":"retry","thinking_level":"high",
+            "reason":"A short provider timeout warrants one bounded retry."})
+        with tempfile.TemporaryDirectory() as root,\
+             patch.dict("os.environ",{
+                 "RIZZLER_AGENTIC_ENABLED":"1",
+                 "RIZZLER_ARTIFACT_QA":"structural",
+                 "RIZZLER_V15_RECOVERY":"1"}),\
+             patch("rizzler.work_dynamic.generate",new=generate),\
+             patch("rizzler.work_dynamic.WorkModelConfig.from_env",
+                   return_value=SimpleNamespace(gemini_api_key="",request_timeout=40,
+                                                gemini_model="mock")) ,\
+             patch("rizzler.work_cognition.decide_stage_recovery",new=advice):
+            store=WorkStore(root)
+            job=store.submit("owner","Produce a professional operational report",
+                             ["md"],"retry_v15_0001",[])
+            self.assertTrue(await WorkWorker(store,composer=composer,researcher=research).once())
+            saved=store.get("owner",job["id"])
+            self.assertEqual(saved["status"],"completed",saved.get("error_code"))
+            stages={row["agent"]:row for row in store.agent_steps("owner",job["id"])}
+            self.assertEqual(stages["orchestrator"]["attempt"],2)
+            self.assertEqual(stages["quality"]["attempt"],1)
+            self.assertEqual(advice.await_count,1)
+            self.assertEqual(state["calls"],2)
+
+    async def test_model_abort_does_not_retry_or_claim_success(self):
+        from rizzler.work_worker import WorkWorker
+        from rizzler.work_store import WorkStore
+        graph={"schema_version":2,"status":"ready","steps":[
+            {"id":"orchestrator","tool":"orchestrator","depends_on":[],"thinking_level":"high"},
+            {"id":"pdf_visual","tool":"pdf_visual",
+             "depends_on":["orchestrator"],"thinking_level":"high"},
+            {"id":"quality","tool":"quality",
+             "depends_on":["orchestrator","pdf_visual"],"thinking_level":"high"}]}
+        calls={"n":0}
+        async def composer(_objective,_summary):
+            calls["n"]+=1
+            raise TimeoutError("simulated provider outage")
+        async def generate(_payload,_cfg):
+            return graph
+        with tempfile.TemporaryDirectory() as root,\
+             patch.dict("os.environ",{
+                 "RIZZLER_AGENTIC_ENABLED":"1",
+                 "RIZZLER_ARTIFACT_QA":"structural",
+                 "RIZZLER_V15_RECOVERY":"1"}),\
+             patch("rizzler.work_dynamic.generate",new=generate),\
+             patch("rizzler.work_dynamic.WorkModelConfig.from_env",
+                   return_value=SimpleNamespace(gemini_api_key="",request_timeout=40,
+                                                gemini_model="mock")),\
+             patch("rizzler.work_cognition.decide_stage_recovery",
+                   new=AsyncMock(return_value={
+                       "action":"abort","thinking_level":"high",
+                       "reason":"Provider is unavailable; further attempts are unhelpful."})):
+            store=WorkStore(root)
+            job=store.submit("owner","Produce a useful operational report",
+                             ["md"],"retry_v15_abort_0001",[])
+            self.assertTrue(await WorkWorker(store,composer=composer,researcher=None).once())
+            result=store.get("owner",job["id"])
+            self.assertEqual(result["status"],"failed")
+            self.assertEqual(result["error_code"],"provider_or_agent_timeout")
+            self.assertEqual(calls["n"],1)
+            self.assertEqual(store.artifacts("owner",job["id"]),[])
+
     async def test_grounded_research_chosen_by_model(self):
         from google import genai
         from rizzler.work_cognition import ResearchDirection
