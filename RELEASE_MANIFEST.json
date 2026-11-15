@@ -1273,9 +1273,9 @@
     },
     {
       "path": "tests/test_v15_acceptance_hardening.py",
-      "bytes": 11526,
+      "bytes": 11647,
       "sha256": "dc54a937b3486658cf317b72644f0c239b21eda9631e2a89c42b9c08de27fbd9",
-      "git_blob_sha1": "ad56ed58f1f566f0a14b82acd5a628ad5d754bb8"
+      "git_blob_sha1": "9194c3df39f2c087b878e2ff40bd4b2f488462b6"
     },
     {
       "path": "tests/test_v15_cognitive.py",
