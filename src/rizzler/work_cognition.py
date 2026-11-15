@@ -206,3 +206,74 @@ async def review_semantics(objective: str, content: str, sources: list[str],
     output = await structured_decision(
         prompt, REVIEW_SCHEMA, cfg, client=client, max_tokens=1600)
     return validate_semantic_review(output)
+
+
+RECOVERY_SCHEMA = {
+    "type":"object",
+    "properties":{
+        "action":{"type":"string","enum":["retry","abort"]},
+        "thinking_level":{"type":"string","enum":["medium","high"]},
+        "reason":{"type":"string"}
+    },
+    "required":["action","thinking_level","reason"],
+    "additionalProperties":False,
+}
+
+
+def validate_recovery(data: dict, attempts_remaining: int) -> dict:
+    if (type(data) is not dict or set(data)!={"action","thinking_level","reason"} or
+        data["action"] not in ("retry","abort") or
+        data["thinking_level"] not in ("medium","high") or
+        type(data["reason"]) is not str or
+        not 8<=len(data["reason"])<=300):
+        raise CognitiveDecisionError("Malformed recovery decision")
+    if data["action"]=="retry" and attempts_remaining<=0:
+        raise CognitiveDecisionError("Model exceeded bounded recovery budget")
+    return data
+
+
+def failure_code(exc: BaseException) -> str:
+    """Safe, stable classification; no raw model text or credentials in logs."""
+    if isinstance(exc, BaseExceptionGroup):
+        codes=[failure_code(e) for e in exc.exceptions]
+        return next((x for x in codes if x!="agent_execution_failed"),
+                    "agent_execution_failed")
+    cls=type(exc).__name__
+    return {
+        "ResearchEvidenceUnavailable":"research_evidence_missing",
+        "ResearchPlanningError":"research_planning_invalid",
+        "CognitiveDecisionError":"model_decision_invalid",
+        "PlanningOutputError":"planning_output_invalid",
+        "TimeoutError":"provider_or_agent_timeout",
+        "PermissionError":"permission_denied",
+        "StaleLease":"worker_lease_stale",
+        "StorageUnavailable":"artifact_storage_unavailable",
+        "BudgetExceeded":"provider_budget_exhausted",
+    }.get(cls,"agent_execution_failed")
+
+
+async def decide_stage_recovery(
+    agent_name: str, agent_role: str, error_code: str,
+    attempts_remaining: int, objective: str, cfg, *, client=None
+) -> dict:
+    """LLM independently decides whether a failed specialist merits a retry.
+
+    Only safe status metadata reaches the model; no raw exception or private
+    uploaded source. Retry is permitted only inside the existing fenced lease.
+    """
+    prompt=(
+        "You supervise Rizzler's specialist workflow. A stage has failed. "
+        "Make a deliberate decision: retry the same authorized stage (which "
+        "reruns with a new fenced attempt and may choose new model reasoning) "
+        "or abort with a specific diagnosis. Never choose external side effects, "
+        "invent source evidence, change permissions or claim the task succeeded. "
+        "A provider quota or permission failure may not be recoverable inside "
+        "the current budget. The host enforces a hard retry limit. "
+        "\nSpecialist: "+agent_name+
+        "\nRole: "+agent_role[:250]+
+        "\nSanitized failure code: "+error_code+
+        "\nRemaining safe retry attempts: "+str(attempts_remaining)+
+        "\nOriginal user task: "+json.dumps(objective[:3000]))
+    result=await structured_decision(
+        prompt,RECOVERY_SCHEMA,cfg,client=client,max_tokens=550)
+    return validate_recovery(result,attempts_remaining)
