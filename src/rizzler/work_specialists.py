@@ -187,6 +187,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 [f"{name}: count {stats['count']}, mean {stats['mean']}, "
                  f"min {stats['min']}, max {stats['max']}."
                  for name,stats in numeric[:10]])
+            finance = summary.get("financial")
+            if finance:
+                import json as _json
+                proof += "\nFinancial totals and regional/product groups:\n" + _json.dumps(
+                    finance, ensure_ascii=False, separators=(",", ":"))[:6500]
             context["text"]=(context["text"] or
                 "# Dataset observations\nIndependent numeric analysis") + (
                 "\n\n## Verified dataset evidence\n"+proof)
