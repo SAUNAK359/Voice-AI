@@ -1,0 +1,223 @@
+"""V15 cognitive work: offline adversarial contracts and native artifact fixtures."""
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
+import unittest
+from unittest.mock import AsyncMock, patch
+
+from rizzler.work_cognition import (
+    CognitiveDecisionError, ResearchDirection, validate_research_direction,
+    validate_semantic_review, direct_research, review_semantics)
+from rizzler.work_ir import compile_ir
+from rizzler.work_presentation import (
+    validate_storyboard, render_storyboard, compose_storyboard)
+from rizzler.work_worker import grounded_research, ResearchEvidenceUnavailable
+from rizzler.work_specialists import invoke
+from rizzler.work_agents import SPECS
+
+URL="https://www.example.org/source"
+STORY={
+    "title":"Supply Chains 2026",
+    "slides":[
+        {"title":"Executive supply-chain findings","layout":"cover",
+         "headline":"Evidence-grounded operational review",
+         "points":["Data integrity and escalation are core priorities"],
+         "secondary":[],"metrics":[],"citations":[],"notes":"Explain the decision context.",
+         "chart_x":"","chart_y":""},
+        {"title":"Operational issues","layout":"two_column",
+         "headline":"Risks require coordinated mitigation",
+         "points":["Latency risk drives operational exposure","Independent QA clarifies gaps"],
+         "secondary":["Check source reliability","Prioritize high-impact changes"],
+         "metrics":[],"citations":[URL],"notes":"Differentiate evidence and recommendations.",
+         "chart_x":"","chart_y":""},
+        {"title":"Sources and methodology","layout":"sources",
+         "headline":"Attribution does not independently establish truth",
+         "points":[],"secondary":[],"metrics":[],"citations":[URL],
+         "notes":"Source date and original publication require verification.",
+         "chart_x":"","chart_y":""},
+    ]
+}
+IR=compile_ir("Supply Chains 2026","# Findings\nOperational evidence 120 units supports review.",[URL])
+
+
+class DirectionContractTests(unittest.TestCase):
+    def test_model_directed_search_and_stop(self):
+        output={"action":"search","questions":[
+            "What are the official quarterly statistics?"],"reason":"Missing observations"}
+        value=validate_research_direction(output,has_evidence=False,searches_remaining=2)
+        self.assertEqual(value.action,"search")
+        done=validate_research_direction(
+            {"action":"finish","questions":[],"reason":"Coverage adequate"},
+            has_evidence=True,searches_remaining=0)
+        self.assertEqual(done.action,"finish")
+
+    def test_no_grounding_cannot_be_declared_complete(self):
+        for d,evidence,budget in (
+            ({"action":"finish","questions":[],"reason":"No sources"},False,2),
+            ({"action":"search","questions":[],"reason":"No query"},False,2),
+            ({"action":"search","questions":["What is the trade balance?"],"reason":"Try"},False,0),
+            ({"action":"delete","questions":[],"reason":"Bad"},False,2),
+            ({"action":"search","questions":["bad"],"reason":"Too short"},False,2),
+            ({"action":"search","questions":["What happened?"]*4,"reason":"Too many"},False,2),
+            ({"action":"finish","questions":["What happened?"],"reason":"Bad"},True,2),
+        ):
+            with self.subTest(d=d):
+                with self.assertRaises(CognitiveDecisionError):
+                    validate_research_direction(d,has_evidence=evidence,searches_remaining=budget)
+
+    def test_semantic_review_requires_actionable_feedback(self):
+        accepted={"passed":True,"findings":[],"summary":"The requested content has been covered."}
+        self.assertTrue(validate_semantic_review(accepted)["passed"])
+        failed={"passed":False,"findings":[
+            {"kind":"presentation","problem":"Executive conclusions are absent"}],
+            "summary":"The content lacks an executive story."}
+        self.assertFalse(validate_semantic_review(failed)["passed"])
+        for bad in (
+            {"passed":True,"findings":failed["findings"],"summary":accepted["summary"]},
+            {"passed":False,"findings":[],"summary":"Blocked by missing evidence"},
+            {"passed":"yes","findings":[],"summary":"Incorrect boolean value"},
+        ):
+            with self.assertRaises(CognitiveDecisionError):
+                validate_semantic_review(bad)
+
+
+class PresentationTests(unittest.TestCase):
+    def test_native_editable_slide_layouts_and_sources(self):
+        story=validate_storyboard(STORY,[URL],content=IR.content)
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/"executive.pptx"
+            meta=render_storyboard(path,story)
+            self.assertEqual(meta["slides"],3)
+            from pptx import Presentation
+            deck=Presentation(path)
+            self.assertEqual(len(deck.slides),3)
+            self.assertIn("two_column",meta["layouts"])
+            visible="\n".join(sh.text for sl in deck.slides for sh in sl.shapes
+                              if getattr(sh,"has_text_frame",False))
+            self.assertIn("Risks require coordinated mitigation",visible)
+            self.assertIn(URL,visible)
+            self.assertTrue(path.stat().st_size>1000)
+
+    def test_stale_citations_and_invented_metric_values_rejected(self):
+        for mutated in (
+            {**STORY,"slides":[{**STORY["slides"][0],
+                "citations":["https://unapproved.example/"]},*STORY["slides"][1:]]},
+            {**STORY,"slides":[STORY["slides"][0],{
+                **STORY["slides"][1],
+                "metrics":[{"label":"Imaginary","value":"9999999","unit":"USD"}]},
+                STORY["slides"][2]]},
+            {**STORY,"slides":[{**STORY["slides"][0],"layout":"bullets"},
+                                *STORY["slides"][1:]]},
+            {**STORY,"slides":STORY["slides"][:2]},
+        ):
+            with self.subTest(slides=repr(mutated)[:120]):
+                with self.assertRaises(CognitiveDecisionError):
+                    validate_storyboard(mutated,[URL],content=IR.content)
+
+    def test_dataset_chart_must_use_actual_columns(self):
+        table=(["Category","Amount"],[["Engineering",35],["Electronics",48]])
+        proposed={**STORY,"slides":[STORY["slides"][0],
+            {**STORY["slides"][1],"layout":"chart",
+             "chart_x":"Category","chart_y":"Amount"},STORY["slides"][2]]}
+        validate_storyboard(proposed,[URL],content=IR.content,table=table)
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/"chart.pptx"
+            render_storyboard(path,proposed,table=table)
+            from pptx import Presentation
+            self.assertTrue(any(getattr(shape,"has_chart",False)
+                for slide in Presentation(path).slides for shape in slide.shapes))
+        with self.assertRaises(CognitiveDecisionError):
+            validate_storyboard(proposed,[URL],content=IR.content)
+
+
+class CognitiveIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_orchestrator_receives_research_evidence(self):
+        captured=[]
+        async def composer(objective,summary):
+            captured.append(objective)
+            return "# Report\n\n## Results\nA substantive report on verified evidence."
+        context={"objective":"Make a substantive presentation",
+                 "text":"The documented research figure is 120 units.",
+                 "sources":[URL],"summary":None}
+        result=await invoke(
+            SPECS["orchestrator"],Path("/tmp"),context,{"pptx"},
+            {"objective":"Make a substantive presentation"},None,"owner",
+            composer,None,"jid","worker",1,Path("/tmp"))
+        self.assertIn("120 units",captured[0])
+        self.assertIn(URL,captured[0])
+        self.assertIn("substantive",result["text"])
+
+    async def test_research_director_has_no_keyword_based_fallback(self):
+        cfg=SimpleNamespace(gemini_api_key="mock",gemini_model="fake",request_timeout=40)
+        with patch("rizzler.work_cognition.structured_decision",
+                   new=AsyncMock(return_value={
+                       "action":"search","questions":["What are the official quarterly statistics?"],
+                       "reason":"Need official evidence"})):
+            result=await direct_research("Explore external trade",cfg,
+                rounds_remaining=2,evidence=[],observations=[])
+        self.assertEqual(result.action,"search")
+        self.assertEqual(len(result.questions),1)
+
+    async def test_semantic_qa_receives_original_objective(self):
+        cfg=SimpleNamespace(gemini_api_key="mock",gemini_model="fake",request_timeout=40)
+        mock=AsyncMock(return_value={
+            "passed":False,
+            "findings":[{"kind":"executive","problem":"Requested recommendations are missing"}],
+            "summary":"The research has not been converted into decisions."})
+        with patch("rizzler.work_cognition.structured_decision",new=mock):
+            result=await review_semantics("Write strategic recommendations",
+                IR.content,[URL],["pptx"],{"pptx":{"checks":["file_opens"]}},cfg)
+        self.assertFalse(result["passed"])
+        self.assertIn("Write strategic recommendations",mock.await_args.args[0])
+
+    async def test_grounded_research_chosen_by_model(self):
+        from google import genai
+        from rizzler.work_cognition import ResearchDirection
+        response=SimpleNamespace(
+            text="The provider grounded evidence is substantive and provides official figures for this test.",
+            candidates=[])
+        mock_client=SimpleNamespace(aio=SimpleNamespace(
+            models=SimpleNamespace(generate_content=AsyncMock(return_value=response)),
+            aclose=AsyncMock()))
+        record={"url":URL,"title":"Official evidence","publisher":"example.org"}
+        with patch.object(genai,"Client",return_value=mock_client),\
+             patch("rizzler.work_cognition.direct_research",
+                   new=AsyncMock(side_effect=[
+                       ResearchDirection("search",("What are the official export figures?",),"Need data"),
+                       ResearchDirection("finish",(),"Source coverage adequate")])),\
+             patch("rizzler.research_evidence.source_records",return_value=[record]),\
+             patch("rizzler.production_guard.reserve_provider_call"),\
+             patch("rizzler.work_dynamic.WorkModelConfig.from_env",return_value=
+                   SimpleNamespace(gemini_api_key="mock",gemini_model="mock",request_timeout=40)):
+            result=await grounded_research("Research the latest import and export position.")
+        self.assertEqual(result["sources"],[URL])
+        self.assertIn("official export figures",result["text"])
+        self.assertEqual(result["evidence_summary"]["grounded_queries"],1)
+        self.assertEqual(mock_client.aio.models.generate_content.await_count,1)
+
+    async def test_unavailable_grounding_blocks_without_fabricated_sources(self):
+        from google import genai
+        from rizzler.work_cognition import ResearchDirection
+        mock_client=SimpleNamespace(aio=SimpleNamespace(
+            models=SimpleNamespace(generate_content=AsyncMock(return_value=
+                SimpleNamespace(text="Some irrelevant content",candidates=[]))),
+            aclose=AsyncMock()))
+        plan=AsyncMock(side_effect=[
+            ResearchDirection("search",("What official source is available?",),"Need source"),
+            ResearchDirection("block",(),"No trusted sources")])
+        with patch.object(genai,"Client",return_value=mock_client),\
+             patch("rizzler.work_cognition.direct_research",new=plan),\
+             patch("rizzler.production_guard.reserve_provider_call"),\
+             patch("rizzler.work_dynamic.WorkModelConfig.from_env",return_value=
+                   SimpleNamespace(gemini_api_key="mock",gemini_model="mock",request_timeout=40)):
+            with self.assertRaises(ResearchEvidenceUnavailable):
+                await grounded_research("Research current trade statistics")
+        self.assertEqual(mock_client.aio.aclose.await_count,1)
+
+
+if __name__=="__main__":
+    unittest.main()
