@@ -44,6 +44,7 @@ Configure the Work worker:
     RIZZLER_AGENTIC_ENABLED=1
     RIZZLER_WORK_LLM_BACKEND=sglang
     RIZZLER_SGLANG_MODEL=Qwen/Qwen3-4B-Instruct-2507
+    # Optional: RIZZLER_SGLANG_HIGH_MODEL=<larger-reasoning-model-served-by-SGLang>
     RIZZLER_SGLANG_BASE_URL=http://127.0.0.1:30000/v1
     RIZZLER_V15_COGNITIVE_PREFLIGHT=on
     RIZZLER_V15_RECOVERY=1
