@@ -23,8 +23,9 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
     """Dedicated model request, bounded and without access to filesystem/tools."""
     from .work_dynamic import WorkModelConfig
     cfg=WorkModelConfig.from_env()
-    if not cfg.gemini_api_key:
-        raise RuntimeError("Gemini work model is not configured")
+    from .work_sglang import enabled as use_sglang, complete as sglang_complete
+    if not cfg.gemini_api_key and not use_sglang():
+        raise RuntimeError("No Work model is configured")
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=cfg.gemini_api_key)
