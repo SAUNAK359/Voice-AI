@@ -24,6 +24,8 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
             return
         await ws.accept()
         owner=None
+        last_user_input=None
+        turn_token=secrets.token_hex(12)
         try:
             request=await asyncio.wait_for(ws.receive_json(),8)
             if request.get("type")!="auth":raise PermissionError("Authentication required")
@@ -84,12 +86,17 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
                 coverage=args.get("source_coverage")
                 if coverage not in ("targeted","complete"):
                     return {"error":"Choose targeted retrieval or complete-source analysis"}
-                idem=hashlib.sha256((owner+"|"+str(fc.id or secrets.token_hex(12))+"|"+objective).encode()).hexdigest()[:48]
+                # A single user turn may repeat its tool call after a provider
+                # reconnect. A new turn receives a fresh token. The original
+                # request is captured separately from the model's interpretation.
+                idem=hashlib.sha256((owner+"|"+turn_token+"|"+objective+"|"+
+                                    json.dumps(deliverables,sort_keys=True)).encode()).hexdigest()[:48]
                 policy=args.get("evidence_scope","auto")
                 if policy not in ("auto","uploaded_only","external_allowed"):
                     return {"error":"Invalid evidence policy"}
                 job=await asyncio.to_thread(work.submit,owner,objective,deliverables,idem,[],
-                                            list(session.sources),coverage,policy)
+                                            list(session.sources),coverage,policy,
+                                            last_user_input or objective)
                 await ws.send_json({"type":"job","job":job})
                 return {"accepted":True,"job_id":job["id"],"status":"queued","not_finished":True}
             if name in ("preview_open","preview_slide","preview_highlight","preview_dashboard"):
@@ -156,6 +163,7 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
             async with client.aio.live.connect(model=live_model,config=config) as provider:
                 await ws.send_json({"type":"ready","native":True,"sample_rate":24000})
                 async def browser_input():
+                    nonlocal last_user_input, turn_token
                     while True:
                         msg=await ws.receive()
                         if msg["type"]=="websocket.disconnect":break
@@ -172,9 +180,13 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
                                 text=message.get("text")
                                 if not isinstance(text,str) or not 1<=len(text)<=8000:
                                     raise ValueError("Invalid Live text")
+                                last_user_input=text
+                                turn_token=secrets.token_hex(12)
                                 async with send_lock:
                                     await provider.send_realtime_input(text=text)
                             elif message.get("type")=="audio_end":
+                                last_user_input=None
+                                turn_token=secrets.token_hex(12)
                                 async with send_lock:
                                     await provider.send_realtime_input(audio_stream_end=True)
                             elif message.get("type")=="interrupt":
@@ -182,13 +194,17 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
                             else:
                                 raise ValueError("Unsupported Live event")
                 async def provider_output():
+                    nonlocal last_user_input
                     while True:
                         async for response in provider.receive():
                             content=response.server_content
                             if content:
                                 if content.input_transcription:
+                                    latest=content.input_transcription.text or ""
+                                    if latest.strip():
+                                        last_user_input=latest[:8000]
                                     await ws.send_json({"type":"transcript","role":"user",
-                                      "text":content.input_transcription.text or ""})
+                                      "text":latest})
                                 if content.output_transcription:
                                     await ws.send_json({"type":"transcript","role":"assistant",
                                       "text":content.output_transcription.text or ""})

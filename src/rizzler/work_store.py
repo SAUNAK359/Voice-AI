@@ -128,7 +128,8 @@ class WorkStore:
     def submit(self, owner: str, objective: str, formats: list[str],
                idem: str, uploads: list[str] | None = None,
                source_ids: list[str] | None = None,
-               source_coverage: str = "targeted", evidence_scope: str = "auto") -> dict:
+               source_coverage: str = "targeted", evidence_scope: str = "auto",
+               original_request: str | None = None) -> dict:
         if not isinstance(idem, str) or not KEY_RE.fullmatch(idem):
             raise ValueError("Idempotency-Key must be 8-96 safe characters")
         if not isinstance(formats, list) or not all(isinstance(f, str) for f in formats):
@@ -153,7 +154,13 @@ class WorkStore:
             source_refs=[{"id":uid,"name":owned[uid]["name"],
                           "sha256":owned[uid]["sha256"],"bytes":owned[uid]["bytes"]}
                          for uid in source_ids]
-        payload = {"objective": objective, "deliverables": formats, "uploads": uploads,
+        if original_request is not None and (
+                type(original_request) is not str or
+                not 1 <= len(original_request.strip()) <= 8000):
+            raise ValueError("Invalid original user request")
+        payload = {"objective": objective,
+                   "original_request": original_request if original_request is not None else objective,
+                   "deliverables": formats, "uploads": uploads,
                    "source_ids": source_ids, "source_refs": source_refs,
                    "source_coverage": source_coverage,
                    "evidence_scope": evidence_scope}

@@ -78,6 +78,8 @@ def gate_agent(name: str, result: dict, required: set[str]) -> dict:
     checks = []
     if name == "research":
         urls, text = result.get("sources"), result.get("text")
+        if result.get("partial") is True:
+            raise ValueError("Research coverage incomplete; final publication refused")
         if not isinstance(urls, list) or not urls or not all(
             isinstance(u, str) and u.startswith("https://") and len(u) <= 2048 for u in urls
         ) or not isinstance(text, str) or len(text.strip()) < 40:
