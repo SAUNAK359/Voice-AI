@@ -57,12 +57,12 @@ async def complete(prompt: str, *, schema: dict|None=None,
     base,model,api_key=config()
     if images is not None:
         if (not isinstance(images,list) or not 1<=len(images)<=3 or
-            any(not isinstance(img,bytes) or not img.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+            any(not isinstance(img,bytes) or not img.startswith(b"\x89PNG\r\n\x1a\n")
                 or len(img)>8_000_000 for img in images)):
             raise ValueError("Invalid bounded SGLang visual inputs")
         # An independent VLM may be selected without changing text specialists.
         model=os.environ.get("RIZZLER_SGLANG_VISION_MODEL",model).strip()
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/\\-:]{1,180}",model):
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/\-:]{1,180}",model):
             raise SGLangProviderError("invalid_sglang_vision_model")
     import httpx
     parts=([{"type":"text","text":prompt}]+
