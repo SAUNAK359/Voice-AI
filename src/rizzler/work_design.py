@@ -284,8 +284,7 @@ def render_xlsx(path: Path, title: str, sections, table, sources,
         wb=Workbook()
         ws=wb.active
         ws.title=tab("Summary")
-    from openpyxl.utils import quote_sheetname
-    data_ref=quote_sheetname(tab("Data"))
+    data_ref="'Rizzler Data'" if native_source else "Data"
     ws.append([title])
     ws.append(["Section", "Content"])
     for heading, body in sections:
