@@ -61,6 +61,11 @@ def validate(table: dict, passages: list[dict]) -> dict:
             raise ValueError("Row has no directly retrievable source passage")
         for cell in cells:
             raw=cell.strip()
+            # Every published value, including dates and labels, must appear
+            # in the same directly fetched source excerpt. Derived values must
+            # be independently calculated in the analysis stage instead.
+            if raw and raw not in quote:
+                raise ValueError("Extracted cell lacks verbatim source passage")
             if _NUMBER.fullmatch(raw):
                 if not re.search(
                     r"(?<![\w.])"+re.escape(raw)+r"(?![\w.])",
