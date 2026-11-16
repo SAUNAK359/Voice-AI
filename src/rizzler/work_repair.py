@@ -84,7 +84,9 @@ async def _verify_bundle(store,owner,checkpoint,context,payload):
                 dataset_rows=context["summary"]["rows"] if context["summary"] else None,
                 bundle_receipts=bundle,artifact_ir=context["artifact_ir"],
                 dataset_summary=context["summary"],
-                visual_required=quality_mode()!="structural")
+                visual_required=quality_mode()!="structural",
+                source_workbook_path=(store.upload(owner,payload["uploads"][0])
+                    if kind=="xlsx" and payload.get("uploads") else None))
             if quality_mode()=="agentic" and kind in ("pptx","docx","xlsx","pdf"):
                 visual=await review(store.root,owner,path,kind,receipt.sha256,payload["objective"])
                 artifact["agentic_visual_review"]=visual
@@ -135,7 +137,8 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
         new_receipt=verify_artifact(path,kind)
         await asyncio.to_thread(inspect_artifact,path,kind,
             dataset_rows=context["summary"]["rows"] if context["summary"] else None,
-            artifact_ir=ir,dataset_summary=context["summary"],visual_required=False)
+            artifact_ir=ir,dataset_summary=context["summary"],visual_required=False,
+            source_workbook_path=source_path)
         proposed[kind]=(path,new_receipt)
     if "zip" in context["receipts"]:
         import zipfile
