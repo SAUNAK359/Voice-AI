@@ -30,6 +30,7 @@ class MCPTool:
     description: str
     arguments: dict[str, str]
     endpoint: str
+    auth_env: str | None = None
 
     @property
     def identifier(self):
@@ -65,8 +66,15 @@ def configured() -> dict[str, MCPTool]:
         raise ValueError("MCP registry requires at most five servers")
     result = {}
     for server in servers:
-        if type(server) is not dict or set(server) != {"alias","url","tools"}:
+        if (type(server) is not dict or
+                not {"alias","url","tools"}.issubset(server) or
+                set(server)-{"alias","url","tools","auth_env"}):
             raise ValueError("Invalid MCP server specification")
+        secret_name=server.get("auth_env")
+        if secret_name is not None and (
+                type(secret_name) is not str or
+                not re.fullmatch(r"RIZZLER_MCP_[A-Z0-9_]{4,64}",secret_name)):
+            raise ValueError("MCP bearer credential must be a trusted environment variable")
         alias = server["alias"]
         if type(alias) is not str or not _NAME.fullmatch(alias):
             raise ValueError("Invalid MCP alias")
@@ -85,7 +93,7 @@ def configured() -> dict[str, MCPTool]:
                     not _NAME.fullmatch(k) or v not in _TYPES
                     for k,v in args.items())):
                 raise ValueError("MCP capabilities must be explicit and read-only")
-            spec = MCPTool(alias,name,desc,args,endpoint)
+            spec = MCPTool(alias,name,desc,args,endpoint,secret_name)
             if spec.identifier in result:
                 raise ValueError("Duplicated MCP tool name")
             result[spec.identifier] = spec
@@ -107,44 +115,65 @@ def verify_args(arguments: dict, schema: dict[str,str]) -> None:
 
 
 async def _call_server(spec: MCPTool, arguments: dict) -> dict:
-    """Use the official MCP 2026 client; supports both modern and older servers."""
+    """MCP v2 streamable HTTP, optional secret-based bearer credentials.
+
+    URLs and authorization variable names are solely operator-configured.
+    MCP redirects are constrained to the original HTTPS origin by the SDK.
+    """
     try:
         from mcp import Client
     except ImportError as exc:
         raise MCPUnavailable("mcp_sdk_not_installed") from exc
+
+    async def execute(client):
+        found=False
+        cursor=None
+        for _ in range(8):
+            page=await client.list_tools(cursor=cursor)
+            if any(tool.name==spec.name for tool in page.tools):
+                found=True
+                break
+            cursor=page.next_cursor
+            if not cursor:
+                break
+        if not found:
+            raise MCPUnavailable("approved_mcp_tool_not_available")
+        answer=await client.call_tool(spec.name,arguments=arguments)
+        if answer.is_error:
+            raise MCPUnavailable("mcp_tool_reported_error")
+        structured=answer.structured_content
+        parts=[getattr(part,"text","") for part in answer.content or []
+               if isinstance(getattr(part,"text",None),str)]
+        body="\n".join(parts)
+        if structured is not None and not isinstance(structured,dict):
+            raise MCPUnavailable("mcp_structured_response_invalid")
+        if len(body)>MAX_RESPONSE or len(json.dumps(structured or {},
+                                                    default=str))>MAX_RESPONSE:
+            raise MCPUnavailable("mcp_response_oversized")
+        return {"text":body,"structured":structured or {}}
+
     try:
+        if spec.auth_env:
+            token=os.environ.get(spec.auth_env,"").strip()
+            if not token or len(token)>4096 or "\n" in token or "\r" in token:
+                raise MCPUnavailable("mcp_authentication_not_configured")
+            import httpx2
+            from mcp.client.streamable_http import streamable_http_client
+            async with httpx2.AsyncClient(
+                headers={"Authorization":"Bearer "+token},
+                timeout=httpx2.Timeout(20,read=60),
+                follow_redirects=False,trust_env=False
+            ) as http:
+                async with Client(streamable_http_client(
+                        spec.endpoint,http_client=http)) as client:
+                    return await execute(client)
         async with Client(spec.endpoint) as client:
-            found = False
-            cursor = None
-            for _ in range(8):
-                page = await client.list_tools(cursor=cursor)
-                if any(tool.name == spec.name for tool in page.tools):
-                    found = True
-                    break
-                cursor = page.next_cursor
-                if not cursor:
-                    break
-            if not found:
-                raise MCPUnavailable("approved_mcp_tool_not_available")
-            answer = await client.call_tool(spec.name, arguments=arguments)
-            if answer.is_error:
-                raise MCPUnavailable("mcp_tool_reported_error")
-            structured = answer.structured_content
-            parts = [getattr(part,"text","") for part in answer.content or []
-                     if isinstance(getattr(part,"text",None), str)]
-            text = "\n".join(parts)
-            if structured is not None and not isinstance(structured,dict):
-                raise MCPUnavailable("mcp_structured_response_invalid")
-            if len(text) > MAX_RESPONSE or len(json.dumps(structured or {},
-                                                         default=str)) > MAX_RESPONSE:
-                raise MCPUnavailable("mcp_response_oversized")
-            return {"text":text[:MAX_RESPONSE],"structured":structured or {}}
+            return await execute(client)
     except MCPUnavailable:
         raise
-    except (Exception,):
-        # Never leak server responses, bearer tokens, prompts, or private data.
+    except Exception:
+        # Never leak server responses, credentials, prompts or raw documents.
         raise MCPUnavailable("mcp_transport_or_tool_failure") from None
-
 
 async def invoke(identifier: str, arguments: dict, *, timeout: int = 25,
                  executor=None) -> dict:
