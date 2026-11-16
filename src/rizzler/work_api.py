@@ -45,6 +45,13 @@ def router(store: WorkStore, identity: Identity | None = None,
             if parsed.scheme not in ("http","https") or parsed.netloc!=req.headers.get("host"):
                 raise HTTPException(status_code=403,detail="Cross-origin request refused")
 
+    @api.get("/readiness")
+    def readiness(req: Request):
+        """Authenticated preflight inventory; no credentials or host topology."""
+        owner(req)
+        from .work_readiness import assess
+        return assess()
+
     @api.get("/skills")
     def skills(req: Request):
         owner(req)
