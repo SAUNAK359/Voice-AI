@@ -7,6 +7,7 @@ HTTP endpoints are operator-configured only and never derived from user text.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -42,7 +43,8 @@ def config() -> tuple[str,str,str]:
 
 async def complete(prompt: str, *, schema: dict|None=None,
                    max_tokens: int=2000, temperature: float=0.1,
-                   role: str="Rizzler specialist") -> str:
+                   role: str="Rizzler specialist",
+                   images: list[bytes] | None = None) -> str:
     """Async structured inference. No model-written URLs or tools executed.
 
     A broken inference server fails the current specialist instead of silently
@@ -53,10 +55,23 @@ async def complete(prompt: str, *, schema: dict|None=None,
     if not 64<=max_tokens<=12000 or not 0<=temperature<=1:
         raise ValueError("Invalid inference sampling settings")
     base,model,api_key=config()
+    if images is not None:
+        if (not isinstance(images,list) or not 1<=len(images)<=3 or
+            any(not isinstance(img,bytes) or not img.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+                or len(img)>8_000_000 for img in images)):
+            raise ValueError("Invalid bounded SGLang visual inputs")
+        # An independent VLM may be selected without changing text specialists.
+        model=os.environ.get("RIZZLER_SGLANG_VISION_MODEL",model).strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/\\-:]{1,180}",model):
+            raise SGLangProviderError("invalid_sglang_vision_model")
     import httpx
+    parts=([{"type":"text","text":prompt}]+
+           [{"type":"image_url","image_url":{"url":
+             "data:image/png;base64,"+base64.b64encode(img).decode("ascii")}}
+            for img in images]) if images else prompt
     body={"model":model,"messages":[
         {"role":"system","content":role+"\nRespect provided data, output schema, units, citation policy and tool permissions."},
-        {"role":"user","content":prompt}],
+        {"role":"user","content":parts}],
           "temperature":temperature,"max_tokens":max_tokens,"stream":False}
     if schema is not None:
         # Native SGLang XGrammar/Outlines constrained decoding.
