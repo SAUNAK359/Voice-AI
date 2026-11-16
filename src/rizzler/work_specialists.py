@@ -315,7 +315,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 kind == "pptx" and
                 os.environ.get("RIZZLER_V15_PRESENTATION",
                     "1" if os.environ.get("RIZZLER_AGENTIC_ENABLED") == "1"
-                    and os.environ.get("GEMINI_API_KEY") else "0") == "1"
+                    and (os.environ.get("GEMINI_API_KEY") or
+                         os.environ.get("RIZZLER_WORK_LLM_BACKEND")=="sglang") else "0") == "1"
             )
             if use_v15:
                 from .work_presentation import make_presentation
