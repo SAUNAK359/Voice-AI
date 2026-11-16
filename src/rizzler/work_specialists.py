@@ -303,6 +303,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             table = await asyncio.to_thread(read_dataset,
                                              store.upload(owner, payload["uploads"][0]))
         working = attempt / (kind + "." + kind)
+        source_path = (store.upload(owner, payload["uploads"][0])
+                       if kind == "xlsx" and payload.get("uploads") else None)
         ir = context["artifact_ir"]
         dataset_rows = context["summary"]["rows"] if context["summary"] else None
         # Exactly one deterministic regeneration on a recoverable output
@@ -320,7 +322,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 await make_presentation(working, payload["objective"], ir, table=table)
             else:
                 await asyncio.to_thread(render_one, kind, working, ir.title,
-                                        ir.content, table, list(ir.sources))
+                                        ir.content, table, list(ir.sources),
+                                        source_path)
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
