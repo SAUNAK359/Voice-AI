@@ -233,7 +233,7 @@ def inspect_artifact(path: Path, kind: str, *,
                                       clean_inline(body), "'"+clean_inline(body))
                          or (not body and cell[0] in (None,""))
                          for cell,(_,body) in zip(cells,artifact_ir.sections)]
-                valid=(present==headings and actual_sources==sources
+                valid=(present==[clean_inline(h) for h in headings] and actual_sources==sources
                        and len(cells)==len(artifact_ir.sections) and all(matches))
                 if not valid:
                     raise ValueError("XLSX input IR contract mismatch: "
