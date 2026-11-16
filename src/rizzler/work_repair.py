@@ -141,7 +141,8 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
         path=attempt/(kind+"."+kind)
         use_v15=(kind=="pptx" and os.environ.get("RIZZLER_V15_PRESENTATION",
                    "1" if os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
-                   and os.environ.get("GEMINI_API_KEY") else "0")=="1")
+                   and (os.environ.get("GEMINI_API_KEY") or
+                         os.environ.get("RIZZLER_WORK_LLM_BACKEND")=="sglang") else "0")=="1")
         if use_v15:
             from .work_presentation import make_presentation
             await make_presentation(path,payload["objective"],ir,table=table)
