@@ -328,7 +328,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
                     artifact_ir=ir, dataset_summary=context["summary"],
-                    visual_required=strict)
+                    visual_required=strict,
+                    source_workbook_path=source_path)
                 break
             except ValueError as exc:
                 if attempt_no:
