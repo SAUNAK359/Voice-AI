@@ -290,13 +290,13 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 # Source-led typed extraction is a separate model decision.
                 # Do not invent tabular data from mere model-generated prose.
                 if not payload.get("uploads") and formats.intersection(
-                        {"xlsx","csv","png","svg","pptx"}):
+                        {"xlsx","csv","png","svg","pptx","data_analysis"}):
                     from .work_structured_research import extract
                     table=await extract(payload["objective"],
                                         found.get("evidence_passages") or [])
                     if table is not None:
                         found["table"]=table
-                    elif formats.intersection({"xlsx","csv","png","svg"}):
+                    elif formats.intersection({"xlsx","csv","png","svg","data_analysis"}):
                         raise ValueError("No source-verified structured rows available")
                 return found
             raise ValueError("Research provider returned malformed evidence")
