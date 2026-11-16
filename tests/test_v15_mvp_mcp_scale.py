@@ -217,3 +217,40 @@ class SourceFormulaContracts(unittest.TestCase):
             still=load_workbook(path,data_only=False)
             self.assertEqual(still.active["C2"].value,"=A2-B2")
             still.close()
+
+
+
+class CognitiveFeedbackContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_cognitive_decisions_leave_owner_scoped_reason_events(self):
+        from unittest.mock import AsyncMock
+        from rizzler.work_dynamic import WorkModelConfig
+        from rizzler.work_preflight import PreflightRejected
+        from rizzler import work_dynamic
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ,{
+                "RIZZLER_AGENTIC_ENABLED":"1",
+                "RIZZLER_V15_COGNITIVE_PREFLIGHT":"on"}):
+            store=WorkStore(root)
+            job=store.submit("owner_001","Prepare a substantive editable report",
+                             ["md"],"feedback_reason_001")
+            claim=store.claim("worker_01",lease_seconds=60)
+            config=WorkModelConfig("mock-key","mock-model",45)
+            async def rejected(payload,cfg,*,client=None,on_feedback=None):
+                for attempt in range(1,4):
+                    on_feedback(attempt,"graph_dependency_invalid")
+                raise PreflightRejected("preflight_review_exhausted")
+            with patch("rizzler.work_preflight.generate_preflight",new=rejected):
+                with self.assertRaises(PreflightRejected):
+                    await work_dynamic.generate({
+                        **claim["payload"],
+                        "_cognitive_checkpoint":(
+                            store,"owner_001",claim["id"],"worker_01",claim["fence"])
+                    },config,client=object())
+            lines=store.events("owner_001",job["id"])
+            self.assertEqual(len([x for x in lines
+                     if x["stage"]=="preflight_revision"]),3)
+            with self.assertRaises(Missing):
+                store.record_cognitive_feedback("other_owner",job["id"],
+                    "worker_01",claim["fence"],1,"graph_dependency_invalid")
+            with self.assertRaises(ValueError):
+                store.record_cognitive_feedback("owner_001",job["id"],
+                    "worker_01",claim["fence"],1,"API_KEY=secret!")
