@@ -65,12 +65,80 @@ export class WorkApi {
   image(id: string, page: number) {
     return this.request('/api/work/artifacts/' + encodeURIComponent(id) + '/pages/' + page).then(r => r.blob());
   }
-  async submit(objective: string, deliverables: string[]) {
+  async uploadDataset(file: File): Promise<string> {
+    if (file.size < 1 || file.size > 8_000_000) {
+      throw Error('CSV/XLSX analysis sources must be under 8 MB');
+    }
+    const result = await this.json<{id:string}>('/api/work/uploads', {
+      method: 'POST', headers: {'X-File-Name': file.name}, body: file
+    });
+    return result.id;
+  }
+
+  private async sha256(blob: Blob): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2,'0')).join('');
+  }
+
+  async uploadSource(file: File): Promise<string> {
+    if (file.size < 1 || file.size > 200_000_000) {
+      throw Error('Selected source exceeds the 200 MB upload limit');
+    }
+    if (file.size <= 8_000_000) {
+      const record = await this.json<{id:string}>('/api/work/sources', {
+        method: 'POST', headers: {'X-File-Name': file.name}, body: file
+      });
+      return record.id;
+    }
+    // Resumable, checksummed 1 MB transfers. The server verifies the complete
+    // digest and scans uploaded bytes before indexing; no optimistic success.
+    const digest = await this.sha256(file);
+    const transfer = await this.json<{id:string;offset:number}>(
+      '/api/work/sources/transfers', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body:JSON.stringify({name:file.name,bytes:file.size,sha256:digest})
+      });
+    let offset = transfer.offset || 0;
+    let failures = 0;
+    while (offset < file.size) {
+      const chunk = file.slice(offset,Math.min(offset + 1_000_000,file.size));
+      try {
+        const result = await this.json<{offset:number}>(
+          '/api/work/sources/transfers/' + encodeURIComponent(transfer.id) + '/chunks',{
+            method:'PUT',headers:{
+              'X-Chunk-Offset':String(offset),
+              'X-Chunk-Sha256':await this.sha256(chunk)
+            },body:chunk
+          });
+        if (result.offset <= offset || result.offset > file.size) {
+          throw Error('Invalid server acknowledgement during source transfer');
+        }
+        offset = result.offset; failures=0;
+      } catch (error) {
+        if (++failures > 3) throw error;
+        const status = await this.json<{offset:number}>(
+          '/api/work/sources/transfers/' + encodeURIComponent(transfer.id));
+        if (status.offset < 0 || status.offset > file.size) throw Error('Invalid resume position');
+        offset = status.offset;
+      }
+    }
+    const source = await this.json<{id:string}>(
+      '/api/work/sources/transfers/' + encodeURIComponent(transfer.id) + '/complete',{
+        method:'POST'
+      });
+    return source.id;
+  }
+
+  async submit(objective: string, deliverables: string[], options: {
+    uploads?: string[]; source_ids?: string[];
+    source_coverage?: 'targeted'|'complete';
+    evidence_scope?: 'auto'|'uploaded_only'|'external_allowed';
+  } = {}) {
     const idem = crypto.randomUUID().replaceAll('-', '');
     return this.json<Job>('/api/work/jobs', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'Idempotency-Key': idem},
-      body: JSON.stringify({objective, deliverables})
+      body: JSON.stringify({objective, deliverables, ...options})
     });
   }
   async download(artifact: Artifact) {
