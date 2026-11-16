@@ -134,7 +134,6 @@ class WorkerScaleContracts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(active[0],0)
 
     async def test_real_ledger_leases_separate_users_but_serializes_each_owner(self):
-        from rizzler.work_worker import WorkWorker
         with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, {
                 "RIZZLER_AGENTIC_ENABLED": "1"}):
             store = WorkStore(root)
@@ -155,7 +154,6 @@ class WorkerScaleContracts(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancelling_real_worker_stops_inflight_specialist(self):
         from rizzler.work_worker import WorkWorker
-        from unittest.mock import AsyncMock
         with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, {
                 "RIZZLER_AGENTIC_ENABLED": "1"}):
             store = WorkStore(root)
