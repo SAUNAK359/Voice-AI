@@ -31,7 +31,15 @@ def config() -> tuple[str,str,str]:
     api_key=os.environ.get("RIZZLER_SGLANG_API_KEY","").strip()
     parsed=urlsplit(base)
     local=parsed.hostname in ("localhost","127.0.0.1","::1")
-    if (parsed.scheme!="https" and not (parsed.scheme=="http" and local)
+    # Explicit operator trust for a Docker-private SGLang service; never
+    # allow arbitrary model-proposed hostnames or metadata services.
+    internal=os.environ.get("RIZZLER_SGLANG_TRUSTED_INTERNAL_HOSTS","").strip()
+    names=internal.split(",") if internal else []
+    if (len(names)>8 or any(not re.fullmatch(r"[a-z][a-z0-9-]{0,40}",x)
+                             for x in names)):
+        raise SGLangProviderError("invalid_trusted_sglang_network_hosts")
+    trusted=local or parsed.hostname in names
+    if (parsed.scheme!="https" and not (parsed.scheme=="http" and trusted)
             or parsed.username or parsed.password or parsed.query or parsed.fragment
             or not parsed.hostname or (parsed.path not in ("/v1","/v1/"))
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/\-:]{1,180}",model)):
