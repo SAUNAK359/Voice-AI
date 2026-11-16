@@ -257,12 +257,46 @@ class WorkWorker:
             await asyncio.gather(guard, return_exceptions=True)
         return True
 
+def worker_parallelism() -> int:
+    """Bound concurrent owner-scoped jobs; workload chooses specialist graph."""
+    raw=os.environ.get("RIZZLER_WORK_CONCURRENCY","1")
+    if not raw.isdecimal() or not 1<=int(raw)<=8:
+        raise ValueError("RIZZLER_WORK_CONCURRENCY must be an integer from 1 to 8")
+    return int(raw)
+
+
 async def serve(store,interval=1):
-    worker=WorkWorker(store)
-    while True:
-        store.schedule_due()
-        if not await worker.once():
-            await asyncio.sleep(interval)
+    """Run independent job leases concurrently with graceful shutdown.
+
+    The database remains authoritative: even if many workers race, one owner
+    has only one active job; each fenced job persists its own checkpoints.
+    No queue task is assumed completed until its WorkStore transaction commits.
+    """
+    capacity=worker_parallelism()
+    active=set()
+    try:
+        while True:
+            store.schedule_due()
+            while len(active)<capacity:
+                active.add(asyncio.create_task(
+                    WorkWorker(store).once(),name="durable-work-job"))
+            done,active=await asyncio.wait(active,return_when=asyncio.FIRST_COMPLETED)
+            empty=False
+            for task in done:
+                try:
+                    empty=not task.result() or empty
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("Worker supervisor encountered a job failure")
+            if empty:
+                await asyncio.sleep(interval)
+    finally:
+        # SIGTERM/cancellation interrupts workers; their fenced state remains
+        # queued for lease recovery, not falsely marked as completed.
+        for task in active:
+            task.cancel()
+        await asyncio.gather(*active,return_exceptions=True)
 
 
 def main():
