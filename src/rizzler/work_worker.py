@@ -248,10 +248,24 @@ class WorkWorker:
                 await asyncio.to_thread(self.store.renew,jid,self.identity,fence,
                                         lease_seconds=45)
         guard = asyncio.create_task(heartbeat(), name="work-lease-heartbeat")
+        execution=None
         try:
             from .work_specialists import execute_specialists
-            await execute_specialists(
-                self.store, claim, self.identity, self.composer, self.researcher)
+            execution=asyncio.create_task(
+                execute_specialists(self.store, claim, self.identity,
+                                    self.composer, self.researcher),
+                name="work-execute-"+jid[:8])
+            done,_=await asyncio.wait((execution,guard),
+                                      return_when=asyncio.FIRST_COMPLETED)
+            if guard in done:
+                if not execution.done():
+                    execution.cancel()
+                    await asyncio.gather(execution,return_exceptions=True)
+                # Propagate lease takeover, cancellation, and storage loss,
+                # instead of continuing a long provider call with stale rights.
+                await guard
+                raise StaleLease("Work heartbeat stopped")
+            await execution
         except (StaleLease, InterruptedError):
             self.store.fail(jid, self.identity, fence, "cancelled_or_stale")
         except asyncio.CancelledError:
@@ -267,6 +281,9 @@ class WorkWorker:
                          jid,code,type(exc).__name__)
             self.store.fail(jid,self.identity,fence,code)
         finally:
+            if execution is not None and not execution.done():
+                execution.cancel()
+                await asyncio.gather(execution,return_exceptions=True)
             guard.cancel()
             await asyncio.gather(guard, return_exceptions=True)
         return True
