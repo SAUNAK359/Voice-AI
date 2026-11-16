@@ -91,8 +91,11 @@ async def complete(prompt: str, *, schema: dict|None=None,
                                                 "schema":schema,"strict":True}}
     headers={"Authorization":"Bearer "+(api_key or "EMPTY")}
     try:
-        async with httpx.AsyncClient(timeout=None,trust_env=False,
-                                     follow_redirects=False) as client:
+        # Unlimited inference *read* wait is intentional for asynchronous Work,
+        # but network connection, write and pool acquisition must remain bounded.
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=12.0,read=None,write=40.0,pool=12.0),
+            trust_env=False,follow_redirects=False) as client:
             response=await client.post(base+"/chat/completions",json=body,
                                        headers=headers)
             if response.status_code!=200:
