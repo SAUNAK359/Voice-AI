@@ -83,7 +83,7 @@ async def complete_job(store, *, offline: bool, payload: dict, key: str):
         async def content(*args,**kwargs):
             return OFFLINE_TEXT
         async def research(*args,**kwargs):
-            return {"text":OFFLINE_TEXT,"sources":[],
+            return {"text":OFFLINE_TEXT,"sources":["https://example.org/offline-fixture"],
                     "partial":False,
                     "evidence_summary":{"provenance":"offline synthetic fixture"}}
         with unittest.mock.patch("rizzler.work_dynamic.generate",new=planning):
