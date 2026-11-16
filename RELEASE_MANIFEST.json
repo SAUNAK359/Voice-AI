@@ -1104,8 +1104,8 @@
     },
     {
       "path": "src/rizzler/work_structured_research.py",
-      "git_blob_sha1": "98ce0ce5d5ff17858fa15b6ee4460b4419d88476",
-      "bytes": 5056
+      "git_blob_sha1": "f3b044db6983b447ce1936359caf61f162014ac1",
+      "bytes": 5407
     },
     {
       "path": "src/rizzler/work_visual.py",
@@ -1439,8 +1439,8 @@
     },
     {
       "path": "tests/test_v17_structured_research.py",
-      "git_blob_sha1": "cc3ef312e36b0edb960e27b59b89f5c16c82196d",
-      "bytes": 1466
+      "git_blob_sha1": "c4eef8262e16d98ceb7829722c54a7fe57c95266",
+      "bytes": 1646
     },
     {
       "path": "tests/test_voice_core.cjs",
