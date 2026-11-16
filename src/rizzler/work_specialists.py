@@ -98,7 +98,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                         and category not in ("provider_budget_exhausted",
                                              "permission_denied","worker_lease_stale")
                         and os.environ.get("RIZZLER_V15_RECOVERY",
-                            "1" if os.environ.get("GEMINI_API_KEY")
+                            "1" if (os.environ.get("GEMINI_API_KEY") or
+                                     os.environ.get("RIZZLER_WORK_LLM_BACKEND")=="sglang")
                             and os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
                             else "0")=="1"
                     )
