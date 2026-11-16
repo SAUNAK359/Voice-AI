@@ -3,6 +3,7 @@
 These tests never reach an external model, network, browser or local filesystem.
 """
 import asyncio
+import importlib.util
 import json
 import sys
 import types
@@ -26,6 +27,10 @@ def candidate(with_sql=False):
     return {"schema_version": 2, "status": "ready", "steps": nodes}
 
 
+@unittest.skipUnless(
+    importlib.util.find_spec("deepagents") is not None and
+    importlib.util.find_spec("langchain_core") is not None,
+    "Optional Deep Agents runtime absent from dependency-free core CI")
 class PlannerContracts(unittest.IsolatedAsyncioTestCase):
     async def invoke(self, initial):
         payload = {"objective": "Research recent Indian stock prices and make presentation",
