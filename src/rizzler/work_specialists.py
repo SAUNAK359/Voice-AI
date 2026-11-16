@@ -338,15 +338,29 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 break
             except ValueError as exc:
                 if attempt_no:
-                    if quality_mode()!="agentic":
+                    from .work_decision_plane import diagnosis
+                    reason=diagnosis(exc)
+                    # Only content/formatting defects may enter the model-led
+                    # bundle repair stage. Never defer source numbers, changed
+                    # formulas, forbidden URLs, file corruption or permissions.
+                    recoverable=reason in {
+                        "artifact_provenance_mismatch",
+                        "raw_markdown_leaked_to_word",
+                        "word_content_missing",
+                        "word_table_structure_lost",
+                        "presentation_insufficient_slides",
+                        "presentation_empty_slide",
+                    }
+                    if not recoverable or (quality_mode()!="agentic" and
+                            not context.get("cognitive_preflight")):
                         raise
-                    # Stage verifies file integrity only; substantive defects
-                    # are explicitly deferred to the model-driven final QA,
-                    # which either repairs and revalidates or fails the job.
+                    # Receipt is staged, NOT finally published. The independent
+                    # quality specialist must repair and validate the full
+                    # shared Artifact IR before final publication can happen.
                     verify_artifact(working,kind)
                     report={"kind":kind,"passed":True,
                             "checks":["staging_receipt_valid"],
-                            "deferred_to_quality":str(exc)[:350]}
+                            "deferred_to_quality":reason}
                     break
                 repairs += 1
                 working.unlink(missing_ok=True)
