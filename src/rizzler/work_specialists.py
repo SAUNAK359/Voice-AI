@@ -87,8 +87,10 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     raise
                 except Exception as exc:
                     from .work_cognition import failure_code
+                    from .work_decision_plane import diagnosis
                     category=failure_code(exc)
-                    try:store.agent_error(jid,worker_id,fence,spec.name,category)
+                    specific=diagnosis(exc)
+                    try:store.agent_error(jid,worker_id,fence,spec.name,category,specific)
                     except Exception:pass
                     can_recover=(
                         retries<1 and spec.name!="quality"
@@ -106,7 +108,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     from .work_dynamic import WorkModelConfig
                     try:
                         advice=await decide_stage_recovery(
-                            spec.name,spec.role,category,1-retries,
+                            spec.name,spec.role,category+" / "+specific,1-retries,
                             payload["objective"],WorkModelConfig.from_env())
                     except Exception:
                         # A failed model recovery decision never authorizes a
