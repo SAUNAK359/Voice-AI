@@ -26,9 +26,6 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
     from .work_sglang import enabled as use_sglang, complete as sglang_complete
     if not cfg.gemini_api_key and not use_sglang():
         raise RuntimeError("No Work model is configured")
-    from google import genai
-    from google.genai import types
-    client = genai.Client(api_key=cfg.gemini_api_key)
     prompt = ("Write a decisive, readable, evidence-aware report for real business use. "
               "Open with an executive summary, explain methods and limits, separate "
               "observations from recommendations, and provide clear next actions. "
@@ -56,6 +53,17 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
               "computed independently; quote only what they substantiate.\n\n"
               "Objective and selected research evidence:\n" + objective[:16000] + "\n\nDataset summary:\n" +
               json.dumps(data_summary or {}, ensure_ascii=False)[:9000])
+    if use_sglang():
+        from .production_guard import reserve_provider_call
+        reserve_provider_call("work")
+        result=await sglang_complete(prompt,max_tokens=7000,temperature=0.25,
+                                     role="Rizzler evidence-aware synthesis specialist")
+        if not 15<=len(result.strip())<=max_chars:
+            raise ValueError("SGLang report missing or too long")
+        return result
+    from google import genai
+    from google.genai import types
+    client=genai.Client(api_key=cfg.gemini_api_key)
     try:
         from .work_async import wait_scope
         async with wait_scope(min(90, cfg.request_timeout)):
