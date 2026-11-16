@@ -55,6 +55,17 @@ async def complete(prompt: str, *, schema: dict|None=None,
     if not 64<=max_tokens<=12000 or not 0<=temperature<=1:
         raise ValueError("Invalid inference sampling settings")
     base,model,api_key=config()
+    # Respect the LLM-authored specialist reasoning tier. A deployment can
+    # route high-compute specialists to a larger SGLang-served model without
+    # changing the authenticated Work execution graph.
+    if images is None:
+        from .work_reasoning import current
+        selected=(os.environ.get("RIZZLER_SGLANG_HIGH_MODEL","").strip()
+                  if current()=="high" else "")
+        if selected:
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/\-:]{1,180}",selected):
+                raise SGLangProviderError("invalid_sglang_high_model")
+            model=selected
     if images is not None:
         if (not isinstance(images,list) or not 1<=len(images)<=3 or
             any(not isinstance(img,bytes) or not img.startswith(b"\x89PNG\r\n\x1a\n")
