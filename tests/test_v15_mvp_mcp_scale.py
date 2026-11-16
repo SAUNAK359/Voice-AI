@@ -231,7 +231,7 @@ class CognitiveFeedbackContracts(unittest.IsolatedAsyncioTestCase):
                 "RIZZLER_V15_COGNITIVE_PREFLIGHT":"on"}):
             store=WorkStore(root)
             job=store.submit("owner_001","Prepare a substantive editable report",
-                             ["md"],"feedback_reason_001")
+                             ["md"],"feedback_reason_001",[])
             claim=store.claim("worker_01",lease_seconds=60)
             config=WorkModelConfig("mock-key","mock-model",45)
             async def rejected(payload,cfg,*,client=None,on_feedback=None):
