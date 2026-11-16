@@ -175,11 +175,15 @@ def inspect_artifact(path: Path, kind: str, *,
                     for row in t.rows for cell in row.cells])
                 expected_blocks=blocks(artifact_ir.sections)
                 valid=all(h in present for h in headings) and set(sources).issubset(hyperlinks)
+                # DOCX native runs and table cells may normalize whitespace.
+                # Compare semantic text, not exact XML whitespace; retain
+                # separate heading/source-hyperlink and native-table checks.
+                canonical=lambda value:" ".join(clean(value).split())
+                normalized=" ".join(rendered.split())
                 valid=valid and all(
-                    (clean(value) in rendered if kind=="paragraph" else
-                     value in rendered if kind=="bullet" else
-                     value[1] in rendered if kind=="heading" else
-                     all(cell in rendered for row in value for cell in row)
+                    (canonical(value) in normalized if kind in ("paragraph","bullet") else
+                     canonical(value[1]) in normalized if kind=="heading" else
+                     all(canonical(cell) in normalized for row in value for cell in row)
                      if kind=="table" else True)
                     for kind,value in expected_blocks)
             else:
