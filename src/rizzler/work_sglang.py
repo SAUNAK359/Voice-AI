@@ -31,7 +31,14 @@ def config() -> tuple[str,str,str]:
     api_key=os.environ.get("RIZZLER_SGLANG_API_KEY","").strip()
     parsed=urlsplit(base)
     local=parsed.hostname in ("localhost","127.0.0.1","::1")
-    if (parsed.scheme!="https" and not (parsed.scheme=="http" and local)
+    # Internal HTTP must be explicitly allowlisted by the operator and carry
+    # its own bearer secret. This supports private Compose service DNS without
+    # permitting model-supplied or arbitrary HTTP endpoints.
+    hosts=os.environ.get("RIZZLER_SGLANG_TRUSTED_HTTP_HOSTS","").split(",")
+    trusted={host.strip() for host in hosts if
+             re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]{0,120}",host.strip())}
+    internal=parsed.hostname in trusted
+    if (parsed.scheme!="https" and not (parsed.scheme=="http" and (local or internal))
             or parsed.username or parsed.password or parsed.query or parsed.fragment
             or not parsed.hostname or (parsed.path not in ("/v1","/v1/"))
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/\-:]{1,180}",model)):
@@ -91,8 +98,11 @@ async def complete(prompt: str, *, schema: dict|None=None,
                                                 "schema":schema,"strict":True}}
     headers={"Authorization":"Bearer "+(api_key or "EMPTY")}
     try:
-        async with httpx.AsyncClient(timeout=None,trust_env=False,
-                                     follow_redirects=False) as client:
+        # Unlimited inference *read* wait is intentional for asynchronous Work,
+        # but network connection, write and pool acquisition must remain bounded.
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=12.0,read=None,write=40.0,pool=12.0),
+            trust_env=False,follow_redirects=False) as client:
             response=await client.post(base+"/chat/completions",json=body,
                                        headers=headers)
             if response.status_code!=200:

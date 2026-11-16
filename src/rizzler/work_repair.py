@@ -139,6 +139,8 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
     for kind,receipt in context["receipts"].items():
         if kind=="zip":continue
         path=attempt/(kind+"."+kind)
+        source_path = (store.upload(owner, payload["uploads"][0])
+                       if kind == "xlsx" and payload.get("uploads") else None)
         use_v15=(kind=="pptx" and os.environ.get("RIZZLER_V15_PRESENTATION",
                    "1" if os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
                    and (os.environ.get("GEMINI_API_KEY") or
@@ -147,10 +149,10 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
             from .work_presentation import make_presentation
             await make_presentation(path,payload["objective"],ir,table=table)
         else:
-            source_path = (store.upload(owner, payload["uploads"][0])
-                           if kind == "xlsx" and payload.get("uploads") else None)
-            await asyncio.to_thread(render_one,kind,path,ir.title,ir.content,
-                                    table,list(ir.sources),source_path)
+            render_args=(kind,path,ir.title,ir.content,table,list(ir.sources))
+            if source_path is not None:
+                render_args+=(source_path,)
+            await asyncio.to_thread(render_one,*render_args)
         new_receipt=verify_artifact(path,kind)
         await asyncio.to_thread(inspect_artifact,path,kind,
             dataset_rows=context["summary"]["rows"] if context["summary"] else None,

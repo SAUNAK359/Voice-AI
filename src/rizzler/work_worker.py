@@ -234,35 +234,86 @@ class WorkWorker:
                 await asyncio.sleep(12)
                 self.store.renew(jid, self.identity, fence, lease_seconds=45)
         guard = asyncio.create_task(heartbeat(), name="work-lease-heartbeat")
+        execution = None
+        failure = None
         try:
             from .work_specialists import execute_specialists
-            await execute_specialists(
-                self.store, claim, self.identity, self.composer, self.researcher)
+            execution = asyncio.create_task(
+                execute_specialists(
+                    self.store, claim, self.identity, self.composer, self.researcher),
+                name="work-specialist-execution")
+            done, _ = await asyncio.wait(
+                (guard, execution), return_when=asyncio.FIRST_COMPLETED)
+            if guard in done:
+                # A lost lease or cancelled job must stop the provider workflow,
+                # even when the specialist has not reached its next checkpoint.
+                guard.result()
+                raise RuntimeError("Work lease monitor unexpectedly stopped")
+            await execution
         except (StaleLease, InterruptedError):
-            self.store.fail(jid, self.identity, fence, "cancelled_or_stale")
+            failure = "cancelled_or_stale"
         except asyncio.CancelledError:
-            # Never silently mark a interrupted worker's job as successful.
-            self.store.fail(jid, self.identity, fence, "worker_interrupted")
+            failure = "worker_interrupted"
             raise
         except Exception as exc:
-            # Log only the exception class and a stable category. Raw provider
-            # errors can contain prompts, credentials, and user document text.
+            # Never persist provider exceptions containing user data or secrets.
             from .work_cognition import failure_code
-            code=failure_code(exc)
+            failure = failure_code(exc)
             logger.error("Work job %s failed: %s (%s)",
-                         jid,code,type(exc).__name__)
-            self.store.fail(jid,self.identity,fence,code)
+                         jid, failure, type(exc).__name__)
         finally:
+            # Stop any in-flight specialist before recording job failure. A
+            # cancelled task must never race a successful artifact publication.
             guard.cancel()
-            await asyncio.gather(guard, return_exceptions=True)
+            if execution is not None:
+                execution.cancel()
+            await asyncio.gather(
+                *(task for task in (guard, execution) if task is not None),
+                return_exceptions=True)
+            if failure is not None:
+                self.store.fail(jid, self.identity, fence, failure)
         return True
 
+def worker_parallelism() -> int:
+    """Bound concurrent owner-scoped jobs; workload chooses specialist graph."""
+    raw=os.environ.get("RIZZLER_WORK_CONCURRENCY","1")
+    if not raw.isdecimal() or not 1<=int(raw)<=8:
+        raise ValueError("RIZZLER_WORK_CONCURRENCY must be an integer from 1 to 8")
+    return int(raw)
+
+
 async def serve(store,interval=1):
-    worker=WorkWorker(store)
-    while True:
-        store.schedule_due()
-        if not await worker.once():
-            await asyncio.sleep(interval)
+    """Run independent job leases concurrently with graceful shutdown.
+
+    The database remains authoritative: even if many workers race, one owner
+    has only one active job; each fenced job persists its own checkpoints.
+    No queue task is assumed completed until its WorkStore transaction commits.
+    """
+    capacity=worker_parallelism()
+    active=set()
+    try:
+        while True:
+            store.schedule_due()
+            while len(active)<capacity:
+                active.add(asyncio.create_task(
+                    WorkWorker(store).once(),name="durable-work-job"))
+            done,active=await asyncio.wait(active,return_when=asyncio.FIRST_COMPLETED)
+            empty=False
+            for task in done:
+                try:
+                    empty=not task.result() or empty
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("Worker supervisor encountered a job failure")
+            if empty:
+                await asyncio.sleep(interval)
+    finally:
+        # SIGTERM/cancellation interrupts workers; their fenced state remains
+        # queued for lease recovery, not falsely marked as completed.
+        for task in active:
+            task.cancel()
+        await asyncio.gather(*active,return_exceptions=True)
 
 
 def main():

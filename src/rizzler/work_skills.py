@@ -43,15 +43,59 @@ def read_dataset(path: Path) -> tuple[list[str], list[list[str]]]:
             table=list(csv.reader(f))
     elif path.suffix.lower()==".xlsx":
         from openpyxl import load_workbook
-        workbook = load_workbook(path,read_only=True,data_only=True)
+        from .work_visual import quality_mode
+        # A formula-bearing source may contain no cached values. In strict
+        # mode calculate a TEMPORARY copy so analytics receives genuine values,
+        # while the final exported workbook preserves original formula strings.
+        formulas=set()
+        original=load_workbook(path,read_only=True,data_only=False)
         try:
-            ws = workbook.active
-            if ws.max_row > 10001 or ws.max_column > 50:
+            ws=original.active
+            if ws.max_row>10001 or ws.max_column>50:
                 raise ValueError("XLSX exceeds 10000 rows or 50 columns")
-            table=[["" if v is None else str(v) for v in row]
-                   for row in ws.iter_rows(values_only=True,max_row=ws.max_row,max_col=ws.max_column)]
+            if quality_mode()!="structural":
+                formulas={cell.coordinate for row in ws.iter_rows()
+                          for cell in row if cell.data_type=="f"}
         finally:
-            workbook.close()
+            original.close()
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            source=path
+            if formulas:
+                import shutil, subprocess, tempfile
+                binary=shutil.which("libreoffice") or shutil.which("soffice")
+                if binary is None:
+                    raise RuntimeError("Source formula recalculation requires LibreOffice")
+                temp=Path(stack.enter_context(tempfile.TemporaryDirectory(
+                    prefix="rizzler-source-calc-")))
+                folder=temp/"input";folder.mkdir()
+                out=temp/"output";out.mkdir()
+                original_copy=folder/"source.xlsx"
+                shutil.copyfile(path,original_copy)
+                profile=(temp/"profile").as_uri()
+                try:
+                    result=subprocess.run([
+                        binary,"--headless","--nologo","--nodefault",
+                        "-env:UserInstallation="+profile,
+                        "--convert-to","xlsx","--outdir",str(out),str(original_copy)],
+                        capture_output=True,timeout=90,check=False)
+                except subprocess.TimeoutExpired:
+                    raise RuntimeError("Source formula recalculation timed out") from None
+                source=out/"source.xlsx"
+                if result.returncode or not source.is_file():
+                    raise RuntimeError("Source formula recalculation failed")
+            workbook=load_workbook(source,read_only=True,data_only=True)
+            try:
+                ws=workbook.active
+                if ws.max_row>10001 or ws.max_column>50:
+                    raise ValueError("XLSX exceeds 10000 rows or 50 columns")
+                if formulas and any(ws[cell].value is None for cell in formulas):
+                    raise ValueError("Source formulas did not produce verified cached values")
+                table=[["" if v is None else str(v) for v in row]
+                       for row in ws.iter_rows(values_only=True,
+                                              max_row=ws.max_row,max_col=ws.max_column)]
+            finally:
+                workbook.close()
     else:
         raise ValueError("Unsupported dataset type")
     if not table or not table[0] or len(table[0])>50 or len(table)>10001:

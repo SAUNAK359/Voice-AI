@@ -45,6 +45,13 @@ def router(store: WorkStore, identity: Identity | None = None,
             if parsed.scheme not in ("http","https") or parsed.netloc!=req.headers.get("host"):
                 raise HTTPException(status_code=403,detail="Cross-origin request refused")
 
+    @api.get("/readiness")
+    def readiness(req: Request):
+        """Authenticated preflight inventory; no credentials or host topology."""
+        owner(req)
+        from .work_readiness import assess
+        return assess()
+
     @api.get("/skills")
     def skills(req: Request):
         owner(req)
@@ -58,15 +65,19 @@ def router(store: WorkStore, identity: Identity | None = None,
             raw=await req.body()
             if len(raw)>15000: raise ValueError("Request too large")
             data=json.loads(raw)
-            if not isinstance(data,dict) or set(data)-{"objective","deliverables","uploads","evidence_scope"}:
+            if not isinstance(data,dict) or set(data)-{
+                    "objective","deliverables","uploads","evidence_scope",
+                    "source_ids","source_coverage"}:
                 raise ValueError("Invalid or unknown job document fields")
             objective, formats=data.get("objective"),data.get("deliverables")
             uploads=data.get("uploads",[])
             if not isinstance(objective,str):raise ValueError("Objective must be text")
             return store.submit(who,objective,formats,
                 req.headers.get("idempotency-key",""),uploads,
+                source_ids=data.get("source_ids",[]),
+                source_coverage=data.get("source_coverage","targeted"),
                 evidence_scope=data.get("evidence_scope","auto"))
-        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError) as exc:
+        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError):
             raise HTTPException(status_code=400,detail="Invalid job request") from None
         except Conflict:
             raise HTTPException(status_code=409,detail="Conflicting idempotency key")

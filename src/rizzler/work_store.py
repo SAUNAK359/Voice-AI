@@ -242,6 +242,20 @@ class WorkStore:
             from .work_preflight import verify_committed
             return verify_committed(json.loads(raw), json.loads(row["payload"]))
 
+    def record_cognitive_feedback(self, owner: str, jid: str, worker: str,
+                                  fence: int, attempt: int, code: str) -> None:
+        """Persist only safe, owner-scoped preflight rejection codes."""
+        if (type(attempt) is not int or not 1 <= attempt <= 3
+                or not isinstance(code,str)
+                or not re.fullmatch(r"[a-z0-9_ -]{1,80}",code)):
+            raise ValueError("Invalid cognitive feedback category")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            if row["owner"]!=owner:
+                raise Missing("Wrong Work owner")
+            self._event(c,jid,"preflight_revision",
+                        f"Attempt {attempt}: {code}")
+
     def install_cognitive_preflight(self, owner: str, jid: str, worker: str,
                                     fence: int, proposed: dict) -> dict:
         """Fence and persist model-approved preflight before the execution graph.

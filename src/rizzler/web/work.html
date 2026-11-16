@@ -2,9 +2,15 @@
 <body><div class="shell"><header><div class="brand"><div class="logo">R/</div><div><strong>RIZZLER WORK</strong><span>Unified voice and Work account</span></div></div><a href="/" class="work-nav-link">Voice</a></header>
 <main class="work-layout"><section class="voice work-editor"><h1>New work</h1><p id="work-auth-hint">Voice and Work share your existing authenticated session.</p>
 
+<p id="work-readiness" aria-live="polite"></p>
 <label for="objective">Objective</label><textarea id="objective" rows="5" maxlength="8000" placeholder="Analyze my uploaded dataset, then prepare a report..."></textarea>
 <label for="deliverables">Output formats (comma-separated)</label><input id="deliverables" value="pdf,docx,md" aria-label="Deliverable formats">
-<label for="upload">Optional CSV/XLSX source file (8 MB limit)</label><input type="file" id="upload" accept=".csv,.xlsx">
+<label for="upload">Optional data table for SQL analytics (CSV/XLSX, up to 8 MB)</label><input type="file" id="upload" accept=".csv,.xlsx">
+<label for="source-files">Reference documents (PDF, Word, TXT, Markdown, XLSX and more; up to 200 MB each)</label><input id="source-files" type="file" multiple accept=".pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.html,.json">
+<p id="source-progress" aria-live="polite"></p>
+<div id="source-selection" role="group" aria-label="Indexed source documents"></div>
+<label for="source-coverage">Source coverage</label><select id="source-coverage"><option value="targeted">Relevant passages</option><option value="complete">Examine every indexed passage</option></select>
+<label for="evidence-scope">External research</label><select id="evidence-scope"><option value="auto">Decide from request</option><option value="uploaded_only">Use only attached sources</option><option value="external_allowed">Allow live web research</option></select>
 <button id="submit-work">Create job</button><p id="work-error" role="alert"></p></section>
 <section class="chat"><h2>Recent jobs</h2><button id="reload-work">Refresh status</button><div id="jobs" aria-live="polite"></div><div id="job-detail"></div><h2>Approved schedules</h2><div id="schedules"></div></section></main>
 <footer><span>Jobs persist only while the configured work volume exists</span><span>External actions require explicit approval</span></footer></div><script src="/static/work.js" defer></script></body></html>

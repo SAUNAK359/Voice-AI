@@ -111,16 +111,25 @@ def render_docx(path: Path, title: str, sections, table, sources):
 
 def _split_prose(value: str, limit: int = 380) -> list[str]:
     """Do not lose words or split long tokens with untraceable transformations."""
-    words = value.split()
-    if any(len(w) > limit for w in words):
-        raise ValueError("Single unbreakable word exceeds slide capacity")
+    if not isinstance(value,str) or not 40<=limit<=2000:
+        raise ValueError("Invalid slide text budget")
     chunks, current = [], []
-    for word in words:
-        if current and len(" ".join(current + [word])) > limit:
+    for word in value.split():
+        # Source identifiers, long URLs and machine-generated tokens may
+        # exceed a slide. Split ONLY the displayed token into continuation
+        # slides instead of aborting the whole multi-format package.
+        while len(word)>limit:
+            if current:
+                chunks.append(" ".join(current))
+                current=[]
+            chunks.append(word[:limit])
+            word=word[limit:]
+        if current and len(" ".join(current+[word]))>limit:
             chunks.append(" ".join(current))
-            current = []
-        current.append(word)
-    return chunks + ([" ".join(current)] if current or not chunks else [])
+            current=[]
+        if word:
+            current.append(word)
+    return chunks+([" ".join(current)] if current or not chunks else [])
 
 
 def render_pptx(path: Path, title: str, sections, table, sources):

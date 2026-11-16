@@ -189,7 +189,11 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
             if previous is not None:
                 from .work_preflight import verify_committed
                 return verify_committed(previous, payload)["plan"]
-        document = await generate_preflight(payload, settings, client=client)
+        def record_feedback(attempt, code):
+            store.record_cognitive_feedback(owner,jid,worker,fence,attempt,code)
+        document = await generate_preflight(
+            payload,settings,client=client,
+            on_feedback=record_feedback if durable is not None else None)
         if durable is not None:
             store.install_cognitive_preflight(owner, jid, worker, fence, document)
         return document["plan"]
