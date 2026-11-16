@@ -178,6 +178,15 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
     Legacy graph-generation remains available as a compatibility adapter;
     it is never selected when preflight explicitly fails.
     """
+    # Deep Agents is opt-in until the new runtime passes live acceptance.
+    # The WorkStore remains the ONLY durable job and publication authority.
+    orchestration = __import__("os").environ.get(
+        "RIZZLER_WORK_ORCHESTRATOR", "legacy").strip().lower()
+    if orchestration == "deepagents":
+        from .work_deepagents import plan_with_deepagents
+        return await plan_with_deepagents(payload, settings, client=client)
+    if orchestration != "legacy":
+        raise ValueError("Unsupported Work orchestration backend")
     from .work_preflight import enabled as cognitive_enabled, generate_preflight
     # Worker claims always carry fenced context. Direct calls with a supplied
     # model client but without a job remain the legacy planning adapter.

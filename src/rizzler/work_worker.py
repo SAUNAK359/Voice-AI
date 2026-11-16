@@ -94,6 +94,9 @@ async def grounded_research(objective: str) -> dict:
     request quotas, provenance and data-integrity constraints. Sources remain
     provider-attributed, not independently fact-checked.
     """
+    from .work_searxng import selected as searxng_selected, research as searxng_research
+    if searxng_selected():
+        return await searxng_research(objective)
     from .work_dynamic import WorkModelConfig
     from .work_cognition import direct_research, CognitiveDecisionError
     from .research_evidence import source_records, evidence_summary
@@ -261,6 +264,15 @@ class WorkWorker:
             failure = failure_code(exc)
             logger.error("Work job %s failed: %s (%s)",
                          jid, failure, type(exc).__name__)
+            if failure in ("provider_rate_limited", "provider_unavailable"):
+                from .work_provider_retry import retry_delay
+                try:
+                    self.store.defer(
+                        jid, self.identity, fence, failure, retry_delay(exc))
+                    failure = None
+                except (StaleLease, InterruptedError):
+                    # Existing worker cancellation/lease fencing stays authoritative.
+                    failure = "cancelled_or_stale"
         finally:
             # Stop any in-flight specialist before recording job failure. A
             # cancelled task must never race a successful artifact publication.

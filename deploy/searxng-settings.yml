@@ -1,0 +1,18 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "Rizzler Private Research"
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json
+
+server:
+  # Replaced on startup by the environment variable SEARXNG_SECRET.
+  # This service is private and is never routed through the public gateway.
+  secret_key: "replace-only-through-SEARXNG_SECRET"
+  limiter: false
+  image_proxy: false

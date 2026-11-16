@@ -46,13 +46,17 @@ def assess() -> dict:
         if qa!="structural" and fmt in ("docx","pptx","pdf") and not visual:
             missing.append("pymupdf")
         outputs[fmt]={"installed":not missing,"missing":missing}
+    from .work_searxng import search_ready
+    keyless = search_ready()
     return {
         "status":"configuration_only_not_live_verified",
         "work_backend":backend,
         "model_configured":model_configured,
         "model_issue":issue,
-        "grounded_web_search_configured":bool(os.environ.get("GEMINI_API_KEY")),
-        "grounded_web_search_note":"Gemini Search attribution, not independent page fact verification",
+        "grounded_web_search_configured":bool(os.environ.get("GEMINI_API_KEY")) or keyless,
+        "grounded_web_search_note":(
+            "SearXNG discovery with pinned HTTPS source retrieval, not independent claim verification"
+            if keyless else "Gemini Search attribution, not independent page fact verification"),
         "mcp_sdk_installed":importlib.util.find_spec("mcp") is not None,
         "strict_qa_mode":qa,
         "worker_concurrency":worker_parallelism(),

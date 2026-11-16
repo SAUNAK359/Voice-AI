@@ -149,6 +149,10 @@ def test_sessions_tamper_protection_and_privacy_retention(setup):
     client, gate, provider, now = setup
     client.get('/', headers={'user-agent': 'portfolio-test', 'referer': 'https://example.org/something'})
     original = client.cookies.get('rizzler_demo_visit')
+    # Delete the host-scoped cookie before inserting the corrupted one.
+    # Otherwise modern httpx versions can send two same-name cookies and the
+    # server may see the original valid token instead of the tampered value.
+    client.cookies.clear()
     client.cookies.set('rizzler_demo_visit', original[:-1] + ('0' if original[-1] != '0' else '1'))
     assert client.get('/api/status').json()['launch_enabled'] is False
     assert launch(client).status_code == 401

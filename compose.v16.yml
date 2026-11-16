@@ -1,0 +1,36 @@
+# Private single-host V16 overlay; use with compose.production.yml and
+# compose.sglang.yml. Search has no internet-facing port or paid API key.
+# Operators must supply RIZZLER_SEARCH_SECRET (internal service secret only).
+services:
+  api:
+    environment:
+      RIZZLER_WORK_ORCHESTRATOR: deepagents
+      RIZZLER_SEARCH_BACKEND: searxng
+      RIZZLER_SEARXNG_URL: http://searxng:8080
+      RIZZLER_SEARXNG_TRUSTED_HOSTS: searxng
+
+  worker:
+    environment:
+      RIZZLER_WORK_ORCHESTRATOR: deepagents
+      RIZZLER_SEARCH_BACKEND: searxng
+      RIZZLER_SEARXNG_URL: http://searxng:8080
+      RIZZLER_SEARXNG_TRUSTED_HOSTS: searxng
+    depends_on:
+      searxng:
+        condition: service_started
+
+  searxng:
+    image: ${RIZZLER_SEARXNG_IMAGE:-searxng/searxng:latest}
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${RIZZLER_SEARCH_SECRET:?Set an independent private SearXNG service secret}
+      SEARXNG_BASE_URL: http://searxng:8080/
+    volumes:
+      - ./deploy/searxng-settings.yml:/etc/searxng/settings.yml:ro
+      - searxng_cache:/var/cache/searxng
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+    # Intentionally no public ports. Expose only to API/Worker on private network.
+
+volumes:
+  searxng_cache: {}

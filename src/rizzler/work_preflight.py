@@ -314,11 +314,12 @@ async def generate_preflight(payload: dict, config, *, client=None,
     from .work_sglang import enabled as use_sglang
     if not config.gemini_api_key and client is None and not use_sglang():
         raise PreflightRejected("provider_credentials_unavailable")
-    if (client is None and not config.gemini_api_key
-            and "research" in payload.get("deliverables",[])):
+    from .work_searxng import search_ready
+    research_available = bool(config.gemini_api_key) or search_ready()
+    if client is None and not research_available and "research" in payload.get("deliverables",[]):
         raise PreflightRejected("grounded_web_research_provider_unconfigured")
     tools = [{"id": name, "role": s.role, "formats": list(s.formats),
-              "available":name!="research" or bool(config.gemini_api_key),
+              "available":name!="research" or research_available,
               "target_seconds": s.sla_seconds} for name, s in SPECS.items()]
     feedback: list[str] = []
     for attempt in range(3):
@@ -327,7 +328,7 @@ async def generate_preflight(payload: dict, config, *, client=None,
                 _instruction(payload, feedback, tools), PREFLIGHT_SCHEMA,
                 config, client=client, max_tokens=6800, temperature=0.12)
             validated = validate_preflight(proposal, payload)
-            if (client is None and not config.gemini_api_key and
+            if (client is None and not research_available and
                     any(x["id"]=="research" for x in validated["plan"]["steps"])):
                 raise PreflightContractError("research_provider_unconfigured")
             critique = await structured_decision(
