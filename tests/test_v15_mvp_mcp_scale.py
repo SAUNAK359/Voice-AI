@@ -135,3 +135,85 @@ class WorkerScaleContracts(unittest.IsolatedAsyncioTestCase):
         for value in ("0","9","3.3","-1","unknown"):
             with patch.dict(os.environ,{"RIZZLER_WORK_CONCURRENCY":value}):
                 with self.assertRaises(ValueError):worker_parallelism()
+
+
+class RepairAndInferenceContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_powerpoint_rebuild_never_uses_unbound_source_workbook(self):
+        import hashlib
+        from unittest.mock import AsyncMock
+        from rizzler.contracts import ArtifactReceipt
+        from rizzler.work_ir import compile_ir
+        from rizzler.work_repair import _rebuild
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ,{
+                "RIZZLER_AGENTIC_ENABLED":"1","RIZZLER_V15_PRESENTATION":"1"}):
+            base=Path(root)
+            checkpoint=base/"checkpoints";checkpoint.mkdir()
+            original=checkpoint/"pptx.pptx"
+            original.write_bytes(b"original-artifact-payload")
+            receipt=ArtifactReceipt(kind="pptx",name="pptx.pptx",
+                sha256=hashlib.sha256(original.read_bytes()).hexdigest(),
+                byte_size=original.stat().st_size,verified=True)
+            ir=compile_ir("Executive briefing",
+                "# Results\nFinancial results were source-checked.\n"
+                "## Conclusions\nThe report includes qualified findings.",[])
+            context={"receipts":{"pptx":receipt},"artifact_ir":ir,
+                     "text":ir.content,"summary":None}
+            class Store:
+                root=base
+                def agent_publish(self,*args):
+                    return args[-2]
+            async def fake_presentation(path,*args,**kwargs):
+                Path(path).write_bytes(b"revised-executive-slide")
+            def fake_receipt(path,kind):
+                raw=Path(path).read_bytes()
+                return ArtifactReceipt(kind=kind,name=kind+"."+kind,
+                    sha256=hashlib.sha256(raw).hexdigest(),
+                    byte_size=len(raw),verified=True)
+            with patch("rizzler.work_repair.verify_checkpoint",return_value=True),\
+                 patch("rizzler.work_repair.verify_artifact",side_effect=fake_receipt),\
+                 patch("rizzler.work_repair.inspect_artifact",return_value={"passed":True}),\
+                 patch("rizzler.work_presentation.make_presentation",
+                       new=AsyncMock(side_effect=fake_presentation)):
+                result=await _rebuild(Store(),
+                    {"owner":"owner_001","id":"a"*32,"fence":1},
+                    "worker",checkpoint,context,
+                    {"objective":"Prepare slides","deliverables":["pptx"],"uploads":[]},
+                    1,ir)
+            self.assertIn("pptx",result["artifacts"])
+
+    async def test_configured_private_sglang_requires_authentication(self):
+        from rizzler.work_sglang import config,SGLangProviderError
+        config_env={
+            "RIZZLER_SGLANG_MODEL":"Qwen/Qwen3-4B",
+            "RIZZLER_SGLANG_BASE_URL":"http://sglang:30000/v1",
+            "RIZZLER_SGLANG_TRUSTED_HTTP_HOSTS":"sglang",
+            "RIZZLER_SGLANG_API_KEY":"private_dummy_work_token",
+        }
+        with patch.dict(os.environ,config_env):
+            self.assertEqual(config()[0],"http://sglang:30000/v1")
+        with patch.dict(os.environ,{**config_env,"RIZZLER_SGLANG_API_KEY":""}):
+            with self.assertRaises(SGLangProviderError):
+                config()
+
+
+class SourceFormulaContracts(unittest.TestCase):
+    def test_strict_source_never_silently_treats_formula_as_blank(self):
+        import importlib.util
+        if importlib.util.find_spec("openpyxl") is None:
+            self.skipTest("Native Excel dependency unavailable in minimal offline CI")
+        from openpyxl import Workbook,load_workbook
+        from rizzler.work_skills import read_dataset
+        import shutil
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/"formulas.xlsx"
+            workbook=Workbook();sheet=workbook.active
+            sheet.append(["Revenue_INR","Cost_INR","Profit_INR"])
+            sheet.append([120,50,"=A2-B2"])
+            workbook.save(path)
+            with patch.dict(os.environ,{"RIZZLER_ARTIFACT_QA":"strict"}),\
+                 patch.object(shutil,"which",return_value=None):
+                with self.assertRaisesRegex(RuntimeError,"requires LibreOffice"):
+                    read_dataset(path)
+            still=load_workbook(path,data_only=False)
+            self.assertEqual(still.active["C2"].value,"=A2-B2")
+            still.close()
