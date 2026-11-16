@@ -44,26 +44,73 @@ function Login({onConnect}: {onConnect: (value: Auth) => Promise<void>}) {
 function NewTask({api,onCreated}: {api: WorkApi;onCreated:(job:Job)=>void}) {
   const [objective,setObjective]=useState('');
   const [formats,setFormats]=useState<string[]>(['pptx']);
-  const submit=useMutation({mutationFn:()=>api.submit(objective.trim(),formats),
-                           onSuccess:job=>{setObjective('');onCreated(job);}});
-  const ready=objective.trim().length>=3 && formats.length>0 && !(formats.length===1 && formats[0]==="zip");
+  const [dataset,setDataset]=useState<File|null>(null);
+  const [sources,setSources]=useState<File[]>([]);
+  const [sourceCoverage,setSourceCoverage]=useState<'targeted'|'complete'>('targeted');
+  const [evidenceScope,setEvidenceScope]=useState<'auto'|'uploaded_only'|'external_allowed'>('auto');
+  const submit=useMutation({
+    mutationFn:async()=>{
+      const uploads=dataset?[await api.uploadDataset(dataset)]:[];
+      const source_ids:string[]=[];
+      // The indexing service has its own bounded resource budget. Sequential
+      // uploads avoid racing multiple 200 MB parses against the same owner.
+      for (const file of sources) source_ids.push(await api.uploadSource(file));
+      return api.submit(objective.trim(),formats,{
+        uploads,source_ids,source_coverage:sourceCoverage,evidence_scope:evidenceScope
+      });
+    },
+    onSuccess:job=>{setObjective('');setDataset(null);setSources([]);onCreated(job);}
+  });
+  const ready=objective.trim().length>=3 && formats.length>0 &&
+    !(formats.length===1 && formats[0]==="zip") &&
+    !(evidenceScope==='uploaded_only' && formats.includes('research')) &&
+    sources.length<=8;
   const toggle=(item:string)=>setFormats(prev=>prev.includes(item)?
      prev.filter(x=>x!==item):[...prev,item]);
   return <section className="panel new-task">
     <div className="section-title"><div><div className="eyebrow">AUTONOMOUS WORK</div><h2>What should Rizzler create?</h2></div><Plus size={22}/></div>
     <form onSubmit={e=>{e.preventDefault();if(ready)submit.mutate();}}>
       <textarea value={objective} onChange={e=>setObjective(e.target.value)} maxLength={7900}
-        placeholder="Describe the objective, intended audience, evidence requirements and expected result. Gemini will plan the workflow…"
+        placeholder="Describe the task, audience, evidence needs, formulas, original units and expected artifacts. Rizzler plans the specialist workflow…"
         aria-label="Work objective" rows={4}/>
       <div className="format-row" role="group" aria-label="Requested deliverable formats">
         {FORMATS.map(f=><button key={f} type="button" className={'format '+(formats.includes(f)?'selected':'')}
            aria-pressed={formats.includes(f)} onClick={()=>toggle(f)}>{f.toUpperCase()}</button>)}
       </div>
+      <label>Dataset for SQL analysis (one CSV or XLSX, up to 8 MB)
+        <input type="file" accept=".csv,.xlsx"
+          onChange={e=>setDataset(e.target.files?.[0]||null)}/>
+      </label>
+      <label>Supporting documents (up to 8 files, each up to 200 MB)
+        <input type="file" multiple accept=".pdf,.docx,.pptx,.xlsx,.csv,.md,.txt,.json,.db,.sqlite"
+          onChange={e=>setSources(Array.from(e.target.files||[]))}/>
+      </label>
+      <div className="format-row">
+        <label>Evidence policy
+          <select value={evidenceScope} onChange={e=>setEvidenceScope(
+            e.target.value as 'auto'|'uploaded_only'|'external_allowed')}>
+            <option value="auto">Let the model assess source needs</option>
+            <option value="uploaded_only">Uploaded evidence only (no web)</option>
+            <option value="external_allowed">External research allowed</option>
+          </select>
+        </label>
+        <label>Document coverage
+          <select value={sourceCoverage} onChange={e=>setSourceCoverage(
+            e.target.value as 'targeted'|'complete')}>
+            <option value="targeted">Retrieve relevant passages</option>
+            <option value="complete">Read every indexed text passage</option>
+          </select>
+        </label>
+      </div>
+      {sources.length>8 && <p className="notice bad" role="alert">Select no more than eight supporting sources.</p>}
+      {dataset && dataset.size>8_000_000 &&
+        <p className="notice bad" role="alert">The structured dataset exceeds 8 MB; add it as a supporting source instead.</p>}
       {submit.isError && <p className="notice bad" role="alert">{visible(submit.error)}</p>}
       <div className="action-row">
-        <span className="muted">Model-authored plan · Independent QA · Dataset-only formats use the existing source uploader</span>
-        <button className="primary" type="submit" disabled={submit.isPending || !ready}>
-          {submit.isPending?'Submitting…':'Create work'} <ArrowUpRight size={16}/>
+        <span className="muted">Model-led plan · Owner-scoped sources · Formula and citation QA · Verified downloads</span>
+        <button className="primary" type="submit" disabled={submit.isPending || !ready ||
+          (!!dataset && dataset.size>8_000_000)}>
+          {submit.isPending?'Uploading, indexing and queuing…':'Create work'} <ArrowUpRight size={16}/>
         </button>
       </div>
     </form>
