@@ -31,17 +31,17 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
     wb = load_workbook(path, read_only=True, data_only=False)
     try:
         prefix="Rizzler " if "Rizzler Summary" in wb.sheetnames else ""
-        name=lambda value: prefix+value
-        if name("Summary") not in wb.sheetnames:
+        sheet_name=lambda value: prefix+value
+        if sheet_name("Summary") not in wb.sheetnames:
             raise ValueError("Workbook summary is missing")
-        if name("Data") not in wb.sheetnames:
+        if sheet_name("Data") not in wb.sheetnames:
             if dataset_summary is not None:
                 raise ValueError("Workbook omitted source data")
             return {"status": "no_source_dataset", "formulas": 0,
                     "recalculation": "not_applicable"}
-        if name("Checks") not in wb.sheetnames:
+        if sheet_name("Checks") not in wb.sheetnames:
             raise ValueError("Workbook formula evidence is missing")
-        data = wb[name("Data")]
+        data = wb[sheet_name("Data")]
         values = list(data.iter_rows(values_only=True))
         headers = [str(v or "") for v in values[0]]
         rows = [[("" if v is None else str(v)) for v in record] for record in values[1:]]
@@ -55,26 +55,25 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 if observed is None or stats["count"] != observed["count"] or any(
                     not _close(stats[name], observed[name]) for name in ("mean","min","max")):
                     raise ValueError("Workbook numeric values differ from independent SQL evidence")
-        if name("Financial Insights") in wb.sheetnames:
+        if sheet_name("Financial Insights") in wb.sheetnames:
             from .work_finance import financial_profile
             finances=financial_profile(headers,rows)
             if finances is None:
                 raise ValueError("Finance dashboard has no source-grounded financial schema")
-            sheet=wb[name("Financial Insights")]
+            sheet=wb[sheet_name("Financial Insights")]
             for row,key in ((4,"revenue"),(5,"cost"),(6,"gross_profit"),(7,"gross_margin_pct")):
                 if not _close(sheet.cell(row,2).value,finances["total"][key]):
                     raise ValueError("Financial dashboard headline KPI differs from source")
             if sheet["B2"].value != finances["currency"]:
                 raise ValueError("Financial dashboard currency disagrees with source")
-        check = list(wb[name("Checks")].iter_rows(values_only=True))
+        check = list(wb[sheet_name("Checks")].iter_rows(values_only=True))
         if len(check) < 2 or check[0][0] != "Metric":
             raise ValueError("Workbook formula contract malformed")
+        data_ref="'Rizzler Data'" if prefix else "Data"
+        expected_row_formula=(f"=ROWS({data_ref}!A2:A{len(rows)+1})" if rows
+                              else f"=COUNTA({data_ref}!A2:A2)")
         if (check[1][0] != "Source rows"
-            or check[1][1] != (f"=ROWS('Rizzler Data'!A2:A{len(rows)+1})" if prefix
-                               else f"=ROWS(Data!A2:A{len(rows)+1})")
-                               if rows else
-                               ("=COUNTA('Rizzler Data'!A2:A2)" if prefix
-                                else "=COUNTA(Data!A2:A2)")
+            or check[1][1] != expected_row_formula
             or check[1][2] != len(rows)):
             raise ValueError("Workbook row-count formula or expected value tampered")
         formulas = 1
@@ -160,7 +159,7 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 raise RuntimeError("Independent spreadsheet recalculation failed")
             recalc = load_workbook(target, read_only=True, data_only=True)
             try:
-                computed = list(recalc[name("Checks")].iter_rows(
+                computed = list(recalc[sheet_name("Checks")].iter_rows(
                     min_row=2, min_col=2, max_col=2, values_only=True))
                 reference = [len(rows)] + [v[0] for v in verified]
                 if len(computed) != len(reference) or any(
