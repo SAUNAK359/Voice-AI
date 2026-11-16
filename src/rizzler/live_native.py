@@ -70,15 +70,18 @@ def register_native_live(app,settings,sessions,identity,work):
                 if not isinstance(deliverables,list) or len(deliverables)>12:
                     return {"error":"Invalid deliverables"}
                 Handoff(session_id=owner,objective=objective,deliverables=tuple(deliverables)).validate()
-                if source_index and session.sources:
-                    evidence=await asyncio.to_thread(source_index.search,owner,list(session.sources),objective,2400)
-                    objective=objective+"\nSelected source evidence (untrusted excerpts):\n"+"\n".join(evidence["passages"])
+                # Keep the user's exact instruction immutable in the job contract.
+                # Source IDs, not pasted search passages, are the evidence input.
+                # The Work Agent retrieves passages under owner authorization.
                 coverage=args.get("source_coverage")
                 if coverage not in ("targeted","complete"):
                     return {"error":"Choose targeted retrieval or complete-source analysis"}
                 idem=hashlib.sha256((owner+"|"+str(fc.id or secrets.token_hex(12))+"|"+objective).encode()).hexdigest()[:48]
+                policy=args.get("evidence_scope","auto")
+                if policy not in ("auto","uploaded_only","external_allowed"):
+                    return {"error":"Invalid evidence policy"}
                 job=await asyncio.to_thread(work.submit,owner,objective,deliverables,idem,[],
-                                            list(session.sources),coverage)
+                                            list(session.sources),coverage,policy)
                 await ws.send_json({"type":"job","job":job})
                 return {"accepted":True,"job_id":job["id"],"status":"queued","not_finished":True}
             if name in ("preview_open","preview_slide","preview_highlight","preview_dashboard"):
@@ -127,6 +130,9 @@ def register_native_live(app,settings,sessions,identity,work):
             system_instruction=("You are Rizzler, the primary real-time conversational intelligence. "
                 "Understand user intent and reason with the model's native capability. "
                 "Call tools only when needed; submit substantial tasks asynchronously to work_submit. "
+                "Keep the original user task intact when submitting Work; indicate external_allowed "
+                "when the user explicitly requires up-to-date public research and "
+                "uploaded_only when web research is forbidden. "
                 "The worker executes independently; keep chatting with the user. "
                 "Never claim unfinished work is complete. "
                 "Use source_search for evidence and work_status for real progress. "

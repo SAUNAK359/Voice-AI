@@ -95,6 +95,8 @@ def validate(graph: dict, payload: dict) -> dict:
     if (needs_narrative and payload.get("evidence_scope")=="uploaded_only"
             and "orchestrator" not in by_name):
         raise ValueError("Narrative deliverables require evidence-aware content synthesis")
+    if payload.get("evidence_scope") == "external_allowed" and "research" not in by_name:
+        raise ValueError("Explicit external research scope requires a research specialist")
     if "research" in payload["deliverables"] and "research" not in by_name:
         raise ValueError("Requested grounded research is missing")
     if not CONTENT.intersection(by_name) and not uploads:
