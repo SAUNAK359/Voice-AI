@@ -18,9 +18,13 @@ jobs:
       - name: Check Compose topology without deploying secrets
         env:
           RIZZLER_DOMAIN: rizzler.example.test
+          RIZZLER_SGLANG_MODEL: Qwen/Qwen3-4B-Instruct-2507
+          RIZZLER_SGLANG_API_KEY: mock-no-live-service-ci
+          RIZZLER_SEARCH_SECRET: mock-no-live-service-ci
         run: |
           cp deploy/production.env.example .env.production
           docker compose -f compose.production.yml config --quiet
+          docker compose -f compose.production.yml -f compose.sglang.yml -f compose.v16.yml config --quiet
           rm .env.production
       - name: Verify deployment contract
         run: |
