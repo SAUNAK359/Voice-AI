@@ -48,9 +48,44 @@ async function details(id){selectedJob=id;try{const [job,ev,art,agentData]=await
  catch(e){err(e)}};pane.append(speak);
  if(!['completed','failed','cancelled'].includes(job.status)){const b=el('button','Cancel job');b.onclick=async()=>{await call('/jobs/'+id+'/cancel',{method:'POST'});details(id)};pane.append(b)}
  }catch(e){err(e)}}
-$('submit-work').onclick=async()=>{try{let uploads=[],file=$('upload').files[0];
- if(file){const result=await call('/uploads',{method:'POST',headers:{'x-file-name':file.name,'content-type':'application/octet-stream'},body:file});uploads=[result.id]}
- const payload={objective:$('objective').value,deliverables:$('deliverables').value.split(',').map(x=>x.trim()).filter(Boolean),uploads};
+async function hash(blob){
+ const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()));
+ return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')}
+async function addSource(file){
+ if(file.size<1||file.size>200_000_000)throw Error('Supporting source must be 1 byte to 200 MB');
+ if(file.size<=8_000_000){
+  const result=await call('/sources',{method:'POST',headers:{'x-file-name':file.name},body:file});return result.id}
+ const transfer=await call('/sources/transfers',{method:'POST',
+  headers:{'content-type':'application/json'},body:JSON.stringify({name:file.name,bytes:file.size,sha256:await hash(file)})});
+ let offset=transfer.offset||0,failures=0;
+ while(offset<file.size){
+  const chunk=file.slice(offset,offset+1_000_000);
+  try{
+   const state=await call('/sources/transfers/'+transfer.id+'/chunks',{method:'PUT',
+    headers:{'x-chunk-offset':String(offset),'x-chunk-sha256':await hash(chunk)},body:chunk});
+   if(state.offset<=offset||state.offset>file.size)throw Error('Invalid chunk confirmation');
+   offset=state.offset;failures=0;
+  }catch(err){
+   if(++failures>3)throw err;
+   const state=await call('/sources/transfers/'+transfer.id);
+   offset=state.offset;
+  }
+ }
+ const result=await call('/sources/transfers/'+transfer.id+'/complete',{method:'POST'});
+ return result.id;
+}
+$('submit-work').onclick=async()=>{try{
+ let uploads=[],file=$('upload').files[0];
+ if(file){
+  if(file.size>8_000_000)throw Error('CSV/XLSX analysis upload exceeds 8 MB');
+  const result=await call('/uploads',{method:'POST',headers:{'x-file-name':file.name,'content-type':'application/octet-stream'},body:file});uploads=[result.id]}
+ const chosen=Array.from($('source-documents').files||[]);
+ if(chosen.length>8)throw Error('Choose at most eight supporting source files');
+ const source_ids=[];
+ for(const source of chosen){$('work-error').textContent='Indexing '+source.name+'…';source_ids.push(await addSource(source))}
+ const payload={objective:$('objective').value,
+  deliverables:$('deliverables').value.split(',').map(x=>x.trim()).filter(Boolean),
+  uploads,source_ids,evidence_scope:$('evidence-scope').value,source_coverage:$('source-coverage').value};
  const unique=crypto.randomUUID().replaceAll('-','');const item=await call('/jobs',{method:'POST',
  headers:{'idempotency-key':unique,'content-type':'application/json'},body:JSON.stringify(payload)});
  $('work-error').textContent='Queued: '+item.id;refresh();details(item.id)}catch(e){err(e)}};
