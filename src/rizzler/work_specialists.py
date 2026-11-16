@@ -134,6 +134,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     retries+=1
         if spec.name == "research":
             context["text"], context["sources"] = result["text"], result["sources"]
+            if result.get("table"):
+                from .work_structured_research import as_table
+                table=as_table(result["table"])
+                from .work_skills import analyze
+                context["research_table"]=table
+                context["summary"]=analyze(*table)
         elif spec.name == "sql_analytics":
             context["summary"] = result["summary"]
         elif spec.name == "orchestrator":
@@ -281,6 +287,17 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         found = await researcher(payload["objective"])
         if isinstance(found, dict):
             if set(found).issuperset({"text","sources"}):
+                # Source-led typed extraction is a separate model decision.
+                # Do not invent tabular data from mere model-generated prose.
+                if not payload.get("uploads") and formats.intersection(
+                        {"xlsx","csv","png","svg","pptx"}):
+                    from .work_structured_research import extract
+                    table=await extract(payload["objective"],
+                                        found.get("evidence_passages") or [])
+                    if table is not None:
+                        found["table"]=table
+                    elif formats.intersection({"xlsx","csv","png","svg"}):
+                        raise ValueError("No source-verified structured rows available")
                 return found
             raise ValueError("Research provider returned malformed evidence")
         text, sources = found
@@ -321,7 +338,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
     # One independent format-specific renderer, reusing the existing vetted
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
-        table = None
+        table = context.get("research_table")
         if payload.get("uploads"):
             from .work_skills import read_dataset
             table = await asyncio.to_thread(read_dataset,
