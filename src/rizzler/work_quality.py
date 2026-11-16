@@ -228,7 +228,9 @@ def inspect_artifact(path: Path, kind: str, *,
                                   if report_prefix+"Sources" in wb else [])
                 cells = list(wb[report_prefix+"Summary"].iter_rows(
                     min_row=3,min_col=2,max_col=2,values_only=True))
-                matches=[cell[0] in (body, "'"+body)
+                from .work_rich_docs import clean as clean_inline
+                matches=[cell[0] in (body, "'"+body,
+                                      clean_inline(body), "'"+clean_inline(body))
                          or (not body and cell[0] in (None,""))
                          for cell,(_,body) in zip(cells,artifact_ir.sections)]
                 valid=(present==headings and actual_sources==sources
