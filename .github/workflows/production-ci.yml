@@ -2,7 +2,7 @@ name: Rizzler Production Configuration
 on:
   pull_request:
   push:
-    branches: [main, feat/v15-unified-cognition-artifact-reliability]
+    branches: [main, 'feat/**']
 permissions:
   contents: read
 jobs:
