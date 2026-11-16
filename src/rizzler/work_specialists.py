@@ -108,9 +108,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     from .work_cognition import decide_stage_recovery
                     from .work_dynamic import WorkModelConfig
                     try:
+                        from .work_decision_plane import snapshot
+                        cognition=snapshot(store,owner,jid)
                         advice=await decide_stage_recovery(
                             spec.name,spec.role,category+" / "+specific,1-retries,
-                            payload["objective"],WorkModelConfig.from_env())
+                            payload["objective"],WorkModelConfig.from_env(),
+                            cognitive_state=cognition)
                     except Exception:
                         # A failed model recovery decision never authorizes a
                         # silent retry, alternate tool, or fabricated success.
