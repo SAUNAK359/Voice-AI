@@ -94,6 +94,9 @@ async def grounded_research(objective: str) -> dict:
     request quotas, provenance and data-integrity constraints. Sources remain
     provider-attributed, not independently fact-checked.
     """
+    from .work_searxng import selected as searxng_selected, research as searxng_research
+    if searxng_selected():
+        return await searxng_research(objective)
     from .work_dynamic import WorkModelConfig
     from .work_cognition import direct_research, CognitiveDecisionError
     from .research_evidence import source_records, evidence_summary
