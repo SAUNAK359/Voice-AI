@@ -108,7 +108,7 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 raise ValueError("Independent calculation conflicts with expected formula")
             verified.append((measured, expected))
             formulas += 1
-        report_names={name(x) for x in ("Summary","Data","Dashboard",
+        report_names={sheet_name(x) for x in ("Summary","Data","Dashboard",
                       "Financial Insights","Sources")}
         if any(cell.data_type == "f" for ws in wb.worksheets if ws.title in report_names
                for row in ws.iter_rows() for cell in row):
