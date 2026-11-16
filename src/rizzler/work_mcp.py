@@ -8,14 +8,12 @@ user-provided MCP endpoint, unrestricted file access or tool-created grants.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import secrets
-from typing import Any
 
 from .contracts import DELIVERABLES
-from .work_store import Missing, WorkStore
+from .work_store import WorkStore
 
 _JOB_ID = re.compile(r"^[a-f0-9]{32}$")
 _SOURCE_ID = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
