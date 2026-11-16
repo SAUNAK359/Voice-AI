@@ -86,7 +86,18 @@ async def complete_job(store, *, offline: bool, payload: dict, key: str):
             return {"text":OFFLINE_TEXT,"sources":["https://example.org/offline-fixture"],
                     "partial":False,
                     "evidence_summary":{"provenance":"offline synthetic fixture"}}
-        with unittest.mock.patch("rizzler.work_dynamic.generate",new=planning):
+        from rizzler.work_specialists import invoke as original_invoke
+        async def observed_invoke(*args,**kwargs):
+            try:
+                return await original_invoke(*args,**kwargs)
+            except Exception as exc:
+                # Only in explicit synthetic offline mode; no private inputs
+                # or real provider responses exist in this fixture.
+                print("OFFLINE_STAGE_FAILURE",args[0].name,
+                      type(exc).__name__,str(exc)[:320])
+                raise
+        with unittest.mock.patch("rizzler.work_dynamic.generate",new=planning),\
+             unittest.mock.patch("rizzler.work_specialists.invoke",new=observed_invoke):
             await WorkWorker(store,composer=content,researcher=research).once()
     else:
         await WorkWorker(store).once()
