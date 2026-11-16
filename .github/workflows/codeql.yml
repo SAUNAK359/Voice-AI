@@ -1,7 +1,7 @@
 name: CodeQL Python
 on:
   push:
-    branches: [main, feat/v15-unified-cognition-artifact-reliability]
+    branches: [main, 'feat/**']
   pull_request:
   workflow_dispatch:
 permissions:
