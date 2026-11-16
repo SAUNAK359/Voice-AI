@@ -43,7 +43,7 @@ def retry_delay(exc: BaseException) -> int:
                     continue
                 delay = item.get("retryDelay")
                 if isinstance(delay, str):
-                    match = re.fullmatch(r"(\\d{1,3})(?:\\.\\d+)?s", delay)
+                    match = re.fullmatch(r"(\d{1,3})(?:\.\d+)?s", delay)
                     if match:
                         return max(5, min(300, int(match.group(1))))
     return 60

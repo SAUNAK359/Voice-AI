@@ -115,7 +115,7 @@ def _read_page(url: str) -> tuple[str,str] | None:
             text=data.decode("utf-8-sig",errors="replace")
         else:
             return None
-        text=re.sub(r"\\s+", " ", text).strip()
+        text=re.sub(r"\s+", " ", text).strip()
         if len(text)<100:
             return None
         return result["url"],text[:9500]
