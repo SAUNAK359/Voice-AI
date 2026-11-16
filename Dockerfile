@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 fonts-
     && groupadd --gid 10001 rizzler && useradd --uid 10001 --gid 10001 -m rizzler
 COPY pyproject.toml README.md requirements-identity.txt ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir -e ".[voice,work]" -r requirements-identity.txt \
+RUN pip install --no-cache-dir -e ".[voice,work,mcp,postgres]" -r requirements-identity.txt \
     && mkdir -p /var/lib/rizzler /home/rizzler/.cache \
     && chown -R rizzler:rizzler /var/lib/rizzler /home/rizzler/.cache
 USER rizzler
