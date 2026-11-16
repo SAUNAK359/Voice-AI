@@ -77,7 +77,6 @@ class AgentRuntime:
         self.source_index=SourceIndex(store.root) if store is not None else None
 
     async def decide(self, client, state, tools):
-        from google.genai import types
         prompt=(
             "You are the autonomous Rizzler execution controller. Understand the user's goal; "
             "discover appropriate authorized tools and use multi-step plans as needed. "
@@ -93,15 +92,27 @@ class AgentRuntime:
                                            "effect":v.effect} for k,v in tools.items()})+
             "\nSupported outputs: "+json.dumps(sorted(DELIVERABLES))+
             "\nContext: "+json.dumps(state[-12:],ensure_ascii=False,default=str)[:16000])
+        from .work_sglang import enabled as use_sglang, decision as sglang_decision
         reserve_provider_call("voice")
-        async with asyncio.timeout(min(12,self.settings.request_timeout)):
-            response=await client.aio.models.generate_content(
-                model=self.settings.gemini_model,contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0,max_output_tokens=850,response_mime_type="application/json"))
-        raw=(getattr(response,"text","") or "").strip()
-        if len(raw)>6500:raise ValueError("Oversize decision")
-        data=json.loads(raw)
+        if client is None and use_sglang():
+            schema={"type":"object","properties":{
+                "calls":{"type":"array","items":{"type":"object","properties":{
+                    "name":{"type":"string"},
+                    "arguments":{"type":"object"}},
+                    "required":["name","arguments"],"additionalProperties":False}},
+                "answer":{"type":"string"}},
+                "required":["calls","answer"],"additionalProperties":False}
+            data=await sglang_decision(prompt,schema,max_tokens=1600,temperature=0)
+        else:
+            from google.genai import types
+            async with asyncio.timeout(min(12,self.settings.request_timeout)):
+                response=await client.aio.models.generate_content(
+                    model=self.settings.gemini_model,contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0,max_output_tokens=850,response_mime_type="application/json"))
+            raw=(getattr(response,"text","") or "").strip()
+            if len(raw)>6500:raise ValueError("Oversize decision")
+            data=json.loads(raw)
         if (not isinstance(data,dict) or set(data)!={"calls","answer"}
             or not isinstance(data["calls"],list) or len(data["calls"])>4
             or not isinstance(data["answer"],str) or len(data["answer"])>3000
@@ -125,8 +136,13 @@ class AgentRuntime:
                     "sources":outcome["sources"],
                     "verified":False,"provenance":outcome["provenance"]}
         if name=="research.search":
-            from .voice_tools import grounded_search
-            answer=await grounded_search(args["query"],self.settings)
+            if self.settings.gemini_api_key:
+                from .voice_tools import grounded_search
+                answer=await grounded_search(args["query"],self.settings)
+            else:
+                from .work_worker import grounded_research
+                answer=await grounded_research(args["query"])
+                answer["verified"]=False
             return {"text":answer["text"][:2600],"verified":answer.get("verified",False),
                     "sources":answer.get("sources",[])[:8]}
         if name=="math.solve":
@@ -182,11 +198,15 @@ class AgentRuntime:
         if not isinstance(text,str) or not 1<=len(text.strip())<=8000:
             raise ValueError("Invalid finalized user text")
         tools=discover(self.store,self.memory,self.visual)
-        if not self.settings.gemini_api_key and not self.client:
+        from .work_sglang import enabled as use_sglang
+        via_sglang = self.client is None and use_sglang()
+        if not self.settings.gemini_api_key and not self.client and not via_sglang:
             return {"tool":"agent","verified":False,"text":"Agent provider is not configured.",
                     "spoken":"The agent provider isn't configured."}
-        from google import genai
-        client=self.client or genai.Client(api_key=self.settings.gemini_api_key)
+        client=self.client
+        if client is None and not via_sglang:
+            from google import genai
+            client=genai.Client(api_key=self.settings.gemini_api_key)
         state=[{"role":"previous","text":str((history or [])[-5:])[:3000]},
                {"role":"current_user","text":text}]
         if source_ids and self.source_index:
@@ -287,5 +307,5 @@ class AgentRuntime:
                     "text":"Rizzler couldn't complete this turn. You can retry; existing jobs are unaffected.",
                     "spoken":"I couldn't complete that turn. Please try again."}
         finally:
-            if self.client is None:
+            if self.client is None and client is not None:
                 await client.aio.aclose()
