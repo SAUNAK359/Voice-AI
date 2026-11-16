@@ -77,7 +77,7 @@ def router(store: WorkStore, identity: Identity | None = None,
                 source_ids=data.get("source_ids",[]),
                 source_coverage=data.get("source_coverage","targeted"),
                 evidence_scope=data.get("evidence_scope","auto"))
-        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError) as exc:
+        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError):
             raise HTTPException(status_code=400,detail="Invalid job request") from None
         except Conflict:
             raise HTTPException(status_code=409,detail="Conflicting idempotency key")
