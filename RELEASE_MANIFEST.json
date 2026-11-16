@@ -1324,8 +1324,8 @@
     },
     {
       "path": "tests/test_v15_sglang_artifacts.py",
-      "git_blob_sha1": "ea4b28ac2f442e70b2ab45a9a737b9bb982b3b3d",
-      "bytes": 10224
+      "git_blob_sha1": "e0a8c53a500085fbbced9ba0a76dc24983cffb95",
+      "bytes": 10528
     },
     {
       "path": "tests/test_voice_core.cjs",
