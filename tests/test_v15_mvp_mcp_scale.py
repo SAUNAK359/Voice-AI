@@ -66,8 +66,9 @@ class MCPWorkContracts(unittest.TestCase):
                     source_ids=[entry["id"]])
 
     def test_mcp_server_is_import_lazy(self):
-        import rizzler.work_mcp
-        self.assertTrue(hasattr(rizzler.work_mcp,"create_mcp_server"))
+        import importlib
+        module=importlib.import_module("rizzler.work_mcp")
+        self.assertTrue(hasattr(module,"create_mcp_server"))
 
 
 class APISourceContracts(unittest.TestCase):
@@ -75,9 +76,10 @@ class APISourceContracts(unittest.TestCase):
         import importlib.util
         if importlib.util.find_spec("httpx") is None:
             self.skipTest("HTTP test client unavailable in dependency-free suite")
+        import importlib
         try:
-            from fastapi import FastAPI
-            from fastapi.testclient import TestClient
+            FastAPI = importlib.import_module("fastapi").FastAPI
+            TestClient = importlib.import_module("fastapi.testclient").TestClient
         except ImportError:
             self.skipTest("API extras absent in minimal offline suite")
         from rizzler.work_api import router
