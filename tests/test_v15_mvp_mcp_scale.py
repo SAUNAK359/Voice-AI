@@ -133,6 +133,54 @@ class WorkerScaleContracts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(peak[0],3)
         self.assertEqual(active[0],0)
 
+    async def test_real_ledger_leases_separate_users_but_serializes_each_owner(self):
+        from rizzler.work_worker import WorkWorker
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, {
+                "RIZZLER_AGENTIC_ENABLED": "1"}):
+            store = WorkStore(root)
+            first = store.submit("owner_001", "Create the first report", ["md"],
+                                 "concurrent_0001", [])
+            second = store.submit("owner_001", "Create the second report", ["md"],
+                                  "concurrent_0002", [])
+            other = store.submit("owner_002", "Create the independent report", ["md"],
+                                 "concurrent_0003", [])
+            a = store.claim("worker_A", lease_seconds=45)
+            b = store.claim("worker_B", lease_seconds=45)
+            self.assertEqual({a["id"], b["id"]}, {first["id"], other["id"]})
+            self.assertIsNone(store.claim("worker_C", lease_seconds=45))
+            store.fail(a["id"], "worker_A", a["fence"], "test_failure")
+            c = store.claim("worker_C", lease_seconds=45)
+            self.assertEqual(c["id"], second["id"])
+            self.assertNotEqual(c["owner"], b["owner"])
+
+    async def test_cancelling_real_worker_stops_inflight_specialist(self):
+        from rizzler.work_worker import WorkWorker
+        from unittest.mock import AsyncMock
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, {
+                "RIZZLER_AGENTIC_ENABLED": "1"}):
+            store = WorkStore(root)
+            job = store.submit("owner_001", "Create a detailed report", ["md"],
+                               "interrupt_0001", [])
+            started = asyncio.Event()
+            stopped = asyncio.Event()
+
+            async def running_specialist(*args, **kwargs):
+                started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    stopped.set()
+
+            with patch("rizzler.work_specialists.execute_specialists",
+                       new=running_specialist):
+                worker = asyncio.create_task(WorkWorker(store).once())
+                await asyncio.wait_for(started.wait(), timeout=3)
+                worker.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await asyncio.wait_for(worker, timeout=3)
+            self.assertTrue(stopped.is_set())
+            self.assertEqual(store.get("owner_001", job["id"])["status"], "failed")
+
     async def test_invalid_worker_capacity_fails_closed(self):
         for value in ("0","9","3.3","-1","unknown"):
             with patch.dict(os.environ,{"RIZZLER_WORK_CONCURRENCY":value}):
