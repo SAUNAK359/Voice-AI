@@ -54,3 +54,42 @@ def diagnosis(exc: BaseException) -> str:
     if isinstance(exc,ConnectionError):
         return "provider_transport_unavailable"
     return "unspecified_agent_failure"
+
+
+
+def snapshot(store, owner: str, jid: str) -> dict:
+    """Authoritative bounded state shared by agentic planning and recovery.
+
+    This state contains no raw upload contents, arbitrary exception messages,
+    private file paths, model reasoning traces or provider credentials.
+    """
+    job=store.get(owner,jid)
+    plan=store.job_plan(owner,jid)
+    steps=store.agent_steps(owner,jid)
+    status=[]
+    for row in steps[:20]:
+        status.append({"agent":row["agent"],"status":row["status"],
+                       "attempt":row["attempt"],
+                       "diagnosis":row.get("error_code","")[:80],
+                       "has_verified_checkpoint":bool(row.get("result_sha256"))})
+    events=store.events(owner,jid)
+    recent=[{"stage":x["stage"][:55],"message":x["message"][:120]}
+            for x in events[-10:] if x["stage"] in (
+                "agent_failed","agent_diagnosis","agent_completed","planning",
+                "research","analysis","rendering","validating","completed")]
+    approved=store.cognitive_preflight(owner,jid)
+    if approved is not None:
+        from .work_preflight import safe_summary
+        cognitive=safe_summary(approved)
+        cognitive={key:cognitive[key] for key in
+                   ("goal","deliverables","evidence_policy","success_criteria",
+                    "prerequisites") if key in cognitive}
+    else:
+        cognitive={"status":"not_yet_approved"}
+    return {"state_version":1,
+            "job_status":job["status"],
+            "approved_requirements":cognitive,
+            "active_plan":[{"agent":x["id"],"requires":x["depends_on"]}
+                           for x in plan.get("steps",[])[:20]],
+            "specialists":status,
+            "recent_events":recent}
