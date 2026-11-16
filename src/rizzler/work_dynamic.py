@@ -85,8 +85,10 @@ def validate(graph: dict, payload: dict) -> dict:
         raise ValueError("The registered dataset tool supports one dataset")
     if ("sql_analytics" in by_name) != bool(uploads):
         raise ValueError("Source dataset must be analyzed; no imaginary dataset")
-    if "data_analysis" in payload["deliverables"] and not uploads:
-        raise ValueError("Analysis requires an uploaded dataset")
+    if ("data_analysis" in payload["deliverables"] and not uploads
+            and ("research" not in by_name or
+                 payload.get("evidence_scope")=="uploaded_only")):
+        raise ValueError("Analysis requires an uploaded or externally sourced dataset")
     if payload.get("evidence_scope","auto")=="uploaded_only" and "research" in by_name:
         raise ValueError("Uploaded-only evidence scope forbids external research")
     if payload.get("evidence_scope","auto")=="uploaded_only" and "research" in payload["deliverables"]:
@@ -95,6 +97,8 @@ def validate(graph: dict, payload: dict) -> dict:
     if (needs_narrative and payload.get("evidence_scope")=="uploaded_only"
             and "orchestrator" not in by_name):
         raise ValueError("Narrative deliverables require evidence-aware content synthesis")
+    if payload.get("evidence_scope") == "external_allowed" and "research" not in by_name:
+        raise ValueError("Explicit external research scope requires a research specialist")
     if "research" in payload["deliverables"] and "research" not in by_name:
         raise ValueError("Requested grounded research is missing")
     if not CONTENT.intersection(by_name) and not uploads:

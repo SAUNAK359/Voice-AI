@@ -26,7 +26,7 @@ jobs:
           RIZZLER_WORK_ORCHESTRATOR: deepagents
           RIZZLER_SEARCH_BACKEND: searxng
           RIZZLER_WORK_LLM_BACKEND: sglang
-        run: python -m pytest -q tests/test_v16_deepagents.py tests/test_v16_searxng.py tests/test_v16_shared_memory.py tests/test_v16_provider_retry.py
+        run: python -m pytest -q tests/test_v16_deepagents.py tests/test_v16_searxng.py tests/test_v16_shared_memory.py tests/test_v16_provider_retry.py tests/test_v17_graph_exec.py tests/test_v17_live_handoff_memory.py tests/test_v17_structured_research.py tests/test_v17_provider_faults.py tests/test_v17_external_analysis.py tests/test_v17_original_request.py
       - name: Run synthetic multi-agent end-to-end artifact acceptance
         run: python scripts/qualify_mvp.py --offline --output /tmp/rizzler-mvp-acceptance
       - name: Validate the canonical native Kaggle notebook

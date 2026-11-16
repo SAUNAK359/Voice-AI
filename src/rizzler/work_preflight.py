@@ -111,7 +111,7 @@ SAFE_GRAPH_ERRORS = frozenset((
     "Uploaded-only evidence scope forbids external research",
     "Research deliverable incompatible with uploaded-only evidence scope",
     "Narrative deliverables require evidence-aware content synthesis",
-    "Requested grounded research is missing", "No source of report content",
+    "Requested grounded research is missing", "Explicit external research scope requires a research specialist", "No source of report content",
     "Content synthesis must see all gathered evidence",
     "Renderer has no evidence or content predecessor",
     "Rendering must wait for its selected inputs",

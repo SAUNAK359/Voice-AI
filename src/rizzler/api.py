@@ -484,7 +484,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         "RIZZLER_NATIVE_LIVE","1").lower() not in ("0","false","no")
     if native_live_enabled:
         from .live_native import register_native_live
-        register_native_live(app,cfg,sessions,identity,work)
+        register_native_live(app,cfg,sessions,identity,work,memory)
 
     app.mount('/static', StaticFiles(directory=WEB), name='static')
 

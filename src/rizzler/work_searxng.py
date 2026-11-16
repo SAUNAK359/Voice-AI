@@ -188,7 +188,11 @@ async def research(objective: str) -> dict:
                           role="Rizzler source-constrained research specialist")
     urls=[item["url"] for item in selected_records]
     records=[{k:v for k,v in item.items() if k!="excerpt"} for item in selected_records]
-    return {"text":result+"\n\n## Source provenance\n"+ "\n".join(
+    # Limited original excerpts are retained in the *private job checkpoint*
+    # for numeric-cell provenance. These are not publicly exposed in lineage.
+    passages=[{"url":item["url"],"excerpt":item["excerpt"][:2500]}
+              for item in selected_records[:12]]
+    return {"evidence_passages":passages,"text":result+"\n\n## Source provenance\n"+ "\n".join(
                 "- "+url for url in urls),
             "sources":urls,"evidence":records,
             "evidence_summary":{

@@ -10,7 +10,8 @@ from .contracts import DELIVERABLES
 DECLARATIONS=[
             {"name":"work_list","description":"List my owned queued, active and completed projects.","parameters":{"type":"OBJECT","properties":{}}},
             {"name":"work_status","description":"Get the actual saved status and verified artifacts of my project.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"}},"required":["job_id"]}},
-            {"name":"work_submit","description":"Queue substantial autonomous work for the Work Engine; respond immediately with a job receipt. Construct a complete objective, success criteria and expected output formats.","parameters":{"type":"OBJECT","properties":{"objective":{"type":"STRING"},"deliverables":{"type":"ARRAY","items":{"type":"STRING"}},"source_coverage":{"type":"STRING","enum":["targeted","complete"]}},"required":["objective","deliverables","source_coverage"]}},
+            {"name":"work_submit","description":"Queue substantial autonomous work for the Work Engine; respond immediately with a job receipt. Construct a complete objective, success criteria and expected output formats.","parameters":{"type":"OBJECT","properties":{"objective":{"type":"STRING"},"deliverables":{"type":"ARRAY","items":{"type":"STRING"}},"source_coverage":{"type":"STRING","enum":["targeted","complete"]},"evidence_scope":{"type":"STRING","enum":["auto","uploaded_only","external_allowed"]}},"required":["objective","deliverables","source_coverage"]}},
+            {"name":"memory_recall","description":"Retrieve my own explicitly stored, encrypted preferences relevant to this question; memories are not authoritative source facts.","parameters":{"type":"OBJECT","properties":{"query":{"type":"STRING"}},"required":["query"]}},
             {"name":"source_search","description":"Retrieve grounded excerpts from my selected indexed attachments, with source and passage references.","parameters":{"type":"OBJECT","properties":{"query":{"type":"STRING"}},"required":["query"]}},
             {"name":"preview_open","description":"Open an owned completed job artifact in the visual preview panel.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"}},"required":["job_id"]}},
             {"name":"preview_slide","description":"Navigate the user's visual preview to a specific slide number in an owned completed presentation.","parameters":{"type":"OBJECT","properties":{"job_id":{"type":"STRING"},"slide":{"type":"INTEGER"}},"required":["job_id","slide"]}},
@@ -24,6 +25,7 @@ _LIMITS = {
     "work_status": {"job_id": (32, 32)},
     "work_submit": {"objective": (3, 5000)},
     "source_search": {"query": (1, 2000)},
+    "memory_recall": {"query": (3, 600)},
     "preview_open": {"job_id": (32, 32)},
     "preview_slide": {"job_id": (32, 32)},
     "preview_highlight": {"job_id": (32, 32), "text": (1, 160)},

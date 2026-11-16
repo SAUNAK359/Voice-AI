@@ -131,7 +131,7 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
     old_ir=context["artifact_ir"]
     attempt=store.root/"attempts"/owner/jid/str(fence)/"quality_repair"/str(revision)
     attempt.mkdir(parents=True,exist_ok=True,mode=0o700)
-    table=None
+    table=context.get("research_table")
     if payload.get("uploads"):
         from .work_skills import read_dataset
         table=await asyncio.to_thread(read_dataset,store.upload(owner,payload["uploads"][0]))

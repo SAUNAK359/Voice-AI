@@ -22,6 +22,17 @@ def transient_code(exc: BaseException) -> str | None:
         return "provider_rate_limited"
     if status in (500, 502, 503, 504):
         return "provider_unavailable"
+    # Local SGLang emits deliberately sanitized exception codes. Preserve
+    # their status without ever parsing arbitrary provider response bodies.
+    if cls == "SGLangProviderError":
+        code=str(exc)
+        if code == "sglang_http_status_429":
+            return "provider_rate_limited"
+        if code in {"sglang_http_status_500","sglang_http_status_502",
+                    "sglang_http_status_503","sglang_http_status_504",
+                    "sglang_transport_or_schema_error:ConnectError",
+                    "sglang_transport_or_schema_error:ReadTimeout"}:
+            return "provider_unavailable"
     if cls in ("ServerError", "ServiceUnavailableError"):
         return "provider_unavailable"
     if cls in ("RateLimitError", "ResourceExhausted"):

@@ -134,6 +134,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     retries+=1
         if spec.name == "research":
             context["text"], context["sources"] = result["text"], result["sources"]
+            if result.get("table"):
+                from .work_structured_research import as_table
+                table=as_table(result["table"])
+                from .work_skills import analyze
+                context["research_table"]=table
+                context["summary"]=analyze(*table)
         elif spec.name == "sql_analytics":
             context["summary"] = result["summary"]
         elif spec.name == "orchestrator":
@@ -237,20 +243,28 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["sources"],context["summary"])
 
     if dynamic:
-        # Execute every currently ready node, not a hardcoded stage sequence.
-        # Dependencies are supplied by the model, then independently validated.
-        pending=set(planned)
-        renderers=set(("powerpoint","word","excel","pdf_visual"))
-        while pending:
-            ready=[node["id"] for node in graph["steps"] if
-                   node["id"] in pending and dependencies[node["id"]].issubset(finished)]
-            if not ready:
-                raise ValueError("Dynamic Work graph is stuck")
+        # A LangGraph StateGraph now owns the execution-wave transitions.
+        # WorkStore continues to own leases, checkpoints, decisions and commits:
+        # crash recovery replays only steps lacking a verified WorkStore receipt.
+        async def run_wave(ready):
+            renderers={"powerpoint","word","excel","pdf_visual"}
             if ((renderers.intersection(ready) or "quality" in ready) and
                     "artifact_ir" not in context):
                 prepare_artifact_ir()
             await stage_group(ready)
-            pending.difference_update(ready)
+
+        if os.environ.get("RIZZLER_WORK_ORCHESTRATOR","legacy").lower()=="deepagents":
+            from .work_graph_exec import execute_dependency_graph
+            await execute_dependency_graph(graph, run_wave)
+        else:
+            pending=set(planned)
+            while pending:
+                ready=[node["id"] for node in graph["steps"] if
+                       node["id"] in pending and dependencies[node["id"]].issubset(finished)]
+                if not ready:
+                    raise ValueError("Dynamic Work graph is stuck")
+                await run_wave(ready)
+                pending.difference_update(ready)
     else:
         # Read-only migration path for already accepted V11 DAGs.
         await stage_group(("research", "sql_analytics"))
@@ -273,6 +287,17 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         found = await researcher(payload["objective"])
         if isinstance(found, dict):
             if set(found).issuperset({"text","sources"}):
+                # Source-led typed extraction is a separate model decision.
+                # Do not invent tabular data from mere model-generated prose.
+                if not payload.get("uploads") and formats.intersection(
+                        {"xlsx","csv","png","svg","pptx","data_analysis"}):
+                    from .work_structured_research import extract
+                    table=await extract(payload["objective"],
+                                        found.get("evidence_passages") or [])
+                    if table is not None:
+                        found["table"]=table
+                    elif formats.intersection({"xlsx","csv","png","svg","data_analysis"}):
+                        raise ValueError("No source-verified structured rows available")
                 return found
             raise ValueError("Research provider returned malformed evidence")
         text, sources = found
@@ -313,7 +338,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
     # One independent format-specific renderer, reusing the existing vetted
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
-        table = None
+        table = context.get("research_table")
         if payload.get("uploads"):
             from .work_skills import read_dataset
             table = await asyncio.to_thread(read_dataset,

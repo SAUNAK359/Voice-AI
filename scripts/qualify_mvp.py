@@ -122,7 +122,7 @@ async def complete_job(store, *, offline: bool, payload: dict, key: str):
     return evidence
 
 
-async def run(output: Path, offline: bool) -> dict:
+async def run(output: Path, offline: bool, stock_market: bool = False) -> dict:
     output.mkdir(parents=True,exist_ok=True)
     old=os.environ.copy()
     if offline:
@@ -148,6 +148,25 @@ async def run(output: Path, offline: bool) -> dict:
                       "deliverables":["research","pptx","pdf","md"],
                       "uploads":[],"evidence_scope":"external_allowed"}
         cases=[("finance_multi_format",data_job),("trade_research_to_presentation",research_job)]
+        if stock_market:
+            if offline:
+                raise ValueError("Stock-market acceptance requires real research providers")
+            cases.append(("stock_market_research_data_artifacts", {
+                "objective": (
+                    "Research the most recent five completed trading sessions "
+                    "for a major Indian equity index using dated public sources. "
+                    "Create a professional stakeholder briefing with opening, "
+                    "high, low, closing and volume observations where verified, "
+                    "explain the relevant market news and distinguish potential "
+                    "effects from observed price changes. Include dates, units, "
+                    "source links and explicit missing-data limitations. "
+                    "Deliver an editable presentation, sourced Excel workbook, "
+                    "PDF and Markdown report, packaged as a manifest-verified ZIP."
+                ),
+                "deliverables":["research","data_analysis","pptx","xlsx",
+                                "pdf","md","zip"],
+                "uploads":[], "evidence_scope":"external_allowed",
+            }))
         results=[]
         for name,payload in cases:
             key="acceptance_"+secrets.token_hex(12)
@@ -197,8 +216,10 @@ def main():
     parser.add_argument("--output",type=Path,default=Path("mvp_acceptance"))
     parser.add_argument("--offline",action="store_true",
                         help="Run verifiable synthetic fixtures without model calls")
+    parser.add_argument("--stock-market", action="store_true",
+                        help="Include live research-to-structured-data market acceptance")
     args=parser.parse_args()
-    report=asyncio.run(run(args.output.resolve(),args.offline))
+    report=asyncio.run(run(args.output.resolve(),args.offline,args.stock_market))
     print(json.dumps({"completed":report["completed"],"total":report["total"],
         "mode":report["mode"],
         "cases":[{"scenario":x["scenario"],"status":x["job"]["status"],
