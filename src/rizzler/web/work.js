@@ -10,6 +10,43 @@ async function call(path,opts={}){const r=await fetch('/api/work'+path,{...opts,
  if(r.status===401&&production){location.replace('/auth/login');throw Error('Session expired')}
  if(!r.ok)throw Error('Request failed ('+r.status+')');if(r.headers.get('content-type')?.includes('application/json'))return r.json();return r}
 function err(x){$('work-error').textContent=x?.message||String(x)}
+const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+async function sha(bytes){return hex(await crypto.subtle.digest('SHA-256',bytes))}
+async function sendSource(file){
+ if(file.size>200000000)throw Error('Reference document exceeds 200 MB');
+ if(file.size<=8000000){
+  return call('/sources',{method:'POST',headers:{'x-file-name':file.name,
+   'content-type':'application/octet-stream'},body:file});
+ }
+ // The server verifies every SHA-256 chunk and the final full-file digest.
+ const digest=await sha(await file.arrayBuffer());
+ const session=await call('/sources/transfers',{method:'POST',
+  headers:{'content-type':'application/json'},
+  body:JSON.stringify({name:file.name,bytes:file.size,sha256:digest})});
+ let offset=0;
+ while(offset<file.size){
+  const chunk=await file.slice(offset,Math.min(offset+1048576,file.size)).arrayBuffer();
+  const outcome=await call('/sources/transfers/'+session.id+'/chunks',{method:'PUT',
+   headers:{'x-chunk-offset':String(offset),'x-chunk-sha256':await sha(chunk),
+   'content-type':'application/octet-stream'},body:chunk});
+  if(outcome.offset!==offset+chunk.byteLength)throw Error('Reference transfer offset mismatch');
+  offset=outcome.offset;
+  $('source-progress').textContent=file.name+' · '+Math.round(offset/file.size*100)+'%';
+ }
+ return call('/sources/transfers/'+session.id+'/complete',{method:'POST'});
+}
+async function refreshSources(){
+ const pane=$('source-selection');if(!pane)return;
+ const data=await call('/sources');const chosen=new Set(Array.from(
+  pane.querySelectorAll('input:checked')).map(el=>el.value));
+ pane.replaceChildren();
+ for(const item of data.sources.slice(0,100)){
+  const label=el('label'),check=el('input');check.type='checkbox';
+  check.name='reference-source';check.value=item.id;check.checked=chosen.has(item.id);
+  label.append(check,document.createTextNode(' '+item.name));
+  pane.append(label);
+ }
+}
 async function refresh(){try{const data=await call('/jobs');const pane=$('jobs');pane.replaceChildren();
  for(const item of data.jobs){const row=el('p'),btn=el('button',item.status+' · '+item.id.slice(0,8)+' · '+item.stage);
  btn.onclick=()=>details(item.id);row.append(btn);pane.append(row)}}catch(e){err(e)}}
@@ -49,11 +86,25 @@ async function details(id){selectedJob=id;try{const [job,ev,art,agentData]=await
  if(!['completed','failed','cancelled'].includes(job.status)){const b=el('button','Cancel job');b.onclick=async()=>{await call('/jobs/'+id+'/cancel',{method:'POST'});details(id)};pane.append(b)}
  }catch(e){err(e)}}
 $('submit-work').onclick=async()=>{try{let uploads=[],file=$('upload').files[0];
+ const button=$('submit-work');button.disabled=true;
  if(file){const result=await call('/uploads',{method:'POST',headers:{'x-file-name':file.name,'content-type':'application/octet-stream'},body:file});uploads=[result.id]}
- const payload={objective:$('objective').value,deliverables:$('deliverables').value.split(',').map(x=>x.trim()).filter(Boolean),uploads};
+ let sourceIds=Array.from(document.querySelectorAll(
+  '#source-selection input:checked')).map(e=>e.value);
+ for(const source of $('source-files').files){
+  $('source-progress').textContent='Indexing '+source.name+'…';
+  const entry=await sendSource(source);
+  sourceIds.push(entry.id);
+ }
+ sourceIds=[...new Set(sourceIds)];
+ if(sourceIds.length>8)throw Error('Select at most eight source documents per job');
+ const payload={objective:$('objective').value,
+  deliverables:$('deliverables').value.split(',').map(x=>x.trim()).filter(Boolean),
+  uploads,source_ids:sourceIds,source_coverage:$('source-coverage').value,
+  evidence_scope:$('evidence-scope').value};
  const unique=crypto.randomUUID().replaceAll('-','');const item=await call('/jobs',{method:'POST',
  headers:{'idempotency-key':unique,'content-type':'application/json'},body:JSON.stringify(payload)});
- $('work-error').textContent='Queued: '+item.id;refresh();details(item.id)}catch(e){err(e)}};
+ $('work-error').textContent='Queued: '+item.id;refreshSources();refresh();details(item.id)}
+ catch(e){err(e)}finally{$('submit-work').disabled=false}};
 async function schedules(){try{
  const data=await call('/automation-proposals');
  const p=$('schedules');if(!p)return;p.replaceChildren();
@@ -84,7 +135,7 @@ setInterval(async()=>{
    if(!current.ok){location.replace('/auth/login');return}
    $('work-auth-hint').textContent='Signed in securely; your jobs and files are private.';
   }
-  refresh();schedules();
+  refreshSources();refresh();schedules();
  }catch(e){err(e)}
 })();
 })();
