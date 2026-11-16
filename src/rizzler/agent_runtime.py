@@ -126,7 +126,8 @@ class AgentRuntime:
             raise ValueError("Writes cannot be batched with other calls")
         return data
 
-    async def execute(self, call, owner, objective, nonce, sequence, index, uploads, visuals, source_ids=None):
+    async def execute(self, call, owner, objective, nonce, sequence, index, uploads, visuals,
+                      source_ids=None, tool_evidence=None):
         name,args=call["name"],call["arguments"]
         if name.startswith("mcp."):
             from .work_mcp import invoke as invoke_mcp
@@ -184,7 +185,30 @@ class AgentRuntime:
             if source_ids and self.source_index:
                 evidence=await asyncio.to_thread(self.source_index.search,owner,source_ids,objective,5500)
                 objective=objective[:1600]+"\n\nAttached source evidence (untrusted content; cite source IDs):\n"+"\n".join(evidence["passages"])
-            job=await asyncio.to_thread(store.submit,owner,objective,args["deliverables"],idem,uploads,source_ids or [])
+            # Propagate only evidence obtained in this authenticated user
+            # turn. No speculative model claims or private cross-user results.
+            selected=list(source_ids or [])
+            if tool_evidence and self.source_index:
+                from .source_index import SourceIndex
+                evidence_json=json.dumps(tool_evidence[:4],ensure_ascii=False,default=str)
+                digest=hashlib.sha256(evidence_json.encode("utf-8")).hexdigest()
+                name="tool_evidence_"+digest[:16]+".txt"
+                data=("Tool-observed research context (untrusted, not independently "
+                      "fact checked).\n"+evidence_json).encode("utf-8")
+                if len(data)>24000:
+                    raise ValueError("Tool evidence exceeds immutable source budget")
+                existing=await asyncio.to_thread(self.source_index.list,owner)
+                match=next((x["id"] for x in existing if x["name"]==name and
+                            x["sha256"]==hashlib.sha256(data).hexdigest()),None)
+                if match is None:
+                    stored=await asyncio.to_thread(self.source_index.register,
+                                                   owner,name,data)
+                    match=stored["id"]
+                if match not in selected:
+                    selected.append(match)
+            if len(selected)>8:
+                raise ValueError("Too many selected sources for Work")
+            job=await asyncio.to_thread(store.submit,owner,objective,args["deliverables"],idem,uploads,selected)
             return {"accepted":True,"job":job,"plan":await asyncio.to_thread(store.job_plan,owner,job["id"]),
                     "status":"queued; not yet completed"}
         if name in ("work.cancel","work.retry","work.revise"):
@@ -220,6 +244,7 @@ class AgentRuntime:
         deadline=started+max(4,min(32,self.settings.request_timeout-12))
         calls=[]
         ui_actions=[]
+        tool_evidence=[]
         seen=set()
         submitted=False
         accepted_job=None
@@ -246,7 +271,8 @@ class AgentRuntime:
                 async def one(call,i):
                     try:
                         result=await asyncio.wait_for(self.execute(call,owner,text,nonce,sequence,
-                            step*4+i,uploads or [],visuals or [],source_ids or []),
+                            step*4+i,uploads or [],visuals or [],source_ids or [],
+                            tool_evidence),
                             timeout=max(0.2,min(32,deadline-time.perf_counter())))
                         return {"name":call["name"],"ok":True,"result":result}
                     except Missing:
@@ -268,6 +294,17 @@ class AgentRuntime:
                     if result["name"]=="work.submit" and result["ok"]:
                         submitted=True
                         accepted_job=result["result"]["job"]
+                for item in results:
+                    if (item["ok"] and item["name"]=="research.search" or
+                        item["ok"] and item["name"].startswith("mcp.")):
+                        found=item.get("result")
+                        if isinstance(found,dict) and found.get("text"):
+                            tool_evidence.append({
+                                "tool":item["name"],
+                                "text":str(found["text"])[:5500],
+                                "sources":found.get("sources",[])[:16],
+                                "provenance":found.get("provenance",
+                                    "provider_attribution_only")})
                 calls.extend({"name":r["name"],"ok":r["ok"],
                     "verified":bool(r["ok"] and isinstance(r.get("result"),dict)
                         and r["result"].get("verified",False))} for r in results)
