@@ -21,7 +21,8 @@ def inspect_artifact(path: Path, kind: str, *,
                      bundle_receipts: dict | None = None,
                      artifact_ir: ArtifactIR | None = None,
                      dataset_summary: dict | None = None,
-                     visual_required: bool = False) -> dict:
+                     visual_required: bool = False,
+                     source_workbook_path: Path | None = None) -> dict:
     receipt = verify_artifact(path, kind)
     checks = ["sha256_receipt_valid", "format_structure_valid"]
     details: dict = {}
@@ -61,19 +62,24 @@ def inspect_artifact(path: Path, kind: str, *,
         from openpyxl import load_workbook
         wb = load_workbook(path, read_only=True, data_only=False)
         try:
-            if "Summary" not in wb.sheetnames:
+            report_prefix="Rizzler " if "Rizzler Summary" in wb.sheetnames else ""
+            report_name=lambda value: report_prefix+value
+            if report_name("Summary") not in wb.sheetnames:
                 raise ValueError("XLSX summary worksheet missing")
             if dataset_rows is not None:
-                if "Data" not in wb.sheetnames:
+                if report_name("Data") not in wb.sheetnames:
                     raise ValueError("XLSX source data worksheet missing")
-                observed = wb["Data"].max_row - 1
+                observed = wb[report_name("Data")].max_row - 1
                 if observed != dataset_rows:
                     raise ValueError("XLSX source row count differs from computed dataset")
                 details["dataset_rows"] = observed
-                if "Checks" not in wb.sheetnames:
+                if report_name("Checks") not in wb.sheetnames:
                     raise ValueError("Dataset formula-check worksheet missing")
-                formula = (f"=ROWS(Data!A2:A{dataset_rows+1})" if dataset_rows else "=COUNTA(Data!A2:A2)")
-                if wb["Checks"]["B2"].value != formula or wb["Checks"]["C2"].value != dataset_rows:
+                data_name=("'Rizzler Data'" if report_prefix else "Data")
+                formula = (f"=ROWS({data_name}!A2:A{dataset_rows+1})" if dataset_rows
+                           else f"=COUNTA({data_name}!A2:A2)")
+                if (wb[report_name("Checks")]["B2"].value != formula or
+                    wb[report_name("Checks")]["C2"].value != dataset_rows):
                     raise ValueError("Workbook source-row formula or expected value mismatch")
                 checks.append("formula_contract_matches_independent_row_count")
             details["sheets"] = wb.sheetnames
@@ -83,7 +89,8 @@ def inspect_artifact(path: Path, kind: str, *,
         from .work_formula import verify_workbook
         details["formula_validation"] = verify_workbook(
             path, dataset_summary=dataset_summary,
-            require_recalculation=visual_required and dataset_rows is not None)
+            require_recalculation=visual_required and dataset_rows is not None,
+            source_path=source_workbook_path)
         checks.append("independently_evaluated_formula_contract")
         if visual_required and dataset_rows is not None:
             checks.append("spreadsheet_recalculated_by_independent_engine")
@@ -214,11 +221,13 @@ def inspect_artifact(path: Path, kind: str, *,
             from openpyxl import load_workbook
             wb = load_workbook(path, read_only=True)
             try:
-                present = [r[0] for r in wb["Summary"].iter_rows(
+                report_prefix="Rizzler " if "Rizzler Summary" in wb.sheetnames else ""
+                present = [r[0] for r in wb[report_prefix+"Summary"].iter_rows(
                            min_row=3, min_col=1, max_col=1, values_only=True)]
-                actual_sources = ([r[0] for r in wb["Sources"].iter_rows(values_only=True)]
-                                  if "Sources" in wb else [])
-                cells = list(wb["Summary"].iter_rows(min_row=3,min_col=2,max_col=2,values_only=True))
+                actual_sources = ([r[0] for r in wb[report_prefix+"Sources"].iter_rows(values_only=True)]
+                                  if report_prefix+"Sources" in wb else [])
+                cells = list(wb[report_prefix+"Summary"].iter_rows(
+                    min_row=3,min_col=2,max_col=2,values_only=True))
                 matches=[cell[0] in (body, "'"+body)
                          or (not body and cell[0] in (None,""))
                          for cell,(_,body) in zip(cells,artifact_ir.sections)]
