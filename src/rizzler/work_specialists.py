@@ -325,9 +325,10 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 from .work_presentation import make_presentation
                 await make_presentation(working, payload["objective"], ir, table=table)
             else:
-                await asyncio.to_thread(render_one, kind, working, ir.title,
-                                        ir.content, table, list(ir.sources),
-                                        source_path)
+                renderer_args=(kind,working,ir.title,ir.content,table,list(ir.sources))
+                if source_path is not None:
+                    renderer_args+= (source_path,)
+                await asyncio.to_thread(render_one,*renderer_args)
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
