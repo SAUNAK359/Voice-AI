@@ -234,27 +234,44 @@ class WorkWorker:
                 await asyncio.sleep(12)
                 self.store.renew(jid, self.identity, fence, lease_seconds=45)
         guard = asyncio.create_task(heartbeat(), name="work-lease-heartbeat")
+        execution = None
+        failure = None
         try:
             from .work_specialists import execute_specialists
-            await execute_specialists(
-                self.store, claim, self.identity, self.composer, self.researcher)
+            execution = asyncio.create_task(
+                execute_specialists(
+                    self.store, claim, self.identity, self.composer, self.researcher),
+                name="work-specialist-execution")
+            done, _ = await asyncio.wait(
+                (guard, execution), return_when=asyncio.FIRST_COMPLETED)
+            if guard in done:
+                # A lost lease or cancelled job must stop the provider workflow,
+                # even when the specialist has not reached its next checkpoint.
+                guard.result()
+                raise RuntimeError("Work lease monitor unexpectedly stopped")
+            await execution
         except (StaleLease, InterruptedError):
-            self.store.fail(jid, self.identity, fence, "cancelled_or_stale")
+            failure = "cancelled_or_stale"
         except asyncio.CancelledError:
-            # Never silently mark a interrupted worker's job as successful.
-            self.store.fail(jid, self.identity, fence, "worker_interrupted")
+            failure = "worker_interrupted"
             raise
         except Exception as exc:
-            # Log only the exception class and a stable category. Raw provider
-            # errors can contain prompts, credentials, and user document text.
+            # Never persist provider exceptions containing user data or secrets.
             from .work_cognition import failure_code
-            code=failure_code(exc)
+            failure = failure_code(exc)
             logger.error("Work job %s failed: %s (%s)",
-                         jid,code,type(exc).__name__)
-            self.store.fail(jid,self.identity,fence,code)
+                         jid, failure, type(exc).__name__)
         finally:
+            # Stop any in-flight specialist before recording job failure. A
+            # cancelled task must never race a successful artifact publication.
             guard.cancel()
-            await asyncio.gather(guard, return_exceptions=True)
+            if execution is not None:
+                execution.cancel()
+            await asyncio.gather(
+                *(task for task in (guard, execution) if task is not None),
+                return_exceptions=True)
+            if failure is not None:
+                self.store.fail(jid, self.identity, fence, failure)
         return True
 
 def worker_parallelism() -> int:
