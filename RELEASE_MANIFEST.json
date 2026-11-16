@@ -1349,8 +1349,8 @@
     },
     {
       "path": "tests/test_v15_mvp_mcp_scale.py",
-      "git_blob_sha1": "22679983e0e88dcfbf25d2c37239e96c344eef7c",
-      "bytes": 13343
+      "git_blob_sha1": "acfaf5f12ea03383c945b3d8b6c4f357ca9cd04e",
+      "bytes": 13346
     },
     {
       "path": "tests/test_v15_sglang_artifacts.py",
