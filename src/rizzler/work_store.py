@@ -794,7 +794,11 @@ class WorkStore:
                 lease_owner=NULL,lease_until=?,error_code=?,updated=?
                 WHERE id=? AND fence=?""",
                 (now+delay_seconds,code,now,jid,fence))
-            self._settle_agents(c,jid,"retry")
+            # Keep completed specialist receipts intact. Running specialists
+            # are eligible for re-execution under the next fenced attempt.
+            c.execute("""UPDATE agent_steps SET status='queued',updated=?,
+                        error_code='provider_retry_pending'
+                        WHERE job_id=? AND status='running'""",(now,jid))
             self._event(c,jid,"retry_scheduled",
                 "Temporary provider failure; delayed safe restart")
 
