@@ -184,11 +184,19 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 result = await run_agent(spec)
                 finished.add(spec.name)
                 return result
-        # TaskGroup cancels and joins sibling tasks on failure. Native threads
-        # continue only inside their isolated, fenced attempt directory.
-        async with asyncio.TaskGroup() as group:
-            for spec in selected:
-                group.create_task(bounded(spec), name="specialist-" + spec.name)
+        # Collect independent siblings without cancelling their work when one
+        # specialist fails. Dependencies remain model-authored and guarded.
+        # Completed siblings persist fenced checkpoints for restart recovery.
+        tasks=[asyncio.create_task(bounded(spec),name="specialist-"+spec.name)
+               for spec in selected]
+        outcomes=await asyncio.gather(*tasks,return_exceptions=True)
+        errors=[result for result in outcomes if isinstance(result,BaseException)]
+        if errors:
+            # Do not mask external cancellation or a lease takeover.
+            for exc in errors:
+                if isinstance(exc,asyncio.CancelledError):
+                    raise exc
+            raise ExceptionGroup("Independent specialist failures",errors)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
     def prepare_artifact_ir():
