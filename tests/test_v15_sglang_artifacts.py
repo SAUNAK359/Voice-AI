@@ -6,11 +6,12 @@ artifact APIs. Live multimodal/research quality requires separate acceptance.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest import IsolatedAsyncioTestCase, TestCase
+from unittest import IsolatedAsyncioTestCase, TestCase, skipUnless
 from unittest.mock import patch
 
 from rizzler.work_decision_plane import diagnosis
@@ -18,6 +19,7 @@ from rizzler.work_ir import compile_ir
 from rizzler.work_sglang import config, decision, complete, SGLangProviderError
 
 
+@skipUnless(importlib.util.find_spec("httpx"),"Optional HTTP transport unavailable")
 class SGLangAgentTests(IsolatedAsyncioTestCase):
     async def test_structured_decisions_use_real_compatible_http_shape(self):
         import httpx
@@ -82,6 +84,7 @@ class SGLangAgentTests(IsolatedAsyncioTestCase):
 
 
 class ArtifactFidelityTests(TestCase):
+    @skipUnless(importlib.util.find_spec("docx"),"Optional Word renderer unavailable")
     def test_native_docx_preserves_inline_whitespace_and_has_no_markup_leak(self):
         from rizzler.work_skills import render_one
         from rizzler.work_quality import inspect_artifact
@@ -101,6 +104,7 @@ class ArtifactFidelityTests(TestCase):
             qa=inspect_artifact(out,"docx",artifact_ir=ir,visual_required=False)
             self.assertTrue(qa["passed"])
 
+    @skipUnless(importlib.util.find_spec("openpyxl"),"Optional spreadsheet renderer unavailable")
     def test_source_xlsx_formulas_survive_without_conversion(self):
         from openpyxl import Workbook,load_workbook
         from rizzler.work_skills import read_dataset,analyze,render_one
