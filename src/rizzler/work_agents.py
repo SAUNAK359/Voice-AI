@@ -87,7 +87,8 @@ def gate_agent(name: str, result: dict, required: set[str]) -> dict:
             if not isinstance(evidence,list) or len(evidence)>24 or any(
                 not isinstance(item,dict) or item.get("url") not in urls
                 or item.get("content_verified") is not False
-                or item.get("attribution") != "provider_grounding"
+                or item.get("attribution") not in (
+                    "provider_grounding", "direct_public_https_fetch")
                 for item in evidence):
                 raise ValueError("Research provenance does not match provider evidence")
         checks = ["nonempty_grounded_https_sources", "substantive_findings",

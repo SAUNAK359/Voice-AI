@@ -38,10 +38,14 @@ def configuration() -> str:
         local=host == "localhost"
     trusted=set(h.strip() for h in os.environ.get(
         "RIZZLER_SEARXNG_TRUSTED_HOSTS", "").split(",") if h.strip())
+    try:
+        port=parsed.port
+    except ValueError:
+        raise SearchUnavailable("invalid_searxng_port") from None
     if (parsed.scheme not in ("http", "https")
             or not host or parsed.username or parsed.password
             or parsed.query or parsed.fragment or parsed.path not in ("", "/")
-            or parsed.port not in (None, 80, 443, 8080, 8081)
+            or port not in (None, 80, 443, 8080, 8081)
             or (parsed.scheme == "http" and not (local or host in trusted))
             or (not local and host not in trusted and parsed.scheme != "https")):
         raise SearchUnavailable("invalid_searxng_private_endpoint")
