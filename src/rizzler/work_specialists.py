@@ -338,15 +338,22 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 break
             except ValueError as exc:
                 if attempt_no:
-                    if quality_mode()!="agentic":
+                    from .work_decision_plane import diagnosis
+                    code=diagnosis(exc)
+                    # Only a content-equivalence IR mismatch can safely be
+                    # delegated to the global model-guided repair pass.
+                    # Structural defects, formulas, sources, and visual faults
+                    # still fail the specialist immediately.
+                    deferred=(quality_mode()=="agentic" or
+                        (context.get("cognitive_preflight") is not None and
+                         code=="artifact_provenance_mismatch"))
+                    if not deferred:
                         raise
-                    # Stage verifies file integrity only; substantive defects
-                    # are explicitly deferred to the model-driven final QA,
-                    # which either repairs and revalidates or fails the job.
-                    verify_artifact(working,kind)
-                    report={"kind":kind,"passed":True,
-                            "checks":["staging_receipt_valid"],
-                            "deferred_to_quality":str(exc)[:350]}
+                    report = await asyncio.to_thread(
+                        inspect_artifact, working, kind, dataset_rows=dataset_rows,
+                        artifact_ir=None, dataset_summary=context["summary"],
+                        visual_required=strict,source_workbook_path=source_path)
+                    report["deferred_to_quality"]=code
                     break
                 repairs += 1
                 working.unlink(missing_ok=True)
