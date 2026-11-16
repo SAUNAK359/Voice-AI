@@ -198,6 +198,7 @@ async def compose_storyboard(objective: str, ir, table=None, *, client=None):
 def render_storyboard(path: Path, story: dict, *, table=None):
     """Build editable native text, shapes and dataset-backed charts."""
     from pptx import Presentation
+    from .work_rich_docs import clean as clean_inline
     from pptx.util import Inches,Pt
     from pptx.dml.color import RGBColor
     from pptx.enum.text import MSO_AUTO_SIZE
@@ -223,7 +224,7 @@ def render_storyboard(path: Path, story: dict, *, table=None):
         tf.word_wrap=True
         tf.auto_size=MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
         tf.margin_left=tf.margin_right=Inches(0.025)
-        p=tf.paragraphs[0];p.text=str(words)
+        p=tf.paragraphs[0];p.text=clean_inline(str(words))
         p.font.name="Aptos";p.font.size=Pt(size)
         p.font.bold=bold;p.font.color.rgb=rgb(color)
         return obj
@@ -306,10 +307,10 @@ def render_storyboard(path: Path, story: dict, *, table=None):
         foot_color="white" if dark else "muted"
         txt(slide,f"{n:02d}  /  {len(story['slides']):02d}",11.52,7.08,1.1,.22,9,
             False,foot_color)
-        notes=spec["notes"]+"\n\n"+ "\n".join(spec["citations"])
+        notes=clean_inline(spec["notes"])+"\n\n"+ "\n".join(spec["citations"])
         try:slide.notes_slide.notes_text_frame.text=notes[:15000]
         except (AttributeError,ValueError):pass
-    prs.core_properties.title=story["title"]
+    prs.core_properties.title=clean_inline(story["title"])
     prs.core_properties.author="Rizzler V15 Cognitive Work Studio"
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     prs.save(path)
