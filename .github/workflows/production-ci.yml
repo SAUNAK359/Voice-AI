@@ -2,7 +2,7 @@ name: Rizzler Production Configuration
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
 permissions:
   contents: read
 jobs:

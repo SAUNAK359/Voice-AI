@@ -286,7 +286,8 @@ async def generate_preflight(payload: dict, config, *, client=None) -> dict:
     Every revision is model-authored. Code verifies permissions and structure;
     it never fills in missing workflow steps or bypasses missing evidence.
     """
-    if not config.gemini_api_key and client is None:
+    from .work_sglang import enabled as use_sglang
+    if not config.gemini_api_key and client is None and not use_sglang():
         raise PreflightRejected("provider_credentials_unavailable")
     tools = [{"id": name, "role": s.role, "formats": list(s.formats),
               "target_seconds": s.sla_seconds} for name, s in SPECS.items()]

@@ -119,7 +119,8 @@ def csv_escape(value):
 
 
 def render_one(kind: str, output: Path, title: str, content: str,
-               table: tuple[list[str],list[list[str]]] | None, source_urls: list[str]):
+               table: tuple[list[str],list[list[str]]] | None, source_urls: list[str],
+               source_path: Path | None = None):
     """Create one real file. Optional rendering dependencies are isolated."""
     output.parent.mkdir(parents=True,exist_ok=True)
     sections=sectioned(content)
@@ -170,9 +171,13 @@ def render_one(kind: str, output: Path, title: str, content: str,
                 output, title, sections, table, source_urls)
         else:
             from .work_design import render_docx, render_pptx, render_xlsx, render_pdf
-            {"docx": render_docx, "pptx": render_pptx,
-             "xlsx": render_xlsx, "pdf": render_pdf}[kind](
-                output, title, sections, table, source_urls)
+            if kind == "xlsx":
+                render_xlsx(output, title, sections, table, source_urls,
+                            source_path=source_path)
+            else:
+                {"docx": render_docx, "pptx": render_pptx,
+                 "pdf": render_pdf}[kind](
+                    output, title, sections, table, source_urls)
     elif kind in ("png","svg"):
         if not table: raise ValueError("Charts require real uploaded data")
         metrics=analyze(*table)["numeric"]

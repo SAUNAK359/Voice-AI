@@ -27,6 +27,11 @@ async def structured_decision(
     All model sessions are owner-agnostic: authorization is checked by the
     calling WorkStore before any execution. Callers never pass API keys as text.
     """
+    from .work_sglang import enabled as use_sglang, decision as sglang_decision
+    if client is None and use_sglang():
+        reserve_provider_call(service)
+        return await sglang_decision(prompt,schema,max_tokens=max_tokens,
+                                     temperature=temperature)
     if not cfg.gemini_api_key and client is None:
         raise RuntimeError("Cognitive decision requires an authorized Gemini provider")
     own = client is None
@@ -249,6 +254,9 @@ def failure_code(exc: BaseException) -> str:
         "ResearchPlanningError":"research_planning_invalid",
         "CognitiveDecisionError":"model_decision_invalid",
         "PlanningOutputError":"planning_output_invalid",
+        "PreflightRejected":"preflight_review_rejected",
+        "PreflightContractError":"preflight_contract_invalid",
+        "SGLangProviderError":"sglang_provider_unavailable",
         "TimeoutError":"provider_or_agent_timeout",
         "PermissionError":"permission_denied",
         "StaleLease":"worker_lease_stale",

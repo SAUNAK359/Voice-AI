@@ -733,8 +733,10 @@ class WorkStore:
             self._event(c,jid,"agent_completed",agent+" specialist completed")
 
     def agent_error(self, jid: str, worker: str, fence: int, agent: str,
-                    code: str = "agent_execution_failed"):
-        if not isinstance(code, str) or len(code) > 80:
+                    code: str = "agent_execution_failed", detail: str = ""):
+        if (not isinstance(code, str) or len(code) > 80 or
+            not isinstance(detail,str) or len(detail)>80 or
+            (detail and not re.fullmatch(r"[a-z0-9_]+",detail))):
             raise ValueError("Invalid agent failure category")
         with self._tx() as c:
             self._active(c,jid,worker,fence)
@@ -743,6 +745,8 @@ class WorkStore:
                          WHERE job_id=? AND agent=? AND status='running'""",
                       (now,now,code,jid,agent))
             self._event(c,jid,"agent_failed",agent+" specialist failed")
+            if detail:
+                self._event(c,jid,"agent_diagnosis",agent+" | "+code+" | "+detail)
 
     @staticmethod
     def _settle_agents(c, jid, terminal):

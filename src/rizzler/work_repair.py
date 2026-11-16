@@ -20,14 +20,13 @@ from .work_skills import render_one
 from .work_visual import quality_mode
 
 async def _revision(ir, objective, defects, dataset_summary, attempt_number):
-    from google import genai
-    from google.genai import types
     from .work_dynamic import WorkModelConfig
+    from .work_sglang import enabled as use_sglang, decision as sglang_decision
     from .work_reasoning import config,use
     from .production_guard import reserve_provider_call
     cfg=WorkModelConfig.from_env()
-    if not cfg.gemini_api_key:raise RuntimeError("Autonomous repair requires Gemini")
-    client=genai.Client(api_key=cfg.gemini_api_key)
+    if not cfg.gemini_api_key and not use_sglang():
+        raise RuntimeError("Autonomous repair requires an inference provider")
     prompt=("You are the independent Rizzler artifact repair agent. The objective is to "
         "repair actual reported defects, preserving all trustworthy source facts, "
         "numerical measures, names and citations. NEVER invent missing evidence. "
@@ -43,6 +42,23 @@ async def _revision(ir, objective, defects, dataset_summary, attempt_number):
         "Independent QA defects:\n"+json.dumps(defects,ensure_ascii=False)[:6500]+"\n"
         "Verified dataset summary (immutable facts):\n"+
         json.dumps(dataset_summary or {},ensure_ascii=False,default=str)[:3000])
+    if use_sglang():
+        reserve_provider_call("work")
+        data=await sglang_decision(prompt,{
+            "type":"object",
+            "properties":{"title":{"type":"string"},"content":{"type":"string"}},
+            "required":["title","content"],"additionalProperties":False},
+            max_tokens=4500,temperature=0.2)
+        title,body=data.get("title"),data.get("content")
+        if type(title) is not str or type(body) is not str or not 5<=len(body)<=18000:
+            raise ValueError("Invalid revised artifact text")
+        candidate=compile_ir(title[:120],body,list(ir.sources),dataset_summary)
+        if candidate.sha256==ir.sha256:
+            raise ValueError("Repair model returned unchanged artifact")
+        return candidate
+    from google import genai
+    from google.genai import types
+    client=genai.Client(api_key=cfg.gemini_api_key)
     try:
         reserve_provider_call("work")
         with use("high"):
@@ -84,7 +100,9 @@ async def _verify_bundle(store,owner,checkpoint,context,payload):
                 dataset_rows=context["summary"]["rows"] if context["summary"] else None,
                 bundle_receipts=bundle,artifact_ir=context["artifact_ir"],
                 dataset_summary=context["summary"],
-                visual_required=quality_mode()!="structural")
+                visual_required=quality_mode()!="structural",
+                source_workbook_path=(store.upload(owner,payload["uploads"][0])
+                    if kind=="xlsx" and payload.get("uploads") else None))
             if quality_mode()=="agentic" and kind in ("pptx","docx","xlsx","pdf"):
                 visual=await review(store.root,owner,path,kind,receipt.sha256,payload["objective"])
                 artifact["agentic_visual_review"]=visual
@@ -123,17 +141,21 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
         path=attempt/(kind+"."+kind)
         use_v15=(kind=="pptx" and os.environ.get("RIZZLER_V15_PRESENTATION",
                    "1" if os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
-                   and os.environ.get("GEMINI_API_KEY") else "0")=="1")
+                   and (os.environ.get("GEMINI_API_KEY") or
+                         os.environ.get("RIZZLER_WORK_LLM_BACKEND")=="sglang") else "0")=="1")
         if use_v15:
             from .work_presentation import make_presentation
             await make_presentation(path,payload["objective"],ir,table=table)
         else:
+            source_path = (store.upload(owner, payload["uploads"][0])
+                           if kind == "xlsx" and payload.get("uploads") else None)
             await asyncio.to_thread(render_one,kind,path,ir.title,ir.content,
-                                    table,list(ir.sources))
+                                    table,list(ir.sources),source_path)
         new_receipt=verify_artifact(path,kind)
         await asyncio.to_thread(inspect_artifact,path,kind,
             dataset_rows=context["summary"]["rows"] if context["summary"] else None,
-            artifact_ir=ir,dataset_summary=context["summary"],visual_required=False)
+            artifact_ir=ir,dataset_summary=context["summary"],visual_required=False,
+            source_workbook_path=source_path)
         proposed[kind]=(path,new_receipt)
     if "zip" in context["receipts"]:
         import zipfile

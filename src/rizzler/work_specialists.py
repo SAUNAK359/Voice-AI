@@ -87,8 +87,10 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     raise
                 except Exception as exc:
                     from .work_cognition import failure_code
+                    from .work_decision_plane import diagnosis
                     category=failure_code(exc)
-                    try:store.agent_error(jid,worker_id,fence,spec.name,category)
+                    specific=diagnosis(exc)
+                    try:store.agent_error(jid,worker_id,fence,spec.name,category,specific)
                     except Exception:pass
                     can_recover=(
                         retries<1 and spec.name!="quality"
@@ -96,7 +98,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                         and category not in ("provider_budget_exhausted",
                                              "permission_denied","worker_lease_stale")
                         and os.environ.get("RIZZLER_V15_RECOVERY",
-                            "1" if os.environ.get("GEMINI_API_KEY")
+                            "1" if (os.environ.get("GEMINI_API_KEY") or
+                                     os.environ.get("RIZZLER_WORK_LLM_BACKEND")=="sglang")
                             and os.environ.get("RIZZLER_AGENTIC_ENABLED")=="1"
                             else "0")=="1"
                     )
@@ -106,7 +109,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     from .work_dynamic import WorkModelConfig
                     try:
                         advice=await decide_stage_recovery(
-                            spec.name,spec.role,category,1-retries,
+                            spec.name,spec.role,category+" / "+specific,1-retries,
                             payload["objective"],WorkModelConfig.from_env())
                     except Exception:
                         # A failed model recovery decision never authorizes a
@@ -184,11 +187,19 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 result = await run_agent(spec)
                 finished.add(spec.name)
                 return result
-        # TaskGroup cancels and joins sibling tasks on failure. Native threads
-        # continue only inside their isolated, fenced attempt directory.
-        async with asyncio.TaskGroup() as group:
-            for spec in selected:
-                group.create_task(bounded(spec), name="specialist-" + spec.name)
+        # Collect independent siblings without cancelling their work when one
+        # specialist fails. Dependencies remain model-authored and guarded.
+        # Completed siblings persist fenced checkpoints for restart recovery.
+        tasks=[asyncio.create_task(bounded(spec),name="specialist-"+spec.name)
+               for spec in selected]
+        outcomes=await asyncio.gather(*tasks,return_exceptions=True)
+        errors=[result for result in outcomes if isinstance(result,BaseException)]
+        if errors:
+            # Do not mask external cancellation or a lease takeover.
+            for exc in errors:
+                if isinstance(exc,asyncio.CancelledError):
+                    raise exc
+            raise ExceptionGroup("Independent specialist failures",errors)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
     def prepare_artifact_ir():
@@ -295,6 +306,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             table = await asyncio.to_thread(read_dataset,
                                              store.upload(owner, payload["uploads"][0]))
         working = attempt / (kind + "." + kind)
+        source_path = (store.upload(owner, payload["uploads"][0])
+                       if kind == "xlsx" and payload.get("uploads") else None)
         ir = context["artifact_ir"]
         dataset_rows = context["summary"]["rows"] if context["summary"] else None
         # Exactly one deterministic regeneration on a recoverable output
@@ -305,19 +318,23 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 kind == "pptx" and
                 os.environ.get("RIZZLER_V15_PRESENTATION",
                     "1" if os.environ.get("RIZZLER_AGENTIC_ENABLED") == "1"
-                    and os.environ.get("GEMINI_API_KEY") else "0") == "1"
+                    and (os.environ.get("GEMINI_API_KEY") or
+                         os.environ.get("RIZZLER_WORK_LLM_BACKEND")=="sglang") else "0") == "1"
             )
             if use_v15:
                 from .work_presentation import make_presentation
                 await make_presentation(working, payload["objective"], ir, table=table)
             else:
-                await asyncio.to_thread(render_one, kind, working, ir.title,
-                                        ir.content, table, list(ir.sources))
+                renderer_args=(kind,working,ir.title,ir.content,table,list(ir.sources))
+                if source_path is not None:
+                    renderer_args+= (source_path,)
+                await asyncio.to_thread(render_one,*renderer_args)
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
                     artifact_ir=ir, dataset_summary=context["summary"],
-                    visual_required=strict)
+                    visual_required=strict,
+                    source_workbook_path=source_path)
                 break
             except ValueError as exc:
                 if attempt_no:
