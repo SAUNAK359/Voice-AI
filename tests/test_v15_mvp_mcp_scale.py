@@ -72,6 +72,9 @@ class MCPWorkContracts(unittest.TestCase):
 
 class APISourceContracts(unittest.TestCase):
     def test_http_job_submission_reaches_source_coverage_ledger(self):
+        import importlib.util
+        if importlib.util.find_spec("httpx") is None:
+            self.skipTest("HTTP test client unavailable in dependency-free suite")
         try:
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
