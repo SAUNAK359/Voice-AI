@@ -119,14 +119,16 @@ class MCPExecution(unittest.IsolatedAsyncioTestCase):
                   "provenance":"configured_mcp_server_unverified"}])
             job=result["job"]
             specification=store.specification("owner_mcp_001",job["id"])
-            sources=specification["payload"]["source_ids"]
+            sources=specification["source_ids"]
             self.assertEqual(len(sources),1)
             self.assertIn("tool_evidence_",SourceIndex(root).list("owner_mcp_001")[0]["name"])
             with self.assertRaises(Exception):
                 store.get("another_owner",job["id"])
 
 
-@unittest.skipUnless(importlib.util.find_spec("fastapi"),"FastAPI test dependency missing")
+@unittest.skipUnless(importlib.util.find_spec("fastapi") and
+                     importlib.util.find_spec("httpx"),
+                     "FastAPI TestClient dependencies missing")
 class WorkAPIHandoff(unittest.TestCase):
     def test_selected_source_documents_reach_202_job(self):
         from fastapi import FastAPI
@@ -152,8 +154,8 @@ class WorkAPIHandoff(unittest.TestCase):
                 self.assertEqual(res.status_code,202,res.text)
                 specification=store.specification("owner_api_01",res.json()["id"])
                 self.assertEqual(specification["payload"]["source_ids"],[doc["id"]])
-                self.assertEqual(specification["payload"]["source_coverage"],"complete")
-                self.assertEqual(len(specification["payload"]["source_refs"]),1)
+                self.assertEqual(specification["source_coverage"],"complete")
+                self.assertEqual(len(specification["source_refs"]),1)
                 forbidden=client.post("/api/work/jobs",headers={
                     "x-verified-owner":"other_owner",
                     "idempotency-key":"other_owner_source_job_002"},
@@ -275,7 +277,8 @@ class ResearchArtifactMVP(unittest.IsolatedAsyncioTestCase):
             for artifact in files:
                 path,receipt=store.artifact("owner_mvp_01",artifact["id"])
                 self.assertGreater(path.stat().st_size,10)
-                self.assertTrue(inspect_artifact(path,artifact["kind"])["passed"])
+                from rizzler.artifacts import verify_artifact
+                self.assertTrue(verify_artifact(path,artifact["kind"]).verified)
             self.assertTrue(store.quality_report("owner_mvp_01",job["id"])
                             ["quality"]["passed"])
 
