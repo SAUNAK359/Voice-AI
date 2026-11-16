@@ -249,6 +249,10 @@ def failure_code(exc: BaseException) -> str:
         return next((x for x in codes if x!="agent_execution_failed"),
                     "agent_execution_failed")
     cls=type(exc).__name__
+    from .work_provider_retry import transient_code
+    transient=transient_code(exc)
+    if transient is not None:
+        return transient
     return {
         "ResearchEvidenceUnavailable":"research_evidence_missing",
         "ResearchPlanningError":"research_planning_invalid",

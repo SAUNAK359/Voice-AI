@@ -162,7 +162,14 @@ async def plan_with_deepagents(
     except (TimeoutError, asyncio.TimeoutError) as exc:
         raise DeepAgentPlanningError("work_planning_timeout") from exc
     except Exception as exc:
-        # Provider errors may carry private content; expose class only.
+        # Preserve a sanitized retry classification, never provider response
+        # bodies, API keys or model-written text.
+        from .work_provider_retry import transient_code, retry_delay
+        code = transient_code(exc)
+        if code:
+            error=DeepAgentPlanningError(code)
+            error.retry_after_seconds=retry_delay(exc)
+            raise error from None
         raise DeepAgentPlanningError(
             "work_planning_provider_" + type(exc).__name__[:50]) from None
     if not accepted:

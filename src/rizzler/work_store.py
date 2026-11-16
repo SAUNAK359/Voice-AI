@@ -530,13 +530,14 @@ class WorkStore:
         """The scheduler invokes this only within an atomic claim transaction."""
         while True:
             row = c.execute("""SELECT j.* FROM jobs j WHERE
-                (j.status='queued' OR (j.status='running' AND j.lease_until < ?))
+                ((j.status='queued' AND j.lease_until <= ?) OR
+                 (j.status='running' AND j.lease_until < ?))
                 AND NOT EXISTS (
                     SELECT 1 FROM jobs active
                     WHERE active.owner=j.owner AND active.id<>j.id
                       AND active.status='running' AND active.lease_until>=?
                 )
-                ORDER BY j.created LIMIT 1""",(now,now)).fetchone()
+                ORDER BY j.created LIMIT 1""",(now,now,now)).fetchone()
             if row is None:
                 return None
             jid = row["id"]
@@ -773,6 +774,29 @@ class WorkStore:
         c.execute("""UPDATE agent_steps SET status=?,updated=?,finished=?,
                      error_code=? WHERE job_id=? AND status='running'""",
                   (terminal,now,now,"parent_"+terminal,jid))
+
+    def defer(self, jid, worker, fence, code="provider_unavailable",
+              delay_seconds=60):
+        """Persist a fenced retry after a transient upstream fault.
+
+        Queued jobs use lease_until as their earliest re-claim timestamp.
+        No second scheduling table, worker-local timer or duplicate job is
+        created. Existing 3-attempt policy remains the hard retry ceiling.
+        """
+        if (code not in ("provider_rate_limited", "provider_unavailable")
+                or not isinstance(delay_seconds,(int,float))
+                or not 5 <= delay_seconds <= 300):
+            raise ValueError("Invalid bounded provider deferral")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            now=time.time()
+            c.execute("""UPDATE jobs SET status='queued',stage='planning',
+                lease_owner=NULL,lease_until=?,error_code=?,updated=?
+                WHERE id=? AND fence=?""",
+                (now+delay_seconds,code,now,jid,fence))
+            self._settle_agents(c,jid,"retry")
+            self._event(c,jid,"retry_scheduled",
+                "Temporary provider failure; delayed safe restart")
 
     def fail(self,jid,worker,fence,error_code="execution_error"):
         with self._tx() as c:

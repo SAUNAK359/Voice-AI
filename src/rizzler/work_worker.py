@@ -264,6 +264,15 @@ class WorkWorker:
             failure = failure_code(exc)
             logger.error("Work job %s failed: %s (%s)",
                          jid, failure, type(exc).__name__)
+            if failure in ("provider_rate_limited", "provider_unavailable"):
+                from .work_provider_retry import retry_delay
+                try:
+                    self.store.defer(
+                        jid, self.identity, fence, failure, retry_delay(exc))
+                    failure = None
+                except (StaleLease, InterruptedError):
+                    # Existing worker cancellation/lease fencing stays authoritative.
+                    failure = "cancelled_or_stale"
         finally:
             # Stop any in-flight specialist before recording job failure. A
             # cancelled task must never race a successful artifact publication.
