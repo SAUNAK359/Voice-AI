@@ -128,8 +128,10 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
             from .work_presentation import make_presentation
             await make_presentation(path,payload["objective"],ir,table=table)
         else:
+            source_path = (store.upload(owner, payload["uploads"][0])
+                           if kind == "xlsx" and payload.get("uploads") else None)
             await asyncio.to_thread(render_one,kind,path,ir.title,ir.content,
-                                    table,list(ir.sources))
+                                    table,list(ir.sources),source_path)
         new_receipt=verify_artifact(path,kind)
         await asyncio.to_thread(inspect_artifact,path,kind,
             dataset_rows=context["summary"]["rows"] if context["summary"] else None,
