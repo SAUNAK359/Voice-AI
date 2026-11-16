@@ -1,5 +1,41 @@
 # Rizzler V16 implementation and release plan
 
+## Implementation checkpoint
+
+This branch is **NOT PRODUCTION QUALIFIED**. It is an incremental working
+migration, not a completed deployment.
+
+Committed V16 components:
+- Deep Agents + LangGraph planning adapter with model-authored validated DAGs,
+  opt-in via `RIZZLER_WORK_ORCHESTRATOR=deepagents`.
+- Preserved original owner-qualified WorkStore leases, checkpoints and
+  artifact publication; bounded provider 429/5xx deferral now persists
+  next-attempt timestamps rather than creating duplicate jobs.
+- Private SearXNG JSON discovery, DNS-pinned direct HTTPS retrieval and
+  direct-fetch provenance, paired with local SGLang reasoning.
+- Live controller instructions distinguish task submission from standalone
+  search, but successful live voice handoff is still unverified.
+- Same encrypted, opt-in owner memory is now readable by the Work Agent
+  as **untrusted preferences**, not automatically retained external facts.
+- Docker image optional framework dependencies installed; single-host
+  private SGLang/SearXNG Compose overlay and CI configuration checks.
+- Offline regression contracts for invalid DAG repair, keyless search
+  configuration, owner-isolated shared memory and fenced provider retry.
+
+Unimplemented or not yet validated:
+- Full dynamic tool-using Deep Agents across every specialist (current runtime
+  delegates graph authoring, then reuses existing vetted executor).
+- Mem0/Qdrant semantic long-term memory, provenance-aware source claim
+  verification, structured sourced web-to-Excel ingestion, sophisticated
+  PPTX layout and artifact-design repair.
+- Actual GPU-backed SGLang tool calls, self-hosted SearXNG live search,
+  Gemini Live user handoff, load/fault injection, backup/restore, and
+  full downloadable multi-artifact package review.
+- No measured or guaranteed 400 ms Gemini Live audio TTFT.
+
+**Deployment instruction: do not merge or deploy as production until P0–P6
+release gates below are backed by logs and downloadable artifacts.**
+
 ## Repository audit / baseline
 
 Source of truth: the V15 implementation at `b6bd61c1`, reviewed against
@@ -108,7 +144,7 @@ TTFT; measure P50/P95/P99 under realistic network conditions.
 - Run Postgres checkpointer and WorkStore transaction invariants against
   concurrent workers; do not create an independent second queue.
 - Gate: cross-owner tests, deletion/retention tests, recovery across restarts.
-- **Current state:** not implemented.
+- **Current state:** encrypted shared-memory bridge implemented; Mem0 migration and semantic-memory qualification remain unimplemented.
 
 ### P5 — Native artifact intelligence
 - Data-first typed table/schema layer; DuckDB and formula validation.
