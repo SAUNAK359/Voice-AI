@@ -287,8 +287,12 @@ def render_xlsx(path: Path, title: str, sections, table, sources,
     data_ref="'Rizzler Data'" if native_source else "Data"
     ws.append([title])
     ws.append(["Section", "Content"])
+    from .work_rich_docs import clean as clean_inline
     for heading, body in sections:
-        ws.append([_safe_cell(heading), _safe_cell(body)])
+        # Spreadsheet cells have no Markdown renderer: convert inline style
+        # markers to text without altering genuine currency or math operators.
+        ws.append([_safe_cell(clean_inline(heading)),
+                   _safe_cell(clean_inline(body))])
     ws.freeze_panes = "B3"
     ws.column_dimensions["A"].width = 31
     ws.column_dimensions["B"].width = 88
