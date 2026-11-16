@@ -1,0 +1,45 @@
+# Optional GPU inference overlay. Keep SGLang on the private Docker network.
+# docker compose -f compose.production.yml -f compose.sglang.yml up -d
+# The SGLang API is never published directly to the internet.
+services:
+  sglang:
+    image: ${RIZZLER_SGLANG_IMAGE:-lmsysorg/sglang:latest}
+    restart: unless-stopped
+    command: ["sglang", "serve", "${RIZZLER_SGLANG_MODEL:?Set an instruction-capable SGLang model}",
+              "--host", "0.0.0.0", "--port", "30000",
+              "--api-key", "${RIZZLER_SGLANG_API_KEY:?Set an independent inference API key}"]
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - model_cache:/root/.cache/huggingface
+    shm_size: "8gb"
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:30000/health',timeout=5)"]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+      start_period: 180s
+
+  worker:
+    environment:
+      RIZZLER_WORK_LLM_BACKEND: sglang
+      RIZZLER_SGLANG_BASE_URL: http://sglang:30000/v1
+      RIZZLER_SGLANG_TRUSTED_HTTP_HOSTS: sglang
+      RIZZLER_SGLANG_MODEL: ${RIZZLER_SGLANG_MODEL:?}
+      RIZZLER_SGLANG_API_KEY: ${RIZZLER_SGLANG_API_KEY:?}
+      RIZZLER_WORK_CONCURRENCY: ${RIZZLER_WORK_CONCURRENCY:-1}
+      RIZZLER_V15_COGNITIVE_PREFLIGHT: "on"
+      RIZZLER_V15_RECOVERY: "1"
+      RIZZLER_ARTIFACT_QA: strict
+    depends_on:
+      sglang:
+        condition: service_healthy
