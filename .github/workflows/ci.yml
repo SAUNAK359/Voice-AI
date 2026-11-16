@@ -1,7 +1,7 @@
 name: Rizzler CI
 on:
   push:
-    branches: [main]
+    branches: [main, feat/v15-unified-cognition-artifact-reliability]
   pull_request:
   workflow_dispatch:
 permissions:
