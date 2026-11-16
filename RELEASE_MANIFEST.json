@@ -29,24 +29,24 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3755,
-      "git_blob_sha1": "29ad8e14051c11375ab2b403a85a7a7f184ae572",
+      "bytes": 3804,
+      "git_blob_sha1": "1a977f325db9df7f5c7fa1f992ce354c2de64ded",
       "sha256": "c47f9ff542162e99238baabc8cce1702460324b582e2ea10debc659f5000dfa0"
     },
     {
       "path": ".github/workflows/ci.yml",
-      "bytes": 2253,
-      "git_blob_sha1": "92fcaa6b3b0d148a6a010473738b218529a2b219"
+      "bytes": 2302,
+      "git_blob_sha1": "6a0992f3385004e47c3735aa806fb1fa6336ec73"
     },
     {
       "path": ".github/workflows/codeql.yml",
-      "bytes": 486,
-      "git_blob_sha1": "1092fc1aebb48ae56b44c9db5b3f7fb95bb79e8e"
+      "bytes": 535,
+      "git_blob_sha1": "d59869da5b67e676c77be2c88648ae1dd850c17a"
     },
     {
       "path": ".github/workflows/production-ci.yml",
-      "bytes": 2905,
-      "git_blob_sha1": "28efb0149219ce2df59bb9e60d79289c0ff7c3b2"
+      "bytes": 2954,
+      "git_blob_sha1": "2f0beca74a45363cdb77d2f19918d0ebdc74055f"
     },
     {
       "path": ".github/workflows/v15-ui-ci.yml",
@@ -931,8 +931,8 @@
     },
     {
       "path": "src/rizzler/work_cognition.py",
-      "bytes": 13773,
-      "git_blob_sha1": "4a5a3e9779bf9491f5fa47f9cd2479a7d34b69e7"
+      "bytes": 13954,
+      "git_blob_sha1": "81a2b5b0d1a67b36015ef29e81e51801b7ca56f1"
     },
     {
       "path": "src/rizzler/work_corpus.py",
@@ -1018,8 +1018,8 @@
     },
     {
       "path": "src/rizzler/work_sglang.py",
-      "git_blob_sha1": "c4463848d63565fab4df6ae7bf46411361c4fcfa",
-      "bytes": 5538
+      "git_blob_sha1": "bccfc97ccc55b7d325259659c2c09ef05f8cd4a9",
+      "bytes": 6134
     },
     {
       "path": "src/rizzler/work_skills.py",
