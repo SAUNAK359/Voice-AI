@@ -223,7 +223,9 @@ class WorkWorker:
         self.identity=secrets.token_hex(12)
 
     async def once(self) -> bool:
-        claim = self.store.claim(self.identity, lease_seconds=45)
+        # SQLite/Postgres claims may block on transactions. Never block the
+        # same event loop that handles concurrent jobs and model streaming.
+        claim = await asyncio.to_thread(self.store.claim,self.identity,45)
         if not claim:
             return False
         jid, fence = claim["id"], claim["fence"]
@@ -232,7 +234,8 @@ class WorkWorker:
         async def heartbeat():
             while True:
                 await asyncio.sleep(12)
-                self.store.renew(jid, self.identity, fence, lease_seconds=45)
+                await asyncio.to_thread(self.store.renew,jid,self.identity,fence,
+                                        lease_seconds=45)
         guard = asyncio.create_task(heartbeat(), name="work-lease-heartbeat")
         try:
             from .work_specialists import execute_specialists
@@ -257,12 +260,52 @@ class WorkWorker:
             await asyncio.gather(guard, return_exceptions=True)
         return True
 
-async def serve(store,interval=1):
-    worker=WorkWorker(store)
-    while True:
-        store.schedule_due()
-        if not await worker.once():
-            await asyncio.sleep(interval)
+async def serve(store, interval=1, *, concurrency=None, stop=None):
+    """Bounded concurrent claims with per-owner isolation and fenced recovery.
+
+    A separate identity is created per task. Claim concurrency is controlled
+    transactionally by WorkStore, not by an in-memory process-local flag.
+    Running jobs are allowed to finish during a graceful stop; abrupt process
+    failures are recovered via the existing lease reaper.
+    """
+    if concurrency is None:
+        concurrency=int(os.environ.get("RIZZLER_WORK_CONCURRENCY","2"))
+    if type(concurrency) is not int or not 1<=concurrency<=8:
+        raise ValueError("RIZZLER_WORK_CONCURRENCY must be between 1 and 8")
+    if type(interval) not in (int,float) or not 0.05<=interval<=30:
+        raise ValueError("Invalid Work poll interval")
+    active=set()
+    try:
+        while stop is None or not stop.is_set():
+            await asyncio.to_thread(store.schedule_due)
+            # Launch independent claim attempts up to the operator-set limit.
+            while len(active)<concurrency:
+                task=asyncio.create_task(WorkWorker(store).once(),
+                                         name="rizzler-work-slot")
+                active.add(task)
+            done,_=await asyncio.wait(active,timeout=interval,
+                                      return_when=asyncio.FIRST_COMPLETED)
+            no_claim=False
+            for task in done:
+                active.remove(task)
+                no_claim=not task.result() or no_claim
+            if no_claim:
+                # Don't hammer the database when no new work was claimable.
+                if stop is None:
+                    await asyncio.sleep(interval)
+                else:
+                    try:
+                        await asyncio.wait_for(stop.wait(),timeout=interval)
+                    except asyncio.TimeoutError:
+                        pass
+        # Graceful shutdown respects already-started user work.
+        if active:
+            await asyncio.gather(*active)
+    except asyncio.CancelledError:
+        # Kubernetes/systemd abrupt shutdown: do not misreport success.
+        for task in active:task.cancel()
+        await asyncio.gather(*active,return_exceptions=True)
+        raise
 
 
 def main():
