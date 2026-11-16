@@ -17,14 +17,16 @@ LINK = re.compile(r"\[([^\]]+)\]\((https://[^\s)]+)\)")
 
 
 def clean(value: str) -> str:
-    return EM.sub(lambda m:m.group(0).strip("*"+chr(96)), LINK.sub(r"\1",value)).strip()
+    # Preserve whitespace around formatting spans; stripping each run glued
+    # words together and made the rendered document disagree with its source IR.
+    return EM.sub(lambda m:m.group(0).strip("*"+chr(96)), LINK.sub(r"\1",value))
 
 
 def blocks(sections):
     """Parse limited, data-only Markdown; no embedded HTML execution."""
     result=[]
     for heading,body in sections:
-        result.append(("heading",(1,clean(heading))))
+        result.append(("heading",(1,clean(heading).strip())))
         lines=body.splitlines()
         i=0
         while i<len(lines):
@@ -33,17 +35,17 @@ def blocks(sections):
             if not line:continue
             match=HEADING.match(line)
             if match:
-                result.append(("heading",(min(4,len(match.group(1))+1),clean(match.group(2)))))
+                result.append(("heading",(min(4,len(match.group(1))+1),clean(match.group(2)).strip())))
                 continue
             if re.fullmatch(r"[-*_]{3,}",line):
                 result.append(("rule",None))
                 continue
             if "|" in line and i<len(lines) and DELIM.match(lines[i]):
-                heads=[clean(s) for s in line.strip("|").split("|")]
+                heads=[clean(s).strip() for s in line.strip("|").split("|")]
                 i+=1
                 rows=[]
                 while i<len(lines) and "|" in lines[i]:
-                    cells=[clean(s) for s in lines[i].strip().strip("|").split("|")]
+                    cells=[clean(s).strip() for s in lines[i].strip().strip("|").split("|")]
                     if len(cells)!=len(heads):break
                     rows.append(cells);i+=1
                 if rows and 2<=len(heads)<=10:
