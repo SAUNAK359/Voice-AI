@@ -49,15 +49,23 @@ REGISTRY = {**VOICE_TOOLS, **SPECIALIST_TOOLS}
 
 
 def capabilities(settings, have_work: bool, memory_enabled: bool = False, visual_enabled: bool = False) -> list[dict]:
-    return [
+    from .work_mcp import configured
+    from .work_mcp_research import research_tool
+    mcp_sdk=find_spec("mcp") is not None
+    mcp_search=bool(mcp_sdk and research_tool())
+    builtin=[
         spec.public(
             (visual_enabled and bool(settings.gemini_api_key)) if name in ("visual_analyze","pdf_research") else
-            bool(settings.gemini_api_key) if name in ("web_search", "research") else
+            (bool(settings.gemini_api_key) or mcp_search) if name in ("web_search", "research") else
             find_spec("sympy") is not None if name == "symbolic_math" else
             have_work if name in ("work_submit", "work_status", "work_cancel", *SPECIALIST_TOOLS) else
             memory_enabled if name.startswith("memory_") else True
         ) for name, spec in REGISTRY.items()
     ]
+    for name, contract in configured().items():
+        builtin.append(Tool(name,"read_only",25,contract.description,
+                            tuple(contract.arguments)).public(mcp_sdk))
+    return builtin
 
 
 def require_tool(tool: str, *, explicit_private_write: bool, allowed: frozenset[str]):
