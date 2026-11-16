@@ -385,13 +385,19 @@ def render_xlsx(path: Path, title: str, sections, table, sources,
             insights["A1"]="Financial performance — verified source totals"
             insights["A1"].font=Font(name="Aptos Display",size=18,bold=True,color=NAVY)
             insights["A2"]="Currency";insights["B2"]=finance["currency"]
+            # Currency formatting is source-derived. Never default INR to USD.
+            money_format=('"₹"#,##0.00;[Red]("₹"#,##0.00)' if
+                          finance["currency"]=="INR" else
+                          '"$"#,##0.00;[Red]("$"#,##0.00)')
             for row,(label,key) in enumerate((
                 ("Total revenue","revenue"),("Total cost","cost"),
                 ("Gross profit","gross_profit"),("Gross margin (%)","gross_margin_pct"),
                 ("Units","units")),4):
                 if finance["total"][key] is not None:
                     insights.cell(row,1,label)
-                    insights.cell(row,2,finance["total"][key])
+                    cell=insights.cell(row,2,finance["total"][key])
+                    cell.number_format=("0.00" if key=="gross_margin_pct"
+                                        else "0" if key=="units" else money_format)
             head=11
             for group_name,items in finance["groups"].items():
                 insights.cell(head,1,group_name+" — source-grounded breakdown")
@@ -406,7 +412,9 @@ def render_xlsx(path: Path, title: str, sections, table, sources,
                 for index,(name,amounts) in enumerate(items.items(),head+2):
                     insights.cell(index,1,_safe_cell(name))
                     for col,key in enumerate(("revenue","cost","gross_profit","gross_margin_pct"),2):
-                        insights.cell(index,col,amounts[key])
+                        metric=insights.cell(index,col,amounts[key])
+                        metric.number_format=("0.00" if key=="gross_margin_pct"
+                                              else money_format)
                 if items:
                     chart=BarChart()
                     chart.type="col"
