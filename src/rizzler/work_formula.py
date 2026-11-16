@@ -11,7 +11,7 @@ import tempfile
 
 
 _FORMULA = re.compile(
-    r"=(COUNT|AVERAGE|MIN|MAX)\(Data!([A-Z]{1,3})2:\2([1-9][0-9]*)\)\Z")
+    r"=(COUNT|AVERAGE|MIN|MAX)\((?:Data|'Rizzler Data')!([A-Z]{1,3})2:\2([1-9][0-9]*)\)\Z")
 
 
 def _close(a, b):
@@ -22,23 +22,26 @@ def _close(a, b):
 
 
 def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
-                    require_recalculation: bool = False) -> dict:
+                    require_recalculation: bool = False,
+                    source_path: Path | None = None) -> dict:
     from openpyxl import load_workbook
     from openpyxl.utils import column_index_from_string
     from .work_skills import analyze
 
     wb = load_workbook(path, read_only=True, data_only=False)
     try:
-        if "Summary" not in wb.sheetnames:
+        prefix="Rizzler " if "Rizzler Summary" in wb.sheetnames else ""
+        name=lambda value: prefix+value
+        if name("Summary") not in wb.sheetnames:
             raise ValueError("Workbook summary is missing")
-        if "Data" not in wb.sheetnames:
+        if name("Data") not in wb.sheetnames:
             if dataset_summary is not None:
                 raise ValueError("Workbook omitted source data")
             return {"status": "no_source_dataset", "formulas": 0,
                     "recalculation": "not_applicable"}
-        if "Checks" not in wb.sheetnames:
+        if name("Checks") not in wb.sheetnames:
             raise ValueError("Workbook formula evidence is missing")
-        data = wb["Data"]
+        data = wb[name("Data")]
         values = list(data.iter_rows(values_only=True))
         headers = [str(v or "") for v in values[0]]
         rows = [[("" if v is None else str(v)) for v in record] for record in values[1:]]
@@ -52,23 +55,26 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 if observed is None or stats["count"] != observed["count"] or any(
                     not _close(stats[name], observed[name]) for name in ("mean","min","max")):
                     raise ValueError("Workbook numeric values differ from independent SQL evidence")
-        if "Financial Insights" in wb.sheetnames:
+        if name("Financial Insights") in wb.sheetnames:
             from .work_finance import financial_profile
             finances=financial_profile(headers,rows)
             if finances is None:
                 raise ValueError("Finance dashboard has no source-grounded financial schema")
-            sheet=wb["Financial Insights"]
+            sheet=wb[name("Financial Insights")]
             for row,key in ((4,"revenue"),(5,"cost"),(6,"gross_profit"),(7,"gross_margin_pct")):
                 if not _close(sheet.cell(row,2).value,finances["total"][key]):
                     raise ValueError("Financial dashboard headline KPI differs from source")
             if sheet["B2"].value != finances["currency"]:
                 raise ValueError("Financial dashboard currency disagrees with source")
-        check = list(wb["Checks"].iter_rows(values_only=True))
+        check = list(wb[name("Checks")].iter_rows(values_only=True))
         if len(check) < 2 or check[0][0] != "Metric":
             raise ValueError("Workbook formula contract malformed")
         if (check[1][0] != "Source rows"
-            or check[1][1] != (f"=ROWS(Data!A2:A{len(rows)+1})"
-                               if rows else "=COUNTA(Data!A2:A2)")
+            or check[1][1] != (f"=ROWS('Rizzler Data'!A2:A{len(rows)+1})" if prefix
+                               else f"=ROWS(Data!A2:A{len(rows)+1})")
+                               if rows else
+                               ("=COUNTA('Rizzler Data'!A2:A2)" if prefix
+                                else "=COUNTA(Data!A2:A2)")
             or check[1][2] != len(rows)):
             raise ValueError("Workbook row-count formula or expected value tampered")
         formulas = 1
@@ -103,9 +109,32 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 raise ValueError("Independent calculation conflicts with expected formula")
             verified.append((measured, expected))
             formulas += 1
-        if any(cell.data_type == "f" for ws in wb.worksheets if ws.title!="Checks"
+        report_names={name(x) for x in ("Summary","Data","Dashboard",
+                      "Financial Insights","Sources")}
+        if any(cell.data_type == "f" for ws in wb.worksheets if ws.title in report_names
                for row in ws.iter_rows() for cell in row):
             raise ValueError("Unexpected executable spreadsheet formula outside Checks")
+        if source_path is not None and Path(source_path).suffix.lower()==".xlsx":
+            # Original sheets remain native and independently comparable,
+            # including exact executable formulas and cell references.
+            original=load_workbook(source_path,read_only=True,data_only=False,
+                                   keep_links=False)
+            try:
+                for ws in original.worksheets:
+                    if ws.title not in wb.sheetnames:
+                        raise ValueError("Source workbook worksheet missing")
+                    output_ws=wb[ws.title]
+                    if (ws.max_row!=output_ws.max_row or
+                        ws.max_column!=output_ws.max_column):
+                        raise ValueError("Original worksheet dimensions changed")
+                    for row in ws.iter_rows():
+                        for source_cell in row:
+                            dest=output_ws[source_cell.coordinate]
+                            if (source_cell.value != dest.value or
+                                source_cell.data_type != dest.data_type):
+                                raise ValueError("Original workbook cell or formula modified")
+            finally:
+                original.close()
     finally:
         wb.close()
     report = {"status":"independently_verified","formulas":formulas,
@@ -131,7 +160,7 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 raise RuntimeError("Independent spreadsheet recalculation failed")
             recalc = load_workbook(target, read_only=True, data_only=True)
             try:
-                computed = list(recalc["Checks"].iter_rows(
+                computed = list(recalc[name("Checks")].iter_rows(
                     min_row=2, min_col=2, max_col=2, values_only=True))
                 reference = [len(rows)] + [v[0] for v in verified]
                 if len(computed) != len(reference) or any(
