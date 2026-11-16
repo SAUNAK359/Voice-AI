@@ -35,6 +35,17 @@ async function sendSource(file){
  }
  return call('/sources/transfers/'+session.id+'/complete',{method:'POST'});
 }
+async function refreshReadiness(){
+ const data=await call('/readiness');
+ const blockers=[];
+ if(!data.model_configured)blockers.push('Work inference is not configured');
+ if(!data.grounded_web_search_configured)blockers.push(
+  'Live web research requires a Gemini search key');
+ const summary=$('work-readiness');
+ if(summary)summary.textContent=blockers.length?
+  blockers.join(' · '):
+  'Work model configured · Live search configured · Full provider test not yet run';
+}
 async function refreshSources(){
  const pane=$('source-selection');if(!pane)return;
  const data=await call('/sources');const chosen=new Set(Array.from(
@@ -135,7 +146,7 @@ setInterval(async()=>{
    if(!current.ok){location.replace('/auth/login');return}
    $('work-auth-hint').textContent='Signed in securely; your jobs and files are private.';
   }
-  refreshSources();refresh();schedules();
+  refreshReadiness();refreshSources();refresh();schedules();
  }catch(e){err(e)}
 })();
 })();
