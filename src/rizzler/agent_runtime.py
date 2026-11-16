@@ -44,6 +44,11 @@ def discover(store, memory=None, visual=None):
         tools["memory.recall"]=Tool("Read opt-in memories",{"query":"str"})
     if visual:
         tools["visual.ask"]=Tool("Analyze currently selected attachments",{"question":"str"})
+    from .work_mcp import configured
+    for identifier, contract in configured().items():
+        tools[identifier] = Tool(
+            "Read-only MCP: " + contract.description,
+            contract.arguments, "read")
     return tools
 
 
@@ -54,6 +59,10 @@ def check_args(args, schema):
         value=args[key]
         if kind=="str" and (type(value)!=str or not value.strip() or len(value)>8000):
             raise ValueError("Invalid string argument")
+        if kind=="int" and (type(value) is not int or not 0<=value<=100):
+            raise ValueError("Invalid integer argument")
+        if kind=="bool" and type(value) is not bool:
+            raise ValueError("Invalid boolean argument")
         if kind=="str_list" and (not isinstance(value,list) or not 1<=len(value)<=16
             or len(set(map(str,value)))!=len(value)
             or any(type(x)!=str or x not in DELIVERABLES for x in value)):
@@ -108,6 +117,13 @@ class AgentRuntime:
 
     async def execute(self, call, owner, objective, nonce, sequence, index, uploads, visuals, source_ids=None):
         name,args=call["name"],call["arguments"]
+        if name.startswith("mcp."):
+            from .work_mcp import invoke as invoke_mcp
+            outcome=await invoke_mcp(name,args)
+            # MCP content is source data, never an approval or verified fact.
+            return {"text":outcome["text"][:7000],
+                    "sources":outcome["sources"],
+                    "verified":False,"provenance":outcome["provenance"]}
         if name=="research.search":
             from .voice_tools import grounded_search
             answer=await grounded_search(args["query"],self.settings)
