@@ -267,7 +267,8 @@ def failure_code(exc: BaseException) -> str:
 
 async def decide_stage_recovery(
     agent_name: str, agent_role: str, error_code: str,
-    attempts_remaining: int, objective: str, cfg, *, client=None
+    attempts_remaining: int, objective: str, cfg, *, client=None,
+    cognitive_state: dict | None = None
 ) -> dict:
     """LLM independently decides whether a failed specialist merits a retry.
 
@@ -286,7 +287,9 @@ async def decide_stage_recovery(
         "\nRole: "+agent_role[:250]+
         "\nSanitized failure code: "+error_code+
         "\nRemaining safe retry attempts: "+str(attempts_remaining)+
-        "\nOriginal user task: "+json.dumps(objective[:3000]))
+        "\nOriginal user task: "+json.dumps(objective[:3000])+
+        "\nAuthoritative task state (verified ledger metadata only): "+
+        json.dumps(cognitive_state or {},ensure_ascii=False,default=str)[:6500])
     result=await structured_decision(
         prompt,RECOVERY_SCHEMA,cfg,client=client,max_tokens=550)
     return validate_recovery(result,attempts_remaining)
