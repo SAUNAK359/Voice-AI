@@ -100,6 +100,17 @@ async def grounded_research(objective: str) -> dict:
     from .work_agents import read_skill
     from .production_guard import reserve_provider_call
     cfg = WorkModelConfig.from_env()
+    # MCP and Gemini are evidence transports, not planner heuristics.
+    # The operator explicitly chooses one. SGLang supplies model-led
+    # research direction even when Gemini search credentials are absent.
+    from .work_mcp_research import research_tool, research as mcp_research
+    provider=os.environ.get("RIZZLER_RESEARCH_BACKEND","gemini").strip().lower()
+    if provider not in ("gemini","mcp"):
+        raise ValueError("RIZZLER_RESEARCH_BACKEND must be gemini or mcp")
+    if provider=="mcp":
+        if research_tool() is None:
+            raise RuntimeError("MCP grounded research tool not configured")
+        return await mcp_research(objective,cfg)
     if not cfg.gemini_api_key:
         raise RuntimeError("Gemini key is required for grounded research")
     from google import genai
