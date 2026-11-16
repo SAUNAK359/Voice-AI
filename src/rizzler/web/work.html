@@ -4,7 +4,12 @@
 
 <label for="objective">Objective</label><textarea id="objective" rows="5" maxlength="8000" placeholder="Analyze my uploaded dataset, then prepare a report..."></textarea>
 <label for="deliverables">Output formats (comma-separated)</label><input id="deliverables" value="pdf,docx,md" aria-label="Deliverable formats">
-<label for="upload">Optional CSV/XLSX source file (8 MB limit)</label><input type="file" id="upload" accept=".csv,.xlsx">
+<label for="upload">Dataset for SQL analysis (one CSV/XLSX up to 8 MB)</label><input type="file" id="upload" accept=".csv,.xlsx">
+<label for="source-documents">Supporting documents (up to 8 files, each up to 200 MB)</label><input type="file" id="source-documents" accept=".pdf,.docx,.pptx,.xlsx,.csv,.md,.txt,.json,.db,.sqlite" multiple>
+<label for="evidence-scope">Research permissions</label>
+<select id="evidence-scope"><option value="auto">Model decides if live sources are needed</option><option value="uploaded_only">Uploaded sources only (no web)</option><option value="external_allowed">External research allowed</option></select>
+<label for="source-coverage">Source reading mode</label>
+<select id="source-coverage"><option value="targeted">Relevant passages</option><option value="complete">Complete indexed text coverage</option></select>
 <button id="submit-work">Create job</button><p id="work-error" role="alert"></p></section>
 <section class="chat"><h2>Recent jobs</h2><button id="reload-work">Refresh status</button><div id="jobs" aria-live="polite"></div><div id="job-detail"></div><h2>Approved schedules</h2><div id="schedules"></div></section></main>
 <footer><span>Jobs persist only while the configured work volume exists</span><span>External actions require explicit approval</span></footer></div><script src="/static/work.js" defer></script></body></html>
