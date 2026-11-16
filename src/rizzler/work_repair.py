@@ -20,14 +20,13 @@ from .work_skills import render_one
 from .work_visual import quality_mode
 
 async def _revision(ir, objective, defects, dataset_summary, attempt_number):
-    from google import genai
-    from google.genai import types
     from .work_dynamic import WorkModelConfig
+    from .work_sglang import enabled as use_sglang, decision as sglang_decision
     from .work_reasoning import config,use
     from .production_guard import reserve_provider_call
     cfg=WorkModelConfig.from_env()
-    if not cfg.gemini_api_key:raise RuntimeError("Autonomous repair requires Gemini")
-    client=genai.Client(api_key=cfg.gemini_api_key)
+    if not cfg.gemini_api_key and not use_sglang():
+        raise RuntimeError("Autonomous repair requires an inference provider")
     prompt=("You are the independent Rizzler artifact repair agent. The objective is to "
         "repair actual reported defects, preserving all trustworthy source facts, "
         "numerical measures, names and citations. NEVER invent missing evidence. "
@@ -43,6 +42,23 @@ async def _revision(ir, objective, defects, dataset_summary, attempt_number):
         "Independent QA defects:\n"+json.dumps(defects,ensure_ascii=False)[:6500]+"\n"
         "Verified dataset summary (immutable facts):\n"+
         json.dumps(dataset_summary or {},ensure_ascii=False,default=str)[:3000])
+    if use_sglang():
+        reserve_provider_call("work")
+        data=await sglang_decision(prompt,{
+            "type":"object",
+            "properties":{"title":{"type":"string"},"content":{"type":"string"}},
+            "required":["title","content"],"additionalProperties":False},
+            max_tokens=4500,temperature=0.2)
+        title,body=data.get("title"),data.get("content")
+        if type(title) is not str or type(body) is not str or not 5<=len(body)<=18000:
+            raise ValueError("Invalid revised artifact text")
+        candidate=compile_ir(title[:120],body,list(ir.sources),dataset_summary)
+        if candidate.sha256==ir.sha256:
+            raise ValueError("Repair model returned unchanged artifact")
+        return candidate
+    from google import genai
+    from google.genai import types
+    client=genai.Client(api_key=cfg.gemini_api_key)
     try:
         reserve_provider_call("work")
         with use("high"):
