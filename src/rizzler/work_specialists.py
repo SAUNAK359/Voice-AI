@@ -237,20 +237,28 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["sources"],context["summary"])
 
     if dynamic:
-        # Execute every currently ready node, not a hardcoded stage sequence.
-        # Dependencies are supplied by the model, then independently validated.
-        pending=set(planned)
-        renderers=set(("powerpoint","word","excel","pdf_visual"))
-        while pending:
-            ready=[node["id"] for node in graph["steps"] if
-                   node["id"] in pending and dependencies[node["id"]].issubset(finished)]
-            if not ready:
-                raise ValueError("Dynamic Work graph is stuck")
+        # A LangGraph StateGraph now owns the execution-wave transitions.
+        # WorkStore continues to own leases, checkpoints, decisions and commits:
+        # crash recovery replays only steps lacking a verified WorkStore receipt.
+        async def run_wave(ready):
+            renderers={"powerpoint","word","excel","pdf_visual"}
             if ((renderers.intersection(ready) or "quality" in ready) and
                     "artifact_ir" not in context):
                 prepare_artifact_ir()
             await stage_group(ready)
-            pending.difference_update(ready)
+
+        if os.environ.get("RIZZLER_WORK_ORCHESTRATOR","legacy").lower()=="deepagents":
+            from .work_graph_exec import execute_dependency_graph
+            await execute_dependency_graph(graph, run_wave)
+        else:
+            pending=set(planned)
+            while pending:
+                ready=[node["id"] for node in graph["steps"] if
+                       node["id"] in pending and dependencies[node["id"]].issubset(finished)]
+                if not ready:
+                    raise ValueError("Dynamic Work graph is stuck")
+                await run_wave(ready)
+                pending.difference_update(ready)
     else:
         # Read-only migration path for already accepted V11 DAGs.
         await stage_group(("research", "sql_analytics"))
