@@ -192,7 +192,11 @@ def main():
         "mode":report["mode"],
         "cases":[{"scenario":x["scenario"],"status":x["job"]["status"],
                   "error_code":x["job"].get("error_code"),
-                  "published_formats":x["published_formats"]}
+                  "published_formats":x["published_formats"],
+                  "agent_failures":[{"agent":s["agent"],"error":s.get("error_code","")}
+                      for s in x["steps"] if s["status"]=="failed"],
+                  "safe_diagnostics":[e["message"] for e in x["events"]
+                      if e["stage"]=="agent_diagnosis"]}
                  for x in report["cases"]]},indent=2))
     print("Report:",(args.output/"MVP_ACCEPTANCE_REPORT.zip").resolve())
     return 0 if report["completed"]==report["total"] else 1
