@@ -260,15 +260,32 @@ def _numeric_column(column_name, values):
         and math.isfinite(float(x)) for x in nonblank)
 
 
-def render_xlsx(path: Path, title: str, sections, table, sources):
-    from openpyxl import Workbook
+def render_xlsx(path: Path, title: str, sections, table, sources,
+                source_path: Path | None = None):
+    from openpyxl import Workbook, load_workbook
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
     from openpyxl.chart import BarChart, Reference
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Summary"
+    # For XLSX sources, start from the ORIGINAL workbook to preserve native
+    # formula strings, references, worksheet names and input formatting.
+    # Report tabs are separate; never rewrite a user's formulas as constants.
+    native_source = bool(source_path and Path(source_path).suffix.lower()==".xlsx")
+    tab = (lambda name: "Rizzler "+name) if native_source else (lambda name: name)
+    if native_source:
+        wb=load_workbook(source_path, data_only=False, read_only=False,
+                         keep_links=False)
+        reserved={tab(name) for name in ("Summary","Data","Checks","Dashboard",
+                  "Financial Insights","Sources")}
+        if reserved.intersection(wb.sheetnames):
+            raise ValueError("Original workbook conflicts with reserved report worksheets")
+        ws=wb.create_sheet(tab("Summary"),0)
+    else:
+        wb=Workbook()
+        ws=wb.active
+        ws.title=tab("Summary")
+    from openpyxl.utils import quote_sheetname
+    data_ref=quote_sheetname(tab("Data"))
     ws.append([title])
     ws.append(["Section", "Content"])
     for heading, body in sections:
@@ -285,7 +302,7 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
         row[0].alignment = Alignment(wrap_text=True, vertical="top")
     if table:
         headers, records = table
-        data = wb.create_sheet("Data")
+        data = wb.create_sheet(tab("Data"))
         data.append([_safe_cell(h) for h in headers])
         numeric = {i for i,h in enumerate(headers)
                    if _numeric_column(h, [row[i] for row in records])}
@@ -301,11 +318,11 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
             cell = data.cell(1,i)
             cell.fill = PatternFill("solid", fgColor=NAVY)
             cell.font = Font(color="FFFFFF", bold=True)
-        checks = wb.create_sheet("Checks")
+        checks = wb.create_sheet(tab("Checks"))
         checks.append(["Metric", "Workbook formula", "Independent expected", "Verification"])
         n = len(records)
         checks.append(["Source rows",
-                       f"=ROWS(Data!A2:A{n+1})" if n else "=COUNTA(Data!A2:A2)",
+                       f"=ROWS({data_ref}!A2:A{n+1})" if n else f"=COUNTA({data_ref}!A2:A2)",
                        n, "Pending spreadsheet recalculation"])
         profile = _dataset_profile(table)
         for i in sorted(numeric):
@@ -313,7 +330,7 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
             if not stats:
                 continue
             col = get_column_letter(i+1)
-            rng = f"Data!{col}2:{col}{max(2,n+1)}"
+            rng = f"{data_ref}!{col}2:{col}{max(2,n+1)}"
             for name, fun, expected in (
                 ("Count", "COUNT", stats["count"]),
                 ("Mean", "AVERAGE", stats["mean"]),
@@ -334,7 +351,7 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
             row[2].number_format = "0.######"
 
         if numeric and records:
-            dashboard = wb.create_sheet("Dashboard", 1)
+            dashboard = wb.create_sheet(tab("Dashboard"), 1)
             dashboard["A1"] = "Source-derived numeric overview"
             dashboard["A1"].font = Font(size=16, color=NAVY, bold=True)
             dashboard.append(["Column","Mean"])
@@ -365,7 +382,7 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
         from .work_finance import financial_profile
         finance=financial_profile(headers,records)
         if finance:
-            insights=wb.create_sheet("Financial Insights",1)
+            insights=wb.create_sheet(tab("Financial Insights"),1)
             insights["A1"]="Financial performance — verified source totals"
             insights["A1"].font=Font(name="Aptos Display",size=18,bold=True,color=NAVY)
             insights["A2"]="Currency";insights["B2"]=finance["currency"]
@@ -407,7 +424,7 @@ def render_xlsx(path: Path, title: str, sections, table, sources):
             for col,width in {"A":28,"B":24,"C":24,"D":27,"E":20}.items():
                 insights.column_dimensions[col].width=width
     if sources:
-        sheet = wb.create_sheet("Sources")
+        sheet = wb.create_sheet(tab("Sources"))
         sheet.column_dimensions["A"].width = 100
         for source in sources:
             sheet.append([source])
