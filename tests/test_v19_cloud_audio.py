@@ -5,13 +5,20 @@ These tests never contact Gemini or access real credentials.
 from __future__ import annotations
 
 import base64
+import importlib.util
 import io
 import os
-import sys
 import types
 import unittest
 from unittest.mock import patch
 import wave
+
+# The dependency-free release CI does not install numpy / Google SDK.
+# App CI and Colab install the actual cloud speech dependencies and run these.
+if importlib.util.find_spec("numpy") is None or importlib.util.find_spec("google") is None:
+    raise unittest.SkipTest("Cloud speech adapter checks run in app CI extras")
+if importlib.util.find_spec("google.genai") is None:
+    raise unittest.SkipTest("Google GenAI SDK unavailable in dependency-free CI")
 
 import numpy as np
 
