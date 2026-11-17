@@ -35,7 +35,7 @@ class WorkProviderUnavailable(RuntimeError):
 def model_sequence(primary: str) -> tuple[str, ...]:
     alt = os.environ.get("RIZZLER_WORK_FALLBACK_MODELS",
                          os.environ.get("RIZZLER_WORK_FALLBACK_MODEL",
-                                        "gemini-3.7-flash"))
+                                        "gemini-3.7-flash,gemini-3.8-flash"))
     candidates = [primary] + [x.strip() for x in alt.split(",") if x.strip()]
     models = tuple(dict.fromkeys(candidates))
     if (not 1 <= len(models) <= 3 or
