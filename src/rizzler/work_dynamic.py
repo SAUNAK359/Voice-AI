@@ -187,6 +187,11 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
     orchestration = __import__("os").environ.get(
         "RIZZLER_WORK_ORCHESTRATOR", "legacy").strip().lower()
     if orchestration == "deepagents":
+        from .work_sglang import enabled as local_work
+        if local_work():
+            # Preserve the V17 on-premise Deep Agents implementation.
+            from .work_deepagents import plan_with_deepagents
+            return await plan_with_deepagents(payload,settings,client=client)
         if client is not None:
             # Existing injected clients preserve the explicit test adapter.
             from .work_deepagents import plan_with_deepagents
