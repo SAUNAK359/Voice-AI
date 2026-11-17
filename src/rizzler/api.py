@@ -34,7 +34,20 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         raise ValueError("Invalid deployment mode")
     production = mode == "production"
     cfg = settings or Settings.from_env()
-    models = providers or ProviderSet(WhisperASR(cfg), GeminiLLM(cfg), KittenSpeech(cfg))
+    # Cloud speech is the default. Native Gemini Live bypasses this legacy
+    # cascade entirely; legacy HTTP/WS still use remote Gemini STT/TTS.
+    speech_backend=environ.get("RIZZLER_SPEECH_BACKEND","gemini").strip().lower()
+    if speech_backend not in ("gemini","legacy_local"):
+        raise ValueError("Unknown speech backend")
+    if providers is not None:
+        models=providers
+    elif speech_backend=="gemini":
+        from .cloud_audio import GeminiCloudASR,GeminiCloudTTS
+        models=ProviderSet(GeminiCloudASR(cfg),GeminiLLM(cfg),GeminiCloudTTS(cfg))
+    else:
+        if environ.get("RIZZLER_ALLOW_LEGACY_LOCAL_SPEECH")!="1":
+            raise ValueError("Local speech requires explicit operator opt-in")
+        models=ProviderSet(WhisperASR(cfg),GeminiLLM(cfg),KittenSpeech(cfg))
     sessions = Sessions()
     operations = Operations()
     owner_admission = None
@@ -230,7 +243,8 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         # listening. No Gemini request, secret logging or recurring polling.
         # Colab can enable this while the visitor opens the HTTPS link.
         prewarm_task = None
-        if environ.get('RIZZLER_PREWARM','').lower() in ('1','true','yes'):
+        if (speech_backend=="legacy_local" and
+                environ.get('RIZZLER_PREWARM','').lower() in ('1','true','yes')):
             async def prewarm():
                 import numpy as np
                 try:

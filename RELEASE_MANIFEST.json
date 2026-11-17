@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "git_blob_sha1": "95a80df0f20beb3b1ea8ecb074e7b516115bfd2f",
-      "bytes": 4851
+      "bytes": 5310,
+      "git_blob_sha1": "3416cb352c393c8de5013e26298fb53aad5bdcb0"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -433,6 +433,11 @@
       "bytes": 3835
     },
     {
+      "path": "docs/V19_CLOUD_SPEECH_CPU_COLAB.md",
+      "bytes": 2591,
+      "git_blob_sha1": "a9a73e52f6301bb693ebdd6e4694d94b441a2b4e"
+    },
+    {
       "path": "docs/VOICE_SUPERVISOR_V10.md",
       "git_blob_sha1": "bf09e45edf5a0fd1ef68be4b47de09213865e542",
       "bytes": 7230
@@ -504,8 +509,8 @@
     },
     {
       "path": "pyproject.toml",
-      "git_blob_sha1": "0c5827ad5e426a2907403ade28a1eb68523e6131",
-      "bytes": 1338
+      "bytes": 1355,
+      "git_blob_sha1": "b29f0c6c5d0227405309781bb52ab8fe91ba590f"
     },
     {
       "path": "README.md",
@@ -679,8 +684,8 @@
     },
     {
       "path": "src/rizzler/api.py",
-      "git_blob_sha1": "dc84c370037708552b1ff26055cc844fdd0f64d8",
-      "bytes": 70783
+      "bytes": 71550,
+      "git_blob_sha1": "7ee297e6f10befaef419d139cb84c2f2b90d791f"
     },
     {
       "path": "src/rizzler/artifact_preview.py",
@@ -701,6 +706,11 @@
       "path": "src/rizzler/backup.py",
       "git_blob_sha1": "a0ab7272791e26494b2ae01264cfb2dfa4d6ebe1",
       "bytes": 11985
+    },
+    {
+      "path": "src/rizzler/cloud_audio.py",
+      "bytes": 4808,
+      "git_blob_sha1": "a77f55115e3a2410a1735b922b05088978450e33"
     },
     {
       "path": "src/rizzler/config.py",
@@ -739,8 +749,8 @@
     },
     {
       "path": "src/rizzler/live_native.py",
-      "git_blob_sha1": "d91764fd95f0b7494497d718d18f561b02e2a229",
-      "bytes": 15580
+      "bytes": 17303,
+      "git_blob_sha1": "f9cd8266fdc2b92262141f784af1c8ab46cadf48"
     },
     {
       "path": "src/rizzler/live_schema.py",
@@ -919,8 +929,8 @@
     },
     {
       "path": "src/rizzler/web/native-live.js",
-      "git_blob_sha1": "4ac3cacb5e328a1247d5f681ea3091d69291b8d5",
-      "bytes": 6185
+      "git_blob_sha1": "897fe7b8fa683458ad8e5ae4a7b5ed6d32ff7917",
+      "bytes": 7589
     },
     {
       "path": "src/rizzler/web/rich-text.js",
@@ -1461,6 +1471,11 @@
       "path": "tests/test_v18_gemini_admission.py",
       "git_blob_sha1": "eb2f2c4d998effef9d9d45abf32319fb634c0e29",
       "bytes": 5595
+    },
+    {
+      "path": "tests/test_v19_cloud_audio.py",
+      "bytes": 4660,
+      "git_blob_sha1": "e39674b6c84d6b327af57f23770010f12a4036ff"
     },
     {
       "path": "tests/test_voice_core.cjs",
