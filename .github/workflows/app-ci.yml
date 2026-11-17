@@ -38,6 +38,12 @@ jobs:
           GEMINI_API_KEY: ""
           RIZZLER_SPEECH_BACKEND: gemini
         run: python -m pytest -q tests/test_v19_cloud_audio.py
+      - name: Full isolated Python regression suite (Python 3.11)
+        if: matrix.python-version == '3.11'
+        env:
+          GEMINI_API_KEY: ""
+          RIZZLER_DEPLOYMENT_MODE: demo
+        run: python -m pytest -q tests
       - name: Run synthetic multi-agent end-to-end artifact acceptance
         run: python scripts/qualify_mvp.py --offline --output /tmp/rizzler-mvp-acceptance
       - name: Validate the canonical native Kaggle notebook
