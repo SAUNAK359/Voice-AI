@@ -187,8 +187,68 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
     orchestration = __import__("os").environ.get(
         "RIZZLER_WORK_ORCHESTRATOR", "legacy").strip().lower()
     if orchestration == "deepagents":
+        from .work_sglang import enabled as local_work
+        if local_work():
+            # Preserve the V17 on-premise Deep Agents implementation.
+            from .work_deepagents import plan_with_deepagents
+            return await plan_with_deepagents(payload,settings,client=client)
+        if client is not None:
+            # Existing injected clients preserve the explicit test adapter.
+            from .work_deepagents import plan_with_deepagents
+            return await plan_with_deepagents(payload, settings, client=client)
+        from .work_gemini_gateway import gemini_content, WorkProviderUnavailable
         from .work_deepagents import plan_with_deepagents
-        return await plan_with_deepagents(payload, settings, client=client)
+        # One model-authored structured decision is substantially cheaper than
+        # an entire recursive supervisor run, while retaining the same strict
+        # dependency, evidence and artifact contracts. The model still selects
+        # every specialist and dependency (never keyword-based routing).
+        capabilities=[{"name":name,"role":spec.role,"formats":list(spec.formats)}
+                      for name,spec in SPECS.items()]
+        instruction=(
+            "You are Rizzler's autonomous Work supervisor. Return ONE complete "
+            "valid, topologically ordered DAG, selected based on the entire "
+            "objective. Maximize useful planning in one response. Include "
+            "required external research when evidence_scope=external_allowed, "
+            "include sql_analytics exactly when an uploaded dataset exists, "
+            "include an orchestrator for narrative synthesis, and choose "
+            "model-specialist capabilities for every requested output. "
+            "Every renderer depends on selected evidence or synthesis, and "
+            "ZIP waits for other artifact renderers. Quality is final and "
+            "depends on ALL preceding steps. Do not invent source datasets. "
+            "Only registered capabilities and medium/high thinking levels. "
+            "Never invent file receipts. Return exact schema_version=2, "
+            "status=ready and steps with id=tool, depends_on,thinking_level. "
+            "Your model decisions are subject to independent validation. "
+            "\nCapability catalog: "+json.dumps(capabilities,separators=(',',':'))+
+            "\nTask: "+json.dumps({
+                "objective":payload["objective"][:8000],
+                "deliverables":payload["deliverables"],
+                "dataset_attached":bool(payload.get("uploads")),
+                "evidence_scope":payload.get("evidence_scope","auto"),
+                "sources_attached":bool(payload.get("source_ids"))},
+                ensure_ascii=False,separators=(',',':')))
+        problem=None
+        for attempt in range(2):
+            try:
+                response=await gemini_content(
+                    settings,
+                    instruction+("" if problem is None else
+                        "\nPrevious graph rejected: "+problem+
+                        ". Repair precisely; return full corrected graph."),
+                    schema=_graph_json_schema(),max_output_tokens=3600)
+                graph=_response_graph(response)
+                return validate(graph,payload)
+            except WorkProviderUnavailable:
+                # Both authorized Gemini models exhausted: defer rather than
+                # spawning another multi-call supervisor against the outage.
+                raise
+            except (ValueError,TypeError,json.JSONDecodeError,KeyError) as exc:
+                # Safe local validator feedback, not raw private model output.
+                problem=type(exc).__name__+":" + str(exc)[:150]
+        # Complex model plans that cannot satisfy the structured contract
+        # enter the Deep Agents multi-tool supervisor as a bounded escalation,
+        # never on a provider outage. This preserves genuine agentic replanning.
+        return await plan_with_deepagents(payload,settings)
     if orchestration != "legacy":
         raise ValueError("Unsupported Work orchestration backend")
     from .work_preflight import enabled as cognitive_enabled, generate_preflight

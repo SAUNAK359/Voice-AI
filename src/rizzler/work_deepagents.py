@@ -38,9 +38,11 @@ def _model(cfg):
         from langchain_google_genai import ChatGoogleGenerativeAI
     except ImportError as exc:
         raise RuntimeError("Install the [deepagents] extra") from exc
+    from .work_gemini_gateway import DeepAgentsWorkLimiter
     return ChatGoogleGenerativeAI(
         model=cfg.gemini_model, google_api_key=cfg.gemini_api_key,
-        temperature=0.1, max_retries=0, timeout=cfg.request_timeout)
+        temperature=0.1, max_retries=0, timeout=cfg.request_timeout,
+        rate_limiter=DeepAgentsWorkLimiter(cfg.gemini_model))
 
 
 def _safe_context(payload: dict) -> dict:
@@ -166,6 +168,12 @@ async def plan_with_deepagents(
         # Preserve a sanitized retry classification, never provider response
         # bodies, API keys or model-written text.
         from .work_provider_retry import transient_code, retry_delay
+        from .work_gemini_gateway import GeminiWorkGate, provider_status
+        status=provider_status(exc)
+        if status in (429,500,502,503,504):
+            # Recursive Deep Agents calls also feed the shared model/project
+            # cooldown. Their request admission is handled by rate_limiter.
+            GeminiWorkGate().record(cfg.gemini_model,status)
         code = transient_code(exc)
         if code:
             error=DeepAgentPlanningError(code)

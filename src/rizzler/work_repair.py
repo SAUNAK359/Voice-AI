@@ -56,32 +56,20 @@ async def _revision(ir, objective, defects, dataset_summary, attempt_number):
         if candidate.sha256==ir.sha256:
             raise ValueError("Repair model returned unchanged artifact")
         return candidate
-    from google import genai
-    from google.genai import types
-    client=genai.Client(api_key=cfg.gemini_api_key)
-    try:
-        reserve_provider_call("work")
-        with use("high"):
-            from .work_async import wait_scope
-            async with wait_scope(min(cfg.request_timeout,95)):
-                response=await client.aio.models.generate_content(
-                    model=cfg.gemini_model,contents=prompt,
-                    config=types.GenerateContentConfig(temperature=0.2,
-                        max_output_tokens=4500,response_mime_type="application/json",
-                        thinking_config=config()))
-        raw=(getattr(response,"text","") or "").strip()
-        if not 70<=len(raw)<=22000:raise ValueError("Repair output absent or oversized")
-        data=json.loads(raw)
-        if type(data) is not dict or set(data)!={"title","content"}:
-            raise ValueError("Malformed repair response")
-        title,body=data["title"],data["content"]
-        if type(title) is not str or type(body) is not str or not 5<=len(body)<=18000:
-            raise ValueError("Invalid revised artifact text")
-        candidate=compile_ir(title[:120],body,list(ir.sources),dataset_summary)
-        if candidate.sha256==ir.sha256:raise ValueError("Repair model returned unchanged artifact")
-        return candidate
-    finally:
-        await client.aio.aclose()
+    from .work_gemini_gateway import gemini_content
+    with use("high"):
+        response=await gemini_content(cfg,prompt,max_output_tokens=4500)
+    raw=(getattr(response,"text","") or "").strip()
+    if not 70<=len(raw)<=22000:raise ValueError("Repair output absent or oversized")
+    data=json.loads(raw)
+    if type(data) is not dict or set(data)!={"title","content"}:
+        raise ValueError("Malformed repair response")
+    title,body=data["title"],data["content"]
+    if type(title) is not str or type(body) is not str or not 5<=len(body)<=18000:
+        raise ValueError("Invalid revised artifact text")
+    candidate=compile_ir(title[:120],body,list(ir.sources),dataset_summary)
+    if candidate.sha256==ir.sha256:raise ValueError("Repair model returned unchanged artifact")
+    return candidate
 
 async def _verify_bundle(store,owner,checkpoint,context,payload):
     from .visual_agentic_qa import review

@@ -107,15 +107,20 @@ async def review(root,owner,path,kind,sha,objective):
                     png=await asyncio.to_thread(render_page,root,owner,path,sha,kind,p)
                     parts.extend([types.Part.from_text(text="Rendered page "+str(p)),
                                   types.Part.from_bytes(data=png,mime_type="image/png")])
-                reserve_provider_call("work")
+                from .work_gemini_gateway import GeminiWorkGate, model_sequence
                 from .work_async import wait_scope
-                async with wait_scope(min(120,cfg.request_timeout*3)):
-                    response=await client.aio.models.generate_content(
-                        model=model,
-                        contents=[types.Content(role="user",parts=parts)],
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json",temperature=0,max_output_tokens=1200,
-                            thinking_config=__import__("rizzler.work_reasoning",fromlist=["config"]).config()))
+                async def visual_call(chosen):
+                    async with wait_scope(min(120,cfg.request_timeout*3)):
+                        return await client.aio.models.generate_content(
+                            model=chosen,
+                            contents=[types.Content(role="user",parts=parts)],
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json",
+                                max_output_tokens=1200))
+                response=await GeminiWorkGate().run(
+                    model_sequence(model),visual_call,
+                    prompt_characters=len(objective[:1800])+12000*len(pages_for_batch),
+                    max_output_tokens=1200)
                 raw=(getattr(response,"text","") or "").strip()
                 if len(raw)>6000:raise ValueError("Oversize QA output")
                 result=json.loads(raw)
