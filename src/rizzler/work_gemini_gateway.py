@@ -103,6 +103,9 @@ class GeminiWorkGate:
             c.execute("""CREATE TABLE IF NOT EXISTS circuits(
                 model TEXT PRIMARY KEY, failures INTEGER NOT NULL,
                 open_until REAL NOT NULL)""")
+            c.execute("""CREATE TABLE IF NOT EXISTS model_outcomes(
+                model TEXT PRIMARY KEY, successes INTEGER NOT NULL,
+                transient_errors INTEGER NOT NULL, rejected INTEGER NOT NULL)""")
             c.execute("CREATE INDEX IF NOT EXISTS requests_called ON requests(called)")
 
     @contextmanager
@@ -165,6 +168,14 @@ class GeminiWorkGate:
 
     def record(self, model: str, status: int | None) -> None:
         with self._tx() as c:
+            c.execute("""INSERT INTO model_outcomes(model,successes,transient_errors,rejected)
+                 VALUES(?,?,?,?) ON CONFLICT(model) DO UPDATE SET
+                 successes=successes+excluded.successes,
+                 transient_errors=transient_errors+excluded.transient_errors,
+                 rejected=rejected+excluded.rejected""",
+                 (model,int(status is None),
+                  int(status in (429,500,502,503,504)),
+                  int(status is not None and status not in (429,500,502,503,504))))
             if status == 429:
                 # 429 often applies to the entire Google project. Prevent
                 # unrelated queued Work jobs from immediately retrying it.
@@ -198,7 +209,13 @@ class GeminiWorkGate:
             circuits = c.execute(
                 "SELECT COUNT(*) FROM circuits WHERE open_until>?", (now,)
             ).fetchone()[0]
+            outcomes=[{"model":row[0],"successes":row[1],
+                       "transient_errors":row[2],"rejected":row[3]}
+                      for row in c.execute(
+                          "SELECT model,successes,transient_errors,rejected "
+                          "FROM model_outcomes ORDER BY model")]
         return {"calls_last_60_seconds": calls, "active": active,
+                "model_outcomes":outcomes,
                 "model_circuits_open": circuits, "rpm_limit": self.rpm,
                 "estimated_tpm_limit": self.tpm, "parallel_limit": self.parallel}
 
