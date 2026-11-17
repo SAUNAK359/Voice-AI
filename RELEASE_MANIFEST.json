@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "description": "Source checkout integrity inventory (not a cryptographic signature)",
+  "description": "V18 exact Git source blob inventory; not a signed attestation",
   "files": [
     {
       "path": ".dockerignore",
@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "git_blob_sha1": "545686f69e46b27620764ffcbd9f130dff185df1",
-      "bytes": 4574
+      "git_blob_sha1": "95a80df0f20beb3b1ea8ecb074e7b516115bfd2f",
+      "bytes": 4851
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -201,6 +201,11 @@
       "path": "compose.v16.yml",
       "git_blob_sha1": "01fdc5d698cd021c09683f6d406f739d94c7b14b",
       "bytes": 1472
+    },
+    {
+      "path": "compose.v18.yml",
+      "git_blob_sha1": "f8fa4d69318f0ae53e558bb287d1031fc9d39f49",
+      "bytes": 1265
     },
     {
       "path": "CONTRIBUTING.md",
@@ -421,6 +426,11 @@
       "path": "docs/V17_PHASED_EXECUTION_AND_RELEASE.md",
       "git_blob_sha1": "1a2246e4a367fca2fd0c8f079668c52f72d98424",
       "bytes": 5776
+    },
+    {
+      "path": "docs/V18_GEMINI_WORK_RELIABILITY.md",
+      "git_blob_sha1": "9feefb0081191efed28bbbdf64dc283c802d2771",
+      "bytes": 3835
     },
     {
       "path": "docs/VOICE_SUPERVISOR_V10.md",
@@ -864,8 +874,8 @@
     },
     {
       "path": "src/rizzler/visual_agentic_qa.py",
-      "git_blob_sha1": "2b59ed63ba0d7a54b54215417335620ee883f1c3",
-      "bytes": 8730
+      "git_blob_sha1": "705b0f7620294c50340b122a1d39cb4bed30ce56",
+      "bytes": 8982
     },
     {
       "path": "src/rizzler/visual_intelligence.py",
@@ -964,8 +974,8 @@
     },
     {
       "path": "src/rizzler/work_cognition.py",
-      "git_blob_sha1": "175958391423a79250c8d71b76dd9f7b9f912fe0",
-      "bytes": 14289
+      "git_blob_sha1": "6d5d6ec694867fababfc077d8523292205e0cf5e",
+      "bytes": 14395
     },
     {
       "path": "src/rizzler/work_corpus.py",
@@ -979,8 +989,8 @@
     },
     {
       "path": "src/rizzler/work_deepagents.py",
-      "git_blob_sha1": "08cf6d6f0a1fd6fa0cf6170ffd17ec6f5f121c97",
-      "bytes": 8122
+      "git_blob_sha1": "7a7d4124737b6488b0ca97b3ef0f0a8365e64749",
+      "bytes": 8243
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -989,8 +999,8 @@
     },
     {
       "path": "src/rizzler/work_dynamic.py",
-      "git_blob_sha1": "31deac3c60b048a3bb5d8e827e8fbd1e93c8d9a9",
-      "bytes": 14396
+      "git_blob_sha1": "c51489ccc9c7eaae4508a6dde18baf8215b3a3bf",
+      "bytes": 18232
     },
     {
       "path": "src/rizzler/work_finance.py",
@@ -1001,6 +1011,11 @@
       "path": "src/rizzler/work_formula.py",
       "git_blob_sha1": "075727c011a9c3ff43ee85200c477c6dd597ca17",
       "bytes": 9001
+    },
+    {
+      "path": "src/rizzler/work_gemini_gateway.py",
+      "git_blob_sha1": "a9e51327c866ed9c627d4642f24528b9fd014591",
+      "bytes": 15078
     },
     {
       "path": "src/rizzler/work_graph_exec.py",
@@ -1039,8 +1054,8 @@
     },
     {
       "path": "src/rizzler/work_provider_retry.py",
-      "git_blob_sha1": "6697c2fe5a1f714ad3dc2f288c8616b0af0b23e9",
-      "bytes": 2490
+      "git_blob_sha1": "a607a2260550a9afcfdd725efcb22d63b003d930",
+      "bytes": 2638
     },
     {
       "path": "src/rizzler/work_quality.py",
@@ -1059,8 +1074,8 @@
     },
     {
       "path": "src/rizzler/work_repair.py",
-      "git_blob_sha1": "78972df4660b9e0585f6e48457727c3889789c36",
-      "bytes": 13378
+      "git_blob_sha1": "1bda4160bd6613e1fa6dfe490a75d051f3acede7",
+      "bytes": 12798
     },
     {
       "path": "src/rizzler/work_rich_docs.py",
@@ -1114,8 +1129,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "git_blob_sha1": "6610743103460f904f1b9e6b8100435e32085939",
-      "bytes": 17494
+      "git_blob_sha1": "1fc58bfae9a5d36e4c4d0775085b8dff95037760",
+      "bytes": 17454
     },
     {
       "path": "stack_site.html",
@@ -1441,6 +1456,11 @@
       "path": "tests/test_v17_structured_research.py",
       "git_blob_sha1": "c4eef8262e16d98ceb7829722c54a7fe57c95266",
       "bytes": 1646
+    },
+    {
+      "path": "tests/test_v18_gemini_admission.py",
+      "git_blob_sha1": "eb2f2c4d998effef9d9d45abf32319fb634c0e29",
+      "bytes": 5595
     },
     {
       "path": "tests/test_voice_core.cjs",
