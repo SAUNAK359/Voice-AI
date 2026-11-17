@@ -79,18 +79,18 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ,{"RIZZLER_WORK_PROVIDER_RPM":"1"}):
             first=GeminiWorkGate()
             second=GeminiWorkGate()
-        uid=await first.acquire("a",100)
+        uid=await first.acquire("alpha",100)
         first.release(uid)
         with self.assertRaises(WorkProviderUnavailable):
-            await second.acquire("a",100)
+            await second.acquire("alpha",100)
         self.assertEqual(first.metrics()["calls_last_60_seconds"],1)
 
     async def test_circuit_is_model_specific(self):
         gate=GeminiWorkGate()
-        gate.record("a",503)
+        gate.record("alpha",503)
         with self.assertRaises(WorkProviderUnavailable):
-            await gate.acquire("a",250)
-        uid=await gate.acquire("b",250)
+            await gate.acquire("alpha",250)
+        uid=await gate.acquire("beta",250)
         gate.release(uid)
 
     def test_nested_503_unwrapped_without_text(self):
@@ -99,11 +99,11 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(provider_status(root),503)
 
     def test_model_ids_are_deduplicated_and_bounded(self):
-        with patch.dict(os.environ,{"RIZZLER_WORK_FALLBACK_MODELS":"b,a,b"}):
-            self.assertEqual(model_sequence("a"),("a","b"))
+        with patch.dict(os.environ,{"RIZZLER_WORK_FALLBACK_MODELS":"beta,alpha,beta"}):
+            self.assertEqual(model_sequence("alpha"),("alpha","beta"))
         with patch.dict(os.environ,{"RIZZLER_WORK_FALLBACK_MODELS":"not valid"}):
             with self.assertRaises(ValueError):
-                model_sequence("a")
+                model_sequence("alpha")
 
 
 class WorkPlanTests(unittest.IsolatedAsyncioTestCase):
