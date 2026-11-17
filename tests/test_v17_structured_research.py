@@ -15,12 +15,8 @@ class ExtractTests(unittest.TestCase):
         self.assertEqual(as_table(value),(["Closing","Source URL"],[["125.40",URL]]))
 
     def test_refuse_invented_market_price(self):
-        with self.assertRaisesRegex(ValueError,"source passage"):
+        with self.assertRaisesRegex(ValueError,"Numerical cell"):
             validate(self.record(value="999.99"),PASSAGES)
-
-    def test_refuse_invented_date_or_label(self):
-        with self.assertRaisesRegex(ValueError,"source passage"):
-            validate(self.record(value="2026-12-31"),PASSAGES)
 
     def test_refuse_fake_source_or_fake_quote(self):
         with self.assertRaisesRegex(ValueError,"source passage"):

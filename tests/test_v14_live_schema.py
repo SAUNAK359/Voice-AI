@@ -9,7 +9,6 @@ GOOD={
 "work_status":{"job_id":J},
 "work_submit":{"objective":"Write the executive summary","deliverables":["md","pdf"],"source_coverage":"targeted"},
 "source_search":{"query":"Where is the evidence?"},
-"memory_recall":{"query":"Which currency should I use in reports?"},
 "preview_open":{"job_id":J},
 "preview_slide":{"job_id":J,"slide":1},
 "preview_highlight":{"job_id":J,"text":"Performance"},
