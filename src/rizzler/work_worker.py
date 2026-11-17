@@ -66,25 +66,12 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
         if not 15<=len(result.strip())<=max_chars:
             raise ValueError("SGLang report missing or too long")
         return result
-    from google import genai
-    from google.genai import types
-    client=genai.Client(api_key=cfg.gemini_api_key)
-    try:
-        from .work_async import wait_scope
-        async with wait_scope(min(90, cfg.request_timeout)):
-            from .production_guard import reserve_provider_call
-            reserve_provider_call('work')
-            response=await client.aio.models.generate_content(
-                model=cfg.gemini_model, contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.25,
-                    max_output_tokens=7000,
-                    thinking_config=__import__("rizzler.work_reasoning",fromlist=["config"]).config()))
-        result=getattr(response, "text", "") or ""
-        if not 15<=len(result.strip())<=max_chars:
-            raise ValueError("Model report missing or too long")
-        return result
-    finally:
-        await client.aio.aclose()
+    from .work_gemini_gateway import gemini_content
+    response=await gemini_content(cfg,prompt,max_output_tokens=7000)
+    result=getattr(response,"text","") or ""
+    if not 15<=len(result.strip())<=max_chars:
+        raise ValueError("Model report missing or too long")
+    return result
 
 
 async def grounded_research(objective: str) -> dict:

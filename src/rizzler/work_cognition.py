@@ -36,20 +36,23 @@ async def structured_decision(
         raise RuntimeError("Cognitive decision requires an authorized Gemini provider")
     own = client is None
     if own:
-        from google import genai
-        client = genai.Client(api_key=cfg.gemini_api_key)
-    from google.genai import types
+        from .work_gemini_gateway import gemini_content
+        response = await gemini_content(
+            cfg,prompt,schema=schema,max_output_tokens=max_tokens)
+    else:
+        from google.genai import types
     try:
-        reserve_provider_call(service)
-        from .work_async import wait_scope
-        async with wait_scope(min(35, cfg.request_timeout)):
-            response = await client.aio.models.generate_content(
-                model=cfg.gemini_model, contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=temperature,
-                    max_output_tokens=max_tokens,
-                    response_mime_type="application/json",
-                    response_json_schema=schema))
+        if not own:
+            reserve_provider_call(service)
+            from .work_async import wait_scope
+            async with wait_scope(min(35, cfg.request_timeout)):
+                response = await client.aio.models.generate_content(
+                    model=cfg.gemini_model, contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=temperature,
+                        max_output_tokens=max_tokens,
+                        response_mime_type="application/json",
+                        response_json_schema=schema))
         parsed = getattr(response, "parsed", None)
         if hasattr(parsed, "model_dump"):
             parsed = parsed.model_dump()
@@ -65,8 +68,7 @@ async def structured_decision(
             raise CognitiveDecisionError("Model decision must be an object")
         return parsed
     finally:
-        if own:
-            await client.aio.aclose()
+        pass
 
 
 RESEARCH_SCHEMA = {
