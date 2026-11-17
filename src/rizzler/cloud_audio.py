@@ -110,7 +110,7 @@ class GeminiCloudTTS:
         try:
             interaction=client.interactions.create(
                 model=self.model,
-                input=text,
+                input=[{"type":"user_input","content":[{"type":"text","text":text}]}],
                 response_format={"type":"audio"},
                 generation_config={"speech_config":[{"voice":self.voice}]})
             audio=getattr(interaction,"output_audio",None)
