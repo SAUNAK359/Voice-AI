@@ -3,7 +3,8 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
 const state={socket:null,context:null,media:null,source:null,worklet:null,muted:false,
-  silence:null,playbacks:[],scheduled:0,seq:800000,connected:false};
+  silence:null,playbacks:[],scheduled:0,seq:800000,connected:false,
+  vadSpeech:false,vadFrames:0,vadQuietMs:0,lastInputEnd:0,firstAudioLogged:false};
 function bubble(role,text){
  if(!text)return;
  const id=role+':native';let node=state.last?.[id];
@@ -24,6 +25,11 @@ function stopPlaying(){
 }
 function hear(blob){
  if(!state.context||state.muted||!blob.byteLength)return;
+ if(!state.firstAudioLogged && state.lastInputEnd){
+  const ms=Math.round(performance.now()-state.lastInputEnd);
+  const detail=$('detail');if(detail)detail.textContent='Gemini Live first PCM '+ms+' ms (browser receive; not speaker)';
+  state.firstAudioLogged=true;
+ }
  const ctx=state.context;
  const data=new Int16Array(blob.slice(0));
  const buffer=ctx.createBuffer(1,data.length,24000),channel=buffer.getChannelData(0);
@@ -89,8 +95,35 @@ async function connect(key,sessionId,production){
   const silence=ctx.createGain();silence.gain.value=0;
   worklet.port.onmessage=evt=>{
    if(state.muted||socket.readyState!==WebSocket.OPEN)return;
-   const pcm=convertPcm(evt.data,ctx.sampleRate);
+   const frame=evt.data;
+   const pcm=convertPcm(frame,ctx.sampleRate);
    if(pcm.length&&socket.bufferedAmount<500000)socket.send(pcm.buffer);
+   // Hybrid endpointing. Gemini's server VAD remains authoritative;
+   // do not shorten natural pauses below ~650ms or drop microphone audio.
+   let power=0;
+   for(let j=0;j<frame.length;j++)power+=frame[j]*frame[j];
+   const audible=Math.sqrt(power/Math.max(1,frame.length))>=500;
+   if(audible){
+    state.vadFrames=Math.min(10,state.vadFrames+1);
+    state.vadQuietMs=0;
+    if(state.vadFrames>=3&&!state.vadSpeech){
+     state.vadSpeech=true;
+     state.firstAudioLogged=false;
+     state.lastInputEnd=0;
+     if(state.playbacks.length)stopPlaying();
+    }
+   }else{
+    state.vadFrames=0;
+    if(state.vadSpeech){
+     state.vadQuietMs+=frame.length/ctx.sampleRate*1000;
+     if(state.vadQuietMs>=650){
+      state.vadSpeech=false;
+      state.vadQuietMs=0;
+      state.lastInputEnd=performance.now();
+      socket.send(JSON.stringify({type:'audio_end'}));
+     }
+    }
+   }
   };
   source.connect(worklet);worklet.connect(silence);silence.connect(ctx.destination);
   await ctx.resume();
@@ -101,6 +134,7 @@ async function connect(key,sessionId,production){
 function textSend(text){
  if(!state.connected||state.socket.readyState!==WebSocket.OPEN)throw Error('Live session is disconnected.');
  newTurn();bubble('user',text);
+ state.lastInputEnd=performance.now();state.firstAudioLogged=false;
  state.socket.send(JSON.stringify({type:'text',text}));
 }
 function setMuted(value){state.muted=!!value;if(state.muted)stopPlaying()}
@@ -110,7 +144,7 @@ async function disconnect(){
  state.media?.getTracks().forEach(t=>t.stop());
  if(state.context)await state.context.close().catch(()=>{});
  state.socket=state.media=state.context=state.source=state.worklet=state.silence=null;
- state.readPosition=0;$('send').hidden=false;
+ state.readPosition=0;state.vadSpeech=false;state.vadFrames=0;state.vadQuietMs=0;state.lastInputEnd=0;$('send').hidden=false;
 }
 $('agent-chat')?.addEventListener('submit',event=>{
  if(!state.connected)return;
