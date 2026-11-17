@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 5079,
-      "git_blob_sha1": "4e67b518ea5487678f65ee4d8b54ed70b0250b1a"
+      "bytes": 5310,
+      "git_blob_sha1": "3416cb352c393c8de5013e26298fb53aad5bdcb0"
     },
     {
       "path": ".github/workflows/ci.yml",
