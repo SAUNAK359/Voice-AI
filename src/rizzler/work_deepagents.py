@@ -38,9 +38,11 @@ def _model(cfg):
         from langchain_google_genai import ChatGoogleGenerativeAI
     except ImportError as exc:
         raise RuntimeError("Install the [deepagents] extra") from exc
+    from .work_gemini_gateway import DeepAgentsWorkLimiter
     return ChatGoogleGenerativeAI(
         model=cfg.gemini_model, google_api_key=cfg.gemini_api_key,
-        temperature=0.1, max_retries=0, timeout=cfg.request_timeout)
+        temperature=0.1, max_retries=0, timeout=cfg.request_timeout,
+        rate_limiter=DeepAgentsWorkLimiter(cfg.gemini_model))
 
 
 def _safe_context(payload: dict) -> dict:

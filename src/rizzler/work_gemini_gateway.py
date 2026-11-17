@@ -252,3 +252,30 @@ async def gemini_content(cfg, prompt: str, *, schema: dict | None = None,
     return await gate.run(model_sequence(cfg.gemini_model), invoke,
                           prompt_characters=len(prompt) + len(system_instruction or ""),
                           max_output_tokens=max_output_tokens)
+
+class DeepAgentsWorkLimiter:
+    """LangChain rate_limiter protocol backed by the same cross-process gate.
+
+    LangChain invokes aacquire immediately before each individual model request,
+    even inside Deep Agents subagents. A bounded reservation is made then
+    released, retaining the global RPM, estimated TPM and model cooldown.
+    The model call itself is bounded by the Work provider timeout. Compact
+    one-call planning remains the preferred path.
+    """
+    def __init__(self, model: str):
+        self.model=model
+
+    async def aacquire(self, *, blocking: bool = True) -> bool:
+        if not blocking:
+            return False
+        gate=GeminiWorkGate()
+        uid=await gate.acquire(self.model, 3000)
+        gate.release(uid)
+        from .production_guard import reserve_provider_call
+        reserve_provider_call("work")
+        return True
+
+    def acquire(self, *, blocking: bool = True) -> bool:
+        if not blocking:
+            return False
+        return asyncio.run(self.aacquire(blocking=True))
