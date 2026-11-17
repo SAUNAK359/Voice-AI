@@ -87,6 +87,8 @@ class GeminiWorkGate:
                     (Path(tempfile.gettempdir()) / "rizzler-work-admission"))
         path.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = path / "gemini_work_admission.sqlite3"
+        with sqlite3.connect(self.db, timeout=10) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
         self.rpm = int(_config_float("RIZZLER_WORK_PROVIDER_RPM", 6, 1, 1000))
         self.tpm = int(_config_float("RIZZLER_WORK_PROVIDER_TPM", 24000, 1000, 10_000_000))
         self.parallel = int(_config_float("RIZZLER_WORK_PROVIDER_PARALLEL", 1, 1, 8))
@@ -129,6 +131,11 @@ class GeminiWorkGate:
             with self._tx() as c:
                 c.execute("DELETE FROM requests WHERE called<?", (now - 60,))
                 c.execute("DELETE FROM active WHERE expires<?", (now,))
+                project = c.execute(
+                    "SELECT open_until FROM circuits WHERE model='__project__'"
+                ).fetchone()
+                if project and project[0] > now:
+                    raise WorkProviderUnavailable(429, int(project[0] - now) + 1)
                 row = c.execute(
                     "SELECT open_until FROM circuits WHERE model=?", (model,)
                 ).fetchone()
@@ -158,7 +165,15 @@ class GeminiWorkGate:
 
     def record(self, model: str, status: int | None) -> None:
         with self._tx() as c:
-            if status in (500, 502, 503, 504):
+            if status == 429:
+                # 429 often applies to the entire Google project. Prevent
+                # unrelated queued Work jobs from immediately retrying it.
+                c.execute("""INSERT INTO circuits(model,failures,open_until)
+                    VALUES('__project__',1,?)
+                    ON CONFLICT(model) DO UPDATE SET
+                    failures=excluded.failures,open_until=excluded.open_until""",
+                    (time.time()+60,))
+            elif status in (500, 502, 503, 504):
                 old = c.execute(
                     "SELECT failures FROM circuits WHERE model=?", (model,)
                 ).fetchone()
@@ -253,7 +268,16 @@ async def gemini_content(cfg, prompt: str, *, schema: dict | None = None,
                           prompt_characters=len(prompt) + len(system_instruction or ""),
                           max_output_tokens=max_output_tokens)
 
-class DeepAgentsWorkLimiter:
+try:
+    from langchain_core.rate_limiters import BaseRateLimiter
+except ImportError:
+    # Work deployments without optional Deep Agents can still use this
+    # gateway for native Gemini research, structured decisions and QA.
+    class BaseRateLimiter:
+        pass
+
+
+class DeepAgentsWorkLimiter(BaseRateLimiter):
     """LangChain rate_limiter protocol backed by the same cross-process gate.
 
     LangChain invokes aacquire immediately before each individual model request,
