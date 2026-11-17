@@ -929,8 +929,8 @@
     },
     {
       "path": "src/rizzler/web/native-live.js",
-      "git_blob_sha1": "4ac3cacb5e328a1247d5f681ea3091d69291b8d5",
-      "bytes": 6185
+      "git_blob_sha1": "897fe7b8fa683458ad8e5ae4a7b5ed6d32ff7917",
+      "bytes": 7589
     },
     {
       "path": "src/rizzler/web/rich-text.js",
