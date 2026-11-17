@@ -989,8 +989,8 @@
     },
     {
       "path": "src/rizzler/work_deepagents.py",
-      "git_blob_sha1": "7a7d4124737b6488b0ca97b3ef0f0a8365e64749",
-      "bytes": 8243
+      "git_blob_sha1": "95568d1e05fcf1742bc76a403db9c7c4f79eb5e1",
+      "bytes": 8610
     },
     {
       "path": "src/rizzler/work_design.py",
