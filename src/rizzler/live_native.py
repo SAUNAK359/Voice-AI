@@ -43,7 +43,7 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
         from google import genai
         from google.genai import types
         from .source_index import SourceIndex
-        live_model=os.environ.get("RIZZLER_LIVE_MODEL","gemini-3.1-flash-live-preview")
+        live_model=os.environ.get("RIZZLER_LIVE_MODEL","gemini-3.8-live")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,99}",live_model):
             await ws.close(code=1008)
             return
@@ -136,8 +136,16 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
                 await ws.send_json({"type":"preview_actions","ui_actions":[action]})
                 return {"ok":True,"ui_action":action}
             return {"error":"Unavailable tool"}
+        voice_name=os.environ.get("RIZZLER_LIVE_VOICE","Kore")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{1,39}",voice_name):
+            await ws.close(code=1008)
+            return
         config=types.LiveConnectConfig(
             response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=voice_name))),
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             context_window_compression=types.ContextWindowCompressionConfig(
@@ -161,7 +169,9 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
         send_lock=asyncio.Lock()
         try:
             async with client.aio.live.connect(model=live_model,config=config) as provider:
-                await ws.send_json({"type":"ready","native":True,"sample_rate":24000})
+                await ws.send_json({"type":"ready","native":True,
+                    "input_rate":16000,"sample_rate":24000,
+                    "speech_engine":"gemini_native_audio","model":live_model})
                 async def browser_input():
                     nonlocal last_user_input, turn_token
                     while True:
@@ -190,6 +200,10 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
                                 async with send_lock:
                                     await provider.send_realtime_input(audio_stream_end=True)
                             elif message.get("type")=="interrupt":
+                                # Explicit barge-in must cancel provider speech,
+                                # not only report a browser-side interruption.
+                                async with send_lock:
+                                    await provider.send_client_content(turns=[],turn_complete=True)
                                 await ws.send_json({"type":"interrupted"})
                             else:
                                 raise ValueError("Unsupported Live event")
@@ -220,25 +234,38 @@ def register_native_live(app,settings,sessions,identity,work,memory=None):
                                 if content.turn_complete:
                                     await ws.send_json({"type":"turn_complete"})
                             if response.tool_call:
-                                replies=[]
-                                for fc in response.tool_call.function_calls or []:
+                                calls=list(response.tool_call.function_calls or [])[:8]
+                                async def resolve_tool(fc):
                                     try:
                                         result=await asyncio.wait_for(execute(fc),timeout=15)
                                     except (ValueError,PermissionError,RuntimeError) as exc:
                                         result={"error":type(exc).__name__}
                                     except Exception:
                                         result={"error":"Tool temporarily unavailable"}
-                                    replies.append(types.FunctionResponse(
-                                        name=fc.name,id=fc.id,response={"result":result}))
-                                if replies:
-                                    async with send_lock:
-                                        await provider.send_tool_response(function_responses=replies)
+                                    return types.FunctionResponse(
+                                        name=fc.name,id=fc.id,response={"result":result})
+                                # Model decisions remain independent; concurrent
+                                # safe tool executions do not block streaming
+                                # speech while waiting for WorkStore I/O.
+                                if calls:
+                                    async def dispatch_tool_batch():
+                                        replies=await asyncio.gather(
+                                            *(resolve_tool(fc) for fc in calls))
+                                        async with send_lock:
+                                            await provider.send_tool_response(
+                                                function_responses=replies)
+                                    task=asyncio.create_task(dispatch_tool_batch())
+                                    tool_tasks.add(task)
+                                    task.add_done_callback(tool_tasks.discard)
+                tool_tasks=set()
                 sending=asyncio.create_task(browser_input())
                 receiving=asyncio.create_task(provider_output())
                 done,pending=await asyncio.wait((sending,receiving),
                                                 return_when=asyncio.FIRST_COMPLETED)
                 for task in pending:task.cancel()
                 await asyncio.gather(*pending,return_exceptions=True)
+                for task in tool_tasks:task.cancel()
+                await asyncio.gather(*tool_tasks,return_exceptions=True)
                 for task in done:
                     if not task.cancelled():task.result()
         except Exception:
