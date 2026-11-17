@@ -168,6 +168,12 @@ async def plan_with_deepagents(
         # Preserve a sanitized retry classification, never provider response
         # bodies, API keys or model-written text.
         from .work_provider_retry import transient_code, retry_delay
+        from .work_gemini_gateway import GeminiWorkGate, provider_status
+        status=provider_status(exc)
+        if status in (429,500,502,503,504):
+            # Recursive Deep Agents calls also feed the shared model/project
+            # cooldown. Their request admission is handled by rate_limiter.
+            GeminiWorkGate().record(cfg.gemini_model,status)
         code = transient_code(exc)
         if code:
             error=DeepAgentPlanningError(code)
