@@ -266,6 +266,43 @@ def normalize_source(data: bytes, mime_type: str, *, source_id: str,
                     tables.append({"rows": rows, "location": {"sheet": sheet.title[:80]}})
         finally:
             workbook.close()
+    elif media == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        from docx import Document
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                entries=archive.infolist()
+                if len(entries)>600 or sum(x.file_size for x in entries)>35_000_000:
+                    raise ValueError("Word package exceeds extraction budget")
+                for item in entries:
+                    parts=item.filename.replace("\\\\","/").split("/")
+                    if (item.filename.startswith("/") or ".." in parts or
+                            item.filename.lower().endswith(
+                                ("vbaproject.bin",".exe",".dll",".ps1")) or
+                            (item.external_attr >> 16) & 0o170000 == 0o120000):
+                        raise ValueError("Unsafe Word archive entry")
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Invalid Word document package") from exc
+        document=Document(io.BytesIO(data))
+        for index,paragraph in enumerate(document.paragraphs):
+            if len(blocks)>=MAX_BLOCKS:
+                warnings.append("docx_paragraphs_truncated")
+                break
+            content=_clean(paragraph.text)
+            if content:
+                blocks.append({
+                    "type":"heading" if paragraph.style and
+                        paragraph.style.name.lower().startswith("heading") else "text",
+                    "text":content,"location":{"paragraph":index+1}})
+        for index,table in enumerate(document.tables[:40]):
+            rows=[]
+            for row in table.rows[:MAX_TABLE_ROWS]:
+                rows.append([_clean(cell.text,1000) for cell in row.cells[:50]])
+            if rows:
+                tables.append({"rows":rows,"location":{"table":index+1}})
+        if len(document.tables)>40:
+            warnings.append("docx_tables_truncated")
+        if not blocks and not tables:
+            warnings.append("docx_without_extractable_text")
     elif media in ("application/json", "application/ld+json"):
         obj = json.loads(data.decode("utf-8-sig"))
         if isinstance(obj, dict):

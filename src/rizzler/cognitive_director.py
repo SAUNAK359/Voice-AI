@@ -54,10 +54,10 @@ async def plan_specialist_briefs(objective: str, graph: dict, *,
             + "\nUser objective: " + objective[:4500]
         )
         async with asyncio.timeout(timeout_seconds):
-            from .production_guard import reserve_provider_call
-            reserve_provider_call("work")
-            response = await client.aio.models.generate_content(
-                model=model, contents=prompt,
+            from .cognitive_provider import generate_with_recovery
+            response = await generate_with_recovery(
+                client, model=model, contents=prompt, role="work",
+                timeout=min(85.0, timeout_seconds),
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     temperature=0.2, max_output_tokens=3500))

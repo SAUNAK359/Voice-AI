@@ -12,7 +12,11 @@
 
 ---
 
-> **V23 cognitive Work foundation (experimental):** The `feature/v23-cognitive-evidence-foundation` branch adds owner-scoped shared cognition, source normalization, optional safe HTTPS research, model-directed specialist briefs, deeper section drafting and independent content review. These features are **not yet production-certified** and are disabled by default. See [implementation and switches](docs/V23_COGNITIVE_IMPLEMENTATION.md) and [phase-by-phase architecture](docs/V23_COGNITIVE_EXECUTION_PLAN.md).\n\n> **Release classification: showcase / research preview.** The notebook and offline contracts are testable; live Kaggle GPU, cloud-model and phone/browser microphone performance are **not currently certified**. GitHub Actions run static and CPU-only tests, not NVIDIA inference. Rizzler is not production-hardened for multi-tenant or confidential workloads.
+> **V23 cognitive Work foundation (experimental):** The `feature/v23-cognitive-evidence-foundation` branch adds owner-scoped shared cognition, source normalization, optional safe HTTPS research, model-directed specialist briefs, deeper section drafting and independent content review. These features are **not yet production-certified** and are disabled by default. See [implementation and switches](docs/V23_COGNITIVE_IMPLEMENTATION.md) and [phase-by-phase architecture](docs/V23_COGNITIVE_EXECUTION_PLAN.md).
+
+> **V23 experimental Cognitive Work Studio:** [Implementation completeness and release gates](docs/V23_E2E_COMPLETENESS_AUDIT.md). The new optional `RIZZLER_V23_MODE=full` profile enables model-directed research, dynamic expert investigations, source quotation checks, specialized PPTX/DOCX/PDF/XLSX generation, and bounded provider recovery. It is **not production-certified**, and does not change the V11 preview classification until live acceptance gates pass.
+
+> **Release classification: showcase / research preview.** The notebook and offline contracts are testable; live Kaggle GPU, cloud-model and phone/browser microphone performance are **not currently certified**. GitHub Actions run static and CPU-only tests, not NVIDIA inference. Rizzler is not production-hardened for multi-tenant or confidential workloads.
 
 ## Product overview
 

@@ -4,6 +4,8 @@ Exactly-once *commit* is enforced; external provider calls can be re-executed
 after process crashes. The DB and files MUST live on a persistent host volume.
 """
 from __future__ import annotations
+
+from .v23_flags import enabled as feature_enabled
 import hashlib
 import json
 import re
@@ -93,6 +95,10 @@ class WorkStore:
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS cognitive_plans(
+              job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL,
+              sha256 TEXT NOT NULL, created REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             """)
 
     @contextmanager
@@ -128,6 +134,11 @@ class WorkStore:
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
+        # Snapshot runtime policy into the immutable job envelope; a restart
+        # or feature flag change must not silently alter the approved DAG.
+        from os import environ
+        if feature_enabled("RIZZLER_V23_UNIFIED_RESEARCH"):
+            payload["research_synthesis"] = True
         from .work_agents import plan
         planned = plan(payload)
         from .task_planning import execution_graph
@@ -329,6 +340,58 @@ class WorkStore:
                 self._event(c,jid,"automation_plan","Draft schedule pending owner approval")
             self._event(c,jid,"completed","All required outputs verified")
 
+    def save_cognitive_plan(self, jid: str, worker: str, fence: int,
+                            plan: dict) -> str:
+        """Persist one schema-checked model decomposition under the current lease."""
+        from .hace_runtime import validate_stage_briefs
+        if not isinstance(plan, dict) or "stages" not in plan:
+            raise ValueError("Invalid model-authored plan")
+        # Public optimizer metadata never grants tool permissions.
+        document = {"schema_version":plan.get("schema_version"),
+                    "stages":plan["stages"]}
+        with self._tx() as c:
+            row = self._active(c, jid, worker, fence)
+            payload = json.loads(row["payload"])
+            from .task_planning import execution_graph
+            approved = frozenset(step["id"] for step in execution_graph(payload)["steps"])
+            validate_stage_briefs(document, approved=approved)
+            raw = json.dumps(document,sort_keys=True,
+                             separators=(",",":"),ensure_ascii=False)
+            if len(raw.encode("utf-8")) > 100_000:
+                raise ValueError("Cognitive plan exceeds storage budget")
+            digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            old = c.execute("SELECT sha256 FROM cognitive_plans WHERE job_id=?",
+                            (jid,)).fetchone()
+            if old:
+                if old["sha256"] != digest:
+                    raise ValueError("Cognitive plan cannot be silently overwritten")
+                return digest
+            c.execute("""INSERT INTO cognitive_plans(job_id,plan_json,sha256,created)
+                         VALUES(?,?,?,?)""",(jid,raw,digest,time.time()))
+            return digest
+
+    def cognitive_plan(self, owner: str, jid: str) -> dict | None:
+        """Read a checked, immutable task decomposition for crash recovery."""
+        from .hace_runtime import validate_stage_briefs
+        with self._tx() as c:
+            row=c.execute("SELECT payload FROM jobs WHERE owner=? AND id=?",
+                          (owner,jid)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            saved=c.execute("SELECT plan_json,sha256 FROM cognitive_plans WHERE job_id=?",
+                            (jid,)).fetchone()
+            if saved is None:
+                return None
+            raw=saved["plan_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=saved["sha256"]:
+                raise ValueError("Cognitive plan integrity failed")
+            plan=json.loads(raw)
+            from .task_planning import execution_graph
+            approved=frozenset(x["id"] for x in execution_graph(
+                json.loads(row["payload"]))["steps"])
+            validate_stage_briefs(plan,approved=approved)
+            return plan
+
     def publish_cognition(self, jid: str, worker: str, fence: int,
                           agent: str, kind: str, payload: dict) -> int:
         """Fenced, transactional publication of public task findings.
@@ -350,10 +413,13 @@ class WorkStore:
             parent = self._active(c, jid, worker, fence)
             cursor = c.execute(
                 """INSERT INTO cognitive_events(job_id,owner,agent,kind,
-                   payload_json,payload_sha256,at) VALUES(?,?,?,?,?,?,?)""",
+                   payload_json,payload_sha256,at) VALUES(?,?,?,?,?,?,?)
+                   RETURNING seq""",
                 (jid, parent["owner"], agent, kind, raw,
                  hashlib.sha256(raw.encode("utf-8")).hexdigest(), time.time()))
-            return int(cursor.lastrowid)
+            # RETURNING is portable to both SQLite 3.35+ and PostgreSQL,
+            # unlike sqlite3 cursor.lastrowid (not exposed by _Tx).
+            return int(cursor.fetchone()[0])
 
     def cognitive_events(self, owner: str, jid: str, after: int = 0,
                          limit: int = 100) -> list[dict]:
@@ -504,6 +570,14 @@ class WorkStore:
             if isinstance(result.get("sources"), list):
                 public["source_refs"] = [
                     u[:350] for u in result["sources"][:8] if isinstance(u,str)]
+            # A bounded, owner-scoped public finding summary enables sibling
+            # specialists to adapt without rereading whole model transcripts.
+            if isinstance(result.get("text"), str):
+                public["summary"] = result["text"][:1800]
+            if isinstance(result.get("verified_quotes"), list):
+                public["claim_refs"] = [
+                    item.get("id") for item in result["verified_quotes"][:20]
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)]
             if isinstance(result.get("receipts"), list):
                 public["artifact_kinds"] = [
                     item.get("kind") for item in result["receipts"][:12]
