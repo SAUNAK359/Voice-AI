@@ -18,6 +18,7 @@ MIME_TYPES = frozenset({
     "text/html", "application/xhtml+xml", "text/plain", "text/markdown",
     "text/x-markdown", "application/pdf", "text/csv", "application/csv",
     "application/json", "application/ld+json",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 })
 
 
