@@ -56,6 +56,21 @@ class DraftProgressTests(unittest.TestCase):
                 self.jid, self.worker, self.claim["fence"],
                 "unauthorized", "Not allowed")
 
+    def test_quality_findings_are_persisted_and_owner_isolated(self):
+        findings = [{"kind": "pdf", "problem":
+                     "Technical report has insufficient context and headings."}]
+        self.store.record_quality_feedback(
+            self.jid, self.worker, self.claim["fence"], 0, findings)
+        saved = self.store.quality_feedback(self.owner, self.jid)
+        self.assertEqual(saved, [{"iteration": 0, "findings": findings}])
+        with self.assertRaises(Missing):
+            self.store.quality_feedback("other_owner", self.jid)
+        events = self.store.events(self.owner, self.jid)
+        self.assertTrue(any(e["stage"] == "quality_result" for e in events))
+        with self.assertRaises(ValueError):
+            self.store.record_quality_feedback(
+                self.jid, self.worker, self.claim["fence"], -1, findings)
+
     def test_owner_only_draft_is_checksum_verified_and_unpublished(self):
         data = b"# Draft analysis\n\nThis report has yet to pass final QA.\n" * 5
         directory = self.store.root / "checkpoints" / self.owner / self.jid
