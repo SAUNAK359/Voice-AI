@@ -23,7 +23,7 @@ async def reflect_once(ledger: ProceduralLedger | None = None, *,
     ledger=ledger if ledger is not None else from_environment()
     if ledger is None:
         return {"status":"disabled"}
-    batch=ledger.due()
+    batch=ledger.claim_due()
     if batch is None:
         return {"status":"idle"}
     # Avoid spending a model call to optimize a specialist with no observed
