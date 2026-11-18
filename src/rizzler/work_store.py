@@ -412,10 +412,13 @@ class WorkStore:
             parent = self._active(c, jid, worker, fence)
             cursor = c.execute(
                 """INSERT INTO cognitive_events(job_id,owner,agent,kind,
-                   payload_json,payload_sha256,at) VALUES(?,?,?,?,?,?,?)""",
+                   payload_json,payload_sha256,at) VALUES(?,?,?,?,?,?,?)
+                   RETURNING seq""",
                 (jid, parent["owner"], agent, kind, raw,
                  hashlib.sha256(raw.encode("utf-8")).hexdigest(), time.time()))
-            return int(cursor.lastrowid)
+            # RETURNING is portable to both SQLite 3.35+ and PostgreSQL,
+            # unlike sqlite3 cursor.lastrowid (not exposed by _Tx).
+            return int(cursor.fetchone()[0])
 
     def cognitive_events(self, owner: str, jid: str, after: int = 0,
                          limit: int = 100) -> list[dict]:
