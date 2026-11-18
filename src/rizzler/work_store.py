@@ -837,6 +837,32 @@ class WorkStore:
             self._settle_agents(c, jid, state)
             self._event(c,jid,state,"Execution "+state)
 
+    def draft_text(self, owner: str, jid: str) -> dict:
+        """Read only a committed writer checkpoint for the authenticated owner.
+
+        Text is not final or source-verified until the Quality Agent passes.
+        """
+        self.get(owner, jid)
+        with self._tx() as c:
+            row = c.execute(
+                "SELECT result_json,result_sha256 FROM agent_steps "
+                "WHERE job_id=? AND agent='orchestrator' AND status='completed'",
+                (jid,)).fetchone()
+        if row is None:
+            return {"status": "pending", "text": ""}
+        raw = row["result_json"]
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest() != row["result_sha256"]:
+            return {"status": "integrity_failed", "text": ""}
+        try:
+            result = json.loads(raw)
+            content = result.get("text", "")
+        except (ValueError, AttributeError):
+            return {"status": "integrity_failed", "text": ""}
+        if not isinstance(content, str):
+            return {"status": "integrity_failed", "text": ""}
+        return {"status": "draft_unverified", "text": content[:20000],
+                "truncated": len(content) > 20000}
+
     def drafts(self, owner: str, jid: str) -> list[dict]:
         """Expose only checksum-verified committed specialist files, never attempts.
 
