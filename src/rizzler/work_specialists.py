@@ -397,7 +397,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 WorkModelConfig.from_env(),
                 on_event=lambda stage,ident:store.record_progress(
                     jid,worker_id,fence,"editorial_progress",
-                    "Editorial "+str(ident)[:35]+" "+stage[:30]))
+                    "Editorial "+str(ident)[:35]+" "+stage[:30]),
+                checkpoint_dir=checkpoint/"hace_editorial")
         elif (composer is production_composer and
                 os.environ.get("RIZZLER_WORK_ORCHESTRATOR","legacy") == "deepagents" and
                 os.environ.get("RIZZLER_DEEP_AGENTS_SYNTHESIS","1") == "1"):
