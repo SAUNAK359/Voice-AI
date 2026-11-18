@@ -93,6 +93,10 @@ class WorkStore:
               job_id TEXT PRIMARY KEY, record_json TEXT NOT NULL,
               sha256 TEXT NOT NULL, created REAL NOT NULL,
               FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS hace_plans(
+              job_id TEXT PRIMARY KEY, record_json TEXT NOT NULL,
+              sha256 TEXT NOT NULL, created REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE TABLE IF NOT EXISTS job_lineage(
               child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL,
               operation TEXT NOT NULL, created REAL NOT NULL,
@@ -266,6 +270,57 @@ class WorkStore:
                 raise ValueError("Stored cognitive preflight checksum failed")
             from .work_preflight import verify_committed
             return verify_committed(json.loads(raw), json.loads(row["payload"]))
+
+    def hace_plan(self, owner: str, jid: str) -> dict | None:
+        """Return checksum-verified, immutable hierarchy, never private reasoning."""
+        with self._tx() as c:
+            job=c.execute("SELECT payload FROM jobs WHERE id=? AND owner=?",
+                          (jid,owner)).fetchone()
+            if job is None:
+                raise Missing("Job not found")
+            row=c.execute("SELECT record_json,sha256 FROM hace_plans WHERE job_id=?",
+                          (jid,)).fetchone()
+        if row is None:
+            return None
+        raw=row["record_json"]
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=row["sha256"]:
+            raise ValueError("Stored HACE plan integrity mismatch")
+        from .work_hace import validate
+        original=json.loads(job["payload"])
+        doc=json.loads(raw)
+        validate(doc,policy=original.get("evidence_scope","auto"))
+        return doc
+
+    def commit_hace_plan(self, owner: str, jid: str, worker: str,
+                         fence: int, proposed: dict) -> dict:
+        """Commit exactly one validated model-authored hierarchy under the lease."""
+        from .work_hace import validate
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            if row["owner"]!=owner:
+                raise Missing("Job owner mismatch")
+            payload=json.loads(row["payload"])
+            validate(proposed,policy=payload.get("evidence_scope","auto"))
+            raw=json.dumps(proposed,sort_keys=True,ensure_ascii=False,
+                           separators=(",",":"),allow_nan=False)
+            if len(raw.encode("utf-8"))>26000:
+                raise ValueError("HACE plan storage budget exceeded")
+            saved=c.execute(
+                "SELECT record_json,sha256 FROM hace_plans WHERE job_id=?",
+                (jid,)).fetchone()
+            digest=hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            if saved:
+                if (hashlib.sha256(saved["record_json"].encode("utf-8")).hexdigest()
+                        !=saved["sha256"]):
+                    raise ValueError("Committed HACE plan corrupted")
+                if saved["record_json"]!=raw:
+                    raise Conflict("Committed HACE plan cannot change")
+                return proposed
+            c.execute(
+                "INSERT INTO hace_plans(job_id,record_json,sha256,created) "
+                "VALUES(?,?,?,?)", (jid,raw,digest,time.time()))
+            self._event(c,jid,"hace_plan","Hierarchical domain contract committed")
+        return proposed
 
     def record_cognitive_feedback(self, owner: str, jid: str, worker: str,
                                   fence: int, attempt: int, code: str) -> None:
