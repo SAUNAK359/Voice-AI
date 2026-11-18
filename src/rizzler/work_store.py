@@ -93,6 +93,10 @@ class WorkStore:
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS cognitive_plans(
+              job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL,
+              sha256 TEXT NOT NULL, created REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             """)
 
     @contextmanager
@@ -334,6 +338,58 @@ class WorkStore:
                     (secrets.token_hex(16),row["owner"],jid,time.time()))
                 self._event(c,jid,"automation_plan","Draft schedule pending owner approval")
             self._event(c,jid,"completed","All required outputs verified")
+
+    def save_cognitive_plan(self, jid: str, worker: str, fence: int,
+                            plan: dict) -> str:
+        """Persist one schema-checked model decomposition under the current lease."""
+        from .hace_runtime import validate_stage_briefs
+        if not isinstance(plan, dict) or "stages" not in plan:
+            raise ValueError("Invalid model-authored plan")
+        # Public optimizer metadata never grants tool permissions.
+        document = {"schema_version":plan.get("schema_version"),
+                    "stages":plan["stages"]}
+        with self._tx() as c:
+            row = self._active(c, jid, worker, fence)
+            payload = json.loads(row["payload"])
+            from .task_planning import execution_graph
+            approved = frozenset(step["id"] for step in execution_graph(payload)["steps"])
+            validate_stage_briefs(document, approved=approved)
+            raw = json.dumps(document,sort_keys=True,
+                             separators=(",",":"),ensure_ascii=False)
+            if len(raw.encode("utf-8")) > 100_000:
+                raise ValueError("Cognitive plan exceeds storage budget")
+            digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            old = c.execute("SELECT sha256 FROM cognitive_plans WHERE job_id=?",
+                            (jid,)).fetchone()
+            if old:
+                if old["sha256"] != digest:
+                    raise ValueError("Cognitive plan cannot be silently overwritten")
+                return digest
+            c.execute("""INSERT INTO cognitive_plans(job_id,plan_json,sha256,created)
+                         VALUES(?,?,?,?)""",(jid,raw,digest,time.time()))
+            return digest
+
+    def cognitive_plan(self, owner: str, jid: str) -> dict | None:
+        """Read a checked, immutable task decomposition for crash recovery."""
+        from .hace_runtime import validate_stage_briefs
+        with self._tx() as c:
+            row=c.execute("SELECT payload FROM jobs WHERE owner=? AND id=?",
+                          (owner,jid)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            saved=c.execute("SELECT plan_json,sha256 FROM cognitive_plans WHERE job_id=?",
+                            (jid,)).fetchone()
+            if saved is None:
+                return None
+            raw=saved["plan_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=saved["sha256"]:
+                raise ValueError("Cognitive plan integrity failed")
+            plan=json.loads(raw)
+            from .task_planning import execution_graph
+            approved=frozenset(x["id"] for x in execution_graph(
+                json.loads(row["payload"]))["steps"])
+            validate_stage_briefs(plan,approved=approved)
+            return plan
 
     def publish_cognition(self, jid: str, worker: str, fence: int,
                           agent: str, kind: str, payload: dict) -> int:
