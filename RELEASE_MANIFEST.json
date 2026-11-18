@@ -314,8 +314,8 @@
     },
     {
       "path": "src/rizzler/work_design.py",
-      "bytes": 20420,
-      "sha256": "db8303a161015550c533889237623687d4c355663aa639f3cd3ecab772d292e5"
+      "bytes": 20404,
+      "sha256": "347f95e7d1879b0e42cb8c8c67be4d6546944b365363628e467cfdf4d9f13964"
     },
     {
       "path": "src/rizzler/work_specialists.py",
@@ -374,8 +374,8 @@
     },
     {
       "path": "tests/test_v23_content_engine.py",
-      "sha256": "145aa6174f00a396f4b478822cbd81f8687f2f1cdac18e1c14cc67e49330fb7e",
-      "bytes": 5997
+      "sha256": "6ee5d8494ba1304f78147360575186d5cad66bd5e8eaaaab222fb96353d7f28a",
+      "bytes": 5995
     },
     {
       "path": "tests/test_v23_hace_runtime.py",
