@@ -1154,8 +1154,8 @@
     },
     {
       "path": "src/rizzler/work_presentation.py",
-      "git_blob_sha1": "4275198ee8983f4300324f6716eaf2405938ab02",
-      "bytes": 18891
+      "git_blob_sha1": "04b0f863fa9dafcf18a555c31b262ceef70b8b83",
+      "bytes": 19348
     },
     {
       "path": "src/rizzler/work_provider_retry.py",
