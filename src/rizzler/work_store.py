@@ -128,6 +128,12 @@ class WorkStore:
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
+        # Snapshot runtime policy into the immutable job envelope; a restart
+        # or feature flag change must not silently alter the approved DAG.
+        from os import environ
+        if environ.get("RIZZLER_V23_UNIFIED_RESEARCH", "0").lower() in (
+                "1", "true", "yes"):
+            payload["research_synthesis"] = True
         from .work_agents import plan
         planned = plan(payload)
         from .task_planning import execution_graph
