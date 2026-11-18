@@ -11,6 +11,7 @@ import json
 import time
 
 from .hace_runtime import public_stage_summary, validate_stage_briefs
+from .cognitive_json import decode_model_json
 
 
 async def plan_specialist_briefs(objective: str, graph: dict, *,
@@ -63,7 +64,7 @@ async def plan_specialist_briefs(objective: str, graph: dict, *,
         raw = (getattr(response, "text", "") or "").strip()
         if not 20 <= len(raw) <= 25000:
             raise ValueError("Malformed cognitive planning response")
-        stages = validate_stage_briefs(json.loads(raw), approved=approved)
+        stages = validate_stage_briefs(decode_model_json(raw), approved=approved)
         return {"schema_version":23, "stages": public_stage_summary(stages),
                 "planner_ms":round((time.perf_counter()-started)*1000, 2),
                 "status":"validated_model_briefs",
