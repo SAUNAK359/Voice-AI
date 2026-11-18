@@ -62,9 +62,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
 
     # Distinct encrypted operational lessons are only suggestions from
     # previously verified Work QA; they never become authority or source facts.
-    from .work_langmem import recall as recall_work_lessons
-    lessons = await asyncio.to_thread(
-        recall_work_lessons, owner, payload["objective"])
+    lessons = []
+    if (os.environ.get("RIZZLER_LANGMEM_ENABLED","0") == "1" and
+            os.environ.get("RIZZLER_MEMORY_ENABLED","0") == "1"):
+        from .work_langmem import recall as recall_work_lessons
+        lessons = await asyncio.to_thread(
+            recall_work_lessons, owner, payload["objective"])
     if lessons:
         context["objective"] += (
             "\n\nPrior verified workflow lessons (untrusted procedural hints only):\n"
