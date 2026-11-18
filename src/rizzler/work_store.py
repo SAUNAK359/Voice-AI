@@ -81,6 +81,15 @@ class WorkStore:
               PRIMARY KEY(job_id,agent),
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS agent_steps_status ON agent_steps(status,updated);
+            CREATE TABLE IF NOT EXISTS cognitive_events(
+              seq INTEGER PRIMARY KEY AUTOINCREMENT,
+              job_id TEXT NOT NULL, owner TEXT NOT NULL,
+              agent TEXT NOT NULL, kind TEXT NOT NULL,
+              payload_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL,
+              at REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS cognitive_cursor
+              ON cognitive_events(owner,job_id,seq);
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
@@ -319,6 +328,55 @@ class WorkStore:
                     (secrets.token_hex(16),row["owner"],jid,time.time()))
                 self._event(c,jid,"automation_plan","Draft schedule pending owner approval")
             self._event(c,jid,"completed","All required outputs verified")
+
+    def publish_cognition(self, jid: str, worker: str, fence: int,
+                          agent: str, kind: str, payload: dict) -> int:
+        """Fenced, transactional publication of public task findings.
+
+        The ledger is deliberately not a chain-of-thought transcript. Readers
+        access only events for their own job. It can be safely replayed after
+        crashes and supports concurrent readers through monotonic sequence IDs.
+        """
+        allowed = {"finding", "gap", "verification", "artifact", "state"}
+        if not isinstance(agent, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", agent):
+            raise ValueError("Invalid publishing specialist")
+        if kind not in allowed or not isinstance(payload, dict):
+            raise ValueError("Invalid cognitive event")
+        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":"), allow_nan=False)
+        if len(raw.encode("utf-8")) > 8192:
+            raise ValueError("Cognitive event exceeds memory budget")
+        with self._tx() as c:
+            parent = self._active(c, jid, worker, fence)
+            cursor = c.execute(
+                """INSERT INTO cognitive_events(job_id,owner,agent,kind,
+                   payload_json,payload_sha256,at) VALUES(?,?,?,?,?,?,?)""",
+                (jid, parent["owner"], agent, kind, raw,
+                 hashlib.sha256(raw.encode("utf-8")).hexdigest(), time.time()))
+            return int(cursor.lastrowid)
+
+    def cognitive_events(self, owner: str, jid: str, after: int = 0,
+                         limit: int = 100) -> list[dict]:
+        """Return verified owner-scoped results and gaps without model internals."""
+        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError("Invalid cognitive cursor")
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE owner=? AND id=?",
+                         (owner, jid)).fetchone() is None:
+                raise Missing("Job not found")
+            rows = c.execute(
+                """SELECT seq,agent,kind,payload_json,payload_sha256,at
+                   FROM cognitive_events WHERE owner=? AND job_id=? AND seq>?
+                   ORDER BY seq LIMIT ?""", (owner,jid,after,limit)).fetchall()
+            events = []
+            for row in rows:
+                raw = row["payload_json"]
+                if hashlib.sha256(raw.encode("utf-8")).hexdigest() != row["payload_sha256"]:
+                    raise ValueError("Cognitive event integrity check failed")
+                events.append({"seq":row["seq"],"agent":row["agent"],
+                               "kind":row["kind"],"payload":json.loads(raw),
+                               "sha256":row["payload_sha256"],"at":row["at"]})
+            return events
 
     def agent_steps(self, owner: str, jid: str) -> list[dict]:
         """Owner-scoped durable per-agent statuses and SLA evidence."""
