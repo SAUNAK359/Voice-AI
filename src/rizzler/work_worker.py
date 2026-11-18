@@ -44,7 +44,9 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
         try:
             result = await develop_content(
                 objective, data_summary, generate,
-                max_characters=min(max_chars, 42000), parallelism=3)
+                max_characters=min(max_chars, 42000), parallelism=3,
+                review=os.environ.get("RIZZLER_COGNITIVE_REVIEW", "0").lower()
+                in ("1", "true", "yes"))
             return result["text"]
         finally:
             await client.aio.aclose()
