@@ -39,7 +39,7 @@ def create_gated_model(cfg):
                     messages, stop=stop, run_manager=run_manager, **kwargs)
             return await gate.run(
                 (self.model,), call, prompt_characters=budget,
-                max_output_tokens=2500)
+                max_output_tokens=9000)
 
         def _generate(self, messages, stop=None, run_manager=None, **kwargs):
             # Synchronous tool/model paths must also receive a full request
@@ -58,6 +58,7 @@ def create_gated_model(cfg):
         temperature=0.1,
         max_retries=0,
         timeout=cfg.request_timeout,
+        max_output_tokens=9000,
         disable_streaming=True,
         rate_limiter=None,
     )
