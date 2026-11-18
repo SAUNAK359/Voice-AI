@@ -281,6 +281,19 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             preflight = context["preflight"].get(receipt.kind)
             studio = (preflight or {}).get("studio_blueprint") if receipt.kind == "pptx" else None
             editor = (preflight or {}).get("editor_blueprint") if receipt.kind in ("docx","pdf") else None
+            excel_studio=(preflight or {}).get("excel_blueprint") if receipt.kind == "xlsx" else None
+            if excel_studio is not None:
+                from .work_excel_studio import validate_workbook_plan, inspect_workbook_plan
+                from .work_skills import read_dataset
+                if not payload.get("uploads"):
+                    raise ValueError("Analytical workbook lost source dataset")
+                table=await asyncio.to_thread(
+                    read_dataset,store.upload(owner,payload["uploads"][0]))
+                validation=validate_workbook_plan(excel_studio,table)
+                workbook_qa=await asyncio.to_thread(
+                    inspect_workbook_plan,checkpoint/receipt.name,validation)
+                if not workbook_qa["passed"]:
+                    raise ValueError("Analytical workbook study reconciliation failed")
             document_ir = context["artifact_ir"]
             if studio is not None:
                 from .work_studio import validate_storyboard, inspect_storyboard
@@ -356,7 +369,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         dataset_rows = context["summary"]["rows"] if context["summary"] else None
         studio_blueprint = None
         editor_blueprint = None
+        excel_blueprint = None
         document_ir = ir
+        if kind == "xlsx" and os.environ.get(
+                "RIZZLER_EXCEL_STUDIO", "0").lower() in ("1","true","yes"):
+            if table is None:
+                raise ValueError("Advanced Excel analysis requires uploaded source data")
+            from .config import Settings
+            from .work_excel_studio import create_workbook_plan
+            cfg=Settings.from_env()
+            excel_blueprint=await create_workbook_plan(
+                payload["objective"],table,model=cfg.gemini_model,
+                api_key=cfg.gemini_api_key)
         if kind == "pptx" and os.environ.get(
                 "RIZZLER_COGNITIVE_STUDIO", "0").lower() in ("1", "true", "yes"):
             from .config import Settings
@@ -388,6 +412,10 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 await asyncio.to_thread(render_one, kind, working,
                                         document_ir.title, document_ir.content,
                                         table, list(document_ir.sources))
+                if excel_blueprint is not None:
+                    from .work_excel_studio import apply_workbook_plan
+                    await asyncio.to_thread(
+                        apply_workbook_plan,working,excel_blueprint)
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
@@ -402,6 +430,10 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     report["editorial"] = await asyncio.to_thread(
                         inspect_report_document, working, editor_blueprint,
                         source_urls=ir.sources)
+                if excel_blueprint is not None:
+                    from .work_excel_studio import inspect_workbook_plan
+                    report["analytical_studies"] = await asyncio.to_thread(
+                        inspect_workbook_plan,working,excel_blueprint)
                 break
             except ValueError:
                 if attempt_no:
@@ -415,6 +447,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             inspections[kind]["studio_blueprint"] = studio_blueprint
         if editor_blueprint is not None:
             inspections[kind]["editor_blueprint"] = editor_blueprint
+        if excel_blueprint is not None:
+            inspections[kind]["excel_blueprint"] = excel_blueprint
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published specialist artifact failed checksum")
