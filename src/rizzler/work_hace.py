@@ -74,7 +74,7 @@ class HACEPlan:
         )
 
 
-def validate(value: dict, *, max_nodes: int = 18, max_depth: int = 6,
+def validate(value: dict, *, max_nodes: int = 18, max_depth: int = 7,
              policy: str | None = None) -> HACEPlan:
     if type(value) is not dict or set(value) != set(SCHEMA["properties"]):
         raise CognitiveDecisionError("Invalid HACE document")
@@ -140,7 +140,7 @@ async def plan(objective: str, evidence_summary: str, source_policy: str,
         "Act as Rizzler's hierarchical domain architect. Author an inspectable "
         "top-down specialization tree, not hidden chain-of-thought. Root stage "
         "depth=0 is the entire user goal; each child deepens a real domain "
-        "question by one level up to six. Use independent branches and explicit "
+        "question by one level up to seven. Use independent branches and explicit "
         "data dependencies. Give concrete evidence requirements and measurable "
         "acceptance for each stage. Spend depth on technically difficult "
         "questions, and stop early for straightforward tasks. Include a "
