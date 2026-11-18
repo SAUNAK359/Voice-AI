@@ -246,6 +246,9 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
                 defects.extend(semantic["findings"])
             # Integrity checks remain independent of subjective LLM feedback.
             reports["semantic_review"]=semantic
+        if store is not None:
+            store.record_quality_feedback(
+                claim["id"], worker_id, claim["fence"], iteration, defects)
         if not defects:
             progress("quality_result", "All quality checks passed")
             ir=context["artifact_ir"]
