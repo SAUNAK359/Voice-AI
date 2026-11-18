@@ -355,7 +355,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 from .work_studio import render_storyboard
                 await asyncio.to_thread(
                     render_storyboard, working, studio_blueprint,
-                    title=ir.title, sources=ir.sources)
+                    title=ir.title, sources=ir.sources, table=table)
             else:
                 await asyncio.to_thread(render_one, kind, working, ir.title,
                                         ir.content, table, list(ir.sources))
