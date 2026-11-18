@@ -364,7 +364,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             text = await synthesize_with_deepagents(
                 instructions, context.get("text") or "",
                 list(context["sources"]), context["summary"],
-                WorkModelConfig.from_env())
+                WorkModelConfig.from_env(),
+                on_progress=lambda message: store.record_progress(
+                    jid,worker_id,fence,"editorial_progress",message))
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Deep Agents evidence based draft submitted")
         else:
