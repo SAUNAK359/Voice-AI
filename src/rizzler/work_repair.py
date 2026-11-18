@@ -71,7 +71,7 @@ async def _revision(ir, objective, defects, dataset_summary, attempt_number):
     if candidate.sha256==ir.sha256:raise ValueError("Repair model returned unchanged artifact")
     return candidate
 
-async def _verify_bundle(store,owner,checkpoint,context,payload):
+async def _verify_bundle(store,owner,checkpoint,context,payload,progress=None):
     from .visual_agentic_qa import review
     receipts=context["receipts"]
     expected=set(payload["deliverables"]) & FILE_FORMATS
@@ -79,6 +79,7 @@ async def _verify_bundle(store,owner,checkpoint,context,payload):
     qa={};errors=[]
     bundle={r.name:r for r in receipts.values() if r.kind!="zip"}
     for kind,receipt in receipts.items():
+        if progress: progress("quality_check", "Inspecting "+kind+" artifact")
         path=checkpoint/receipt.name
         if not verify_checkpoint(path,receipt):
             errors.append({"kind":kind,"problem":"artifact checksum mismatch"})
@@ -92,6 +93,7 @@ async def _verify_bundle(store,owner,checkpoint,context,payload):
                 source_workbook_path=(store.upload(owner,payload["uploads"][0])
                     if kind=="xlsx" and payload.get("uploads") else None))
             if quality_mode()=="agentic" and kind in ("pptx","docx","xlsx","pdf"):
+                if progress: progress("quality_review", "Visual review "+kind+" pages")
                 visual=await review(store.root,owner,path,kind,receipt.sha256,payload["objective"])
                 artifact["agentic_visual_review"]=visual
                 if not visual["passed"]:
@@ -100,6 +102,7 @@ async def _verify_bundle(store,owner,checkpoint,context,payload):
             qa[kind]=artifact
         except (ValueError,RuntimeError,OSError) as exc:
             errors.append({"kind":kind,"problem":str(exc)[:400]})
+            if progress: progress("quality_result", "Defect "+kind+" "+type(exc).__name__)
     if "research" in payload["deliverables"] and not context["sources"]:
         errors.append({"kind":"research","problem":"Research provenance missing"})
     if "data_analysis" in payload["deliverables"] and not context["summary"]:
@@ -169,6 +172,11 @@ async def _rebuild(store,claim,worker_id,checkpoint,context,payload,revision,ir)
             "artifacts":{kind:receipt.sha256 for kind,receipt in context["receipts"].items()}}
 
 async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
+    def progress(stage, message):
+        if store is not None:
+            store.record_progress(claim["id"], worker_id, claim["fence"],
+                                  stage, message)
+    progress("quality_check", "Starting independent bundle QA")
     if not context.get("text") and not context.get("summary"):
         raise ValueError("No substantive evidence to publish")
     if set(context["receipts"])!=(set(payload["deliverables"]) & FILE_FORMATS):
@@ -181,7 +189,9 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
     history=[]
     max_revisions=2 if semantic_required else 0
     for iteration in range(max_revisions+1):
-        reports,defects=await _verify_bundle(store,claim["owner"],checkpoint,context,payload)
+        progress("quality_check", "QA iteration "+str(iteration+1))
+        reports,defects=await _verify_bundle(
+            store,claim["owner"],checkpoint,context,payload,progress=progress)
         cognitive_qa=(
             bool(cognitive) or
             (quality_mode()=="agentic" and
@@ -190,6 +200,7 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
         )
         semantic=None
         if cognitive_qa:
+            progress("quality_review", "Reviewing semantic completeness")
             from .work_cognition import review_semantics
             from .work_dynamic import WorkModelConfig
             acceptance=payload["objective"]
@@ -206,6 +217,7 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
             # Integrity checks remain independent of subjective LLM feedback.
             reports["semantic_review"]=semantic
         if not defects:
+            progress("quality_result", "All quality checks passed")
             ir=context["artifact_ir"]
             return {"passed":True,"missing":[],"artifacts":sorted(context["receipts"]),
                     "artifact_ir_schema":ir.schema_version,"artifact_ir_sha256":ir.sha256,
@@ -219,10 +231,13 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
                                 "sql_reconciled":bool(context["summary"])},
                     "limits":"Model visual quality review is not independent factual validation"}
         if iteration>=max_revisions:
+            progress("quality_result", "Quality repair budget exhausted")
             raise ValueError("Artifact failed QA after repair budget; no final deliverables published")
+        progress("quality_repair", "Revising artifact bundle version "+str(iteration+1))
         revision=await _revision(context["artifact_ir"],payload["objective"],defects,
                                  context.get("summary"),iteration+1)
         audit=await _rebuild(store,claim,worker_id,checkpoint,context,payload,iteration+1,revision)
+        progress("quality_repair", "Rebuilt bundle version "+str(iteration+1))
         audit["defects"]=defects
         history.append(audit)
     raise RuntimeError("Unreachable repair state")
