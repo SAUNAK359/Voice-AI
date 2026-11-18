@@ -1204,8 +1204,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "c799c23f19748dff8d7a366043789177b58eca43",
-      "bytes": 28888
+      "git_blob_sha1": "c4e12792cf7e4721d06320b10c1524fc76fcbfce",
+      "bytes": 29048
     },
     {
       "path": "src/rizzler/work_sql.py",
