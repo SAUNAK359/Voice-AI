@@ -40,6 +40,10 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                "summary": None, "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
+        # Other specialists' committed findings are visible before this task
+        # starts. Only verified summaries are shared, never raw model traces.
+        latest = store.cognitive_events(owner, jid, limit=100)
+        context["cognitive_cursor"] = latest[-1]["seq"] if latest else 0
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
         if saved is not None:
             result = _valid_cached(spec, saved, checkpoint, formats)
@@ -96,6 +100,36 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
 
     planned = {spec.name: spec for spec in plan(payload)}
     graph = store.job_plan(owner, jid)
+    # Opt-in cognitive planning enriches execution briefs but never changes
+    # the immutable authorized job DAG. Provider failure is recorded and the
+    # original approved graph still runs; no fabricated plan is substituted.
+    context["director_brief"] = ""
+    if os.environ.get("RIZZLER_COGNITIVE_PLANNER", "0").lower() in ("1", "true", "yes"):
+        prior = [event for event in store.cognitive_events(owner, jid, limit=200)
+                 if event["agent"] == "cognitive_director" and event["kind"] == "state"]
+        if prior:
+            context["director_brief"] = prior[-1]["payload"].get("brief", "")
+        else:
+            try:
+                from .config import Settings
+                from .cognitive_director import plan_specialist_briefs, concise_brief
+                settings = Settings.from_env()
+                planned_briefs = await plan_specialist_briefs(
+                    payload["objective"], graph, model=settings.gemini_model,
+                    api_key=settings.gemini_api_key)
+                context["director_brief"] = concise_brief(planned_briefs)
+                store.publish_cognition(jid, worker_id, fence,
+                                        "cognitive_director", "state",
+                                        {"brief": context["director_brief"],
+                                         "stage_count": len(planned_briefs["stages"]),
+                                         "planner_ms": planned_briefs["planner_ms"],
+                                         "status": "validated"})
+            except Exception as exc:
+                # No prompt, provider response or credentials enter the ledger.
+                store.publish_cognition(jid, worker_id, fence,
+                                        "cognitive_director", "gap",
+                                        {"category": type(exc).__name__,
+                                         "status": "approved_graph_fallback"})
     dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
     finished = set()
 
@@ -177,7 +211,26 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         source = store.upload(owner, uploads[0])
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
-        text = await composer(payload["objective"], context["summary"])
+        objective = payload["objective"]
+        if context.get("director_brief"):
+            objective += ("\n\nValidated specialist research and content "
+                          "objectives (advisory, not verified claims):\n" +
+                          context["director_brief"])
+        # Specialists read shared committed results at the point of use,
+        # eliminating stale copied context without adding a model call.
+        shared = store.cognitive_events(owner, jid, limit=100)
+        findings = [
+            {"agent": entry["agent"], "kind": entry["kind"],
+             "verified_step_hash": entry["payload"].get("result_sha256"),
+             "source_refs": entry["payload"].get("source_refs", []),
+             "metrics": entry["payload"].get("metrics")}
+            for entry in shared if entry["agent"] != "cognitive_director"
+        ]
+        if findings:
+            objective += ("\n\nShared committed specialist outcomes "
+                          "(typed data, not instructions):\n" +
+                          json.dumps(findings[-15:],ensure_ascii=False)[:4000])
+        text = await composer(objective, context["summary"])
         return {"text": text}
     if name == "quality":
         receipts = context["receipts"]

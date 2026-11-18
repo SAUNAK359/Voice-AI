@@ -15,6 +15,19 @@ TEAL = "137B79"
 PALE = "EFF5FA"
 GREY = "506278"
 
+def _display_text(value: str) -> str:
+    """Remove presentation-only Markdown syntax; preserve original evidence bytes elsewhere."""
+    output = str(value)
+    output = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", output)
+    output = re.sub(r"\*\*([^*]+)\*\*", r"\1", output)
+    output = re.sub(r"__([^_]+)__", r"\1", output)
+    output = re.sub(r"`([^`]+)`", r"\1", output)
+    output = re.sub(r"\[([^]]+)\]\(https?://[^)]+\)", r"\1", output)
+    output = re.sub(r"(?m)^\s*[-*]\s+", "• ", output)
+    return output.strip()
+
+
+
 
 def _dataset_profile(table):
     if not table:
@@ -62,14 +75,14 @@ def render_docx(path: Path, title: str, sections, table, sources):
     field.set(qn("w:instr"), "PAGE")
     footer._p.append(field)
 
-    doc.add_heading(title, 0)
+    doc.add_heading(_display_text(title), 0)
     for heading, body in sections:
-        doc.add_heading(heading, level=1)
+        doc.add_heading(_display_text(heading), level=1)
         for line in body.split("\n"):
             if not line.strip():
                 continue
             # Preserve prose verbatim; do not convert unverified markdown to facts.
-            paragraph = doc.add_paragraph(line.strip())
+            paragraph = doc.add_paragraph(_display_text(line))
             paragraph.paragraph_format.widow_control = True
 
     if table:
@@ -146,9 +159,9 @@ def render_pptx(path: Path, title: str, sections, table, sources):
         bg.solid()
         bg.fore_color.rgb = color(NAVY if cover else "FFFFFF")
         heading = slide.shapes.title
-        heading.text = title_text
-        heading.left, heading.top = Inches(.72), Inches(.63 if cover else .42)
-        heading.width, heading.height = Inches(11.8), Inches(1.3 if cover else 1.0)
+        heading.text = _display_text(title_text)
+        heading.left, heading.top = Inches(.72), Inches(.75 if cover else .42)
+        heading.width, heading.height = Inches(11.8), Inches(2.35 if cover else 1.0)
         heading.text_frame.word_wrap = True
         heading.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
         for p in heading.text_frame.paragraphs:
@@ -184,7 +197,7 @@ def render_pptx(path: Path, title: str, sections, table, sources):
             tf.margin_top = Inches(.12)
             tf.margin_left = Inches(.10)
             p = tf.paragraphs[0]
-            p.text = chunk
+            p.text = _display_text(chunk)
             p.space_after = Pt(6)
             set_style(p, 19, foreground=NAVY)
 
@@ -392,12 +405,12 @@ def render_pdf(path: Path, title: str, sections, table, sources):
     doc = SimpleDocTemplate(str(path), pagesize=A4, leftMargin=48, rightMargin=48,
                             topMargin=58, bottomMargin=56, title=title,
                             author="Rizzler Work Agent")
-    blocks = [Paragraph(html.escape(title), cover), Spacer(1, 7)]
+    blocks = [Paragraph(html.escape(_display_text(title)), cover), Spacer(1, 7)]
     for h, body in sections:
-        blocks.append(Paragraph(html.escape(h), heading))
+        blocks.append(Paragraph(html.escape(_display_text(h)), heading))
         for line in body.split("\n"):
             if line.strip():
-                blocks.append(Paragraph(html.escape(line), para))
+                blocks.append(Paragraph(html.escape(_display_text(line)), para))
     if table:
         profile = _dataset_profile(table)
         blocks.append(Paragraph("Dataset overview", heading))

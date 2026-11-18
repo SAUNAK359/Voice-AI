@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "description": "Integrity inventory of the original showcase plus updated application package files; run scripts/sync_release_manifest.py after reviewing migration to include newly added files.",
+  "description": "Source checkout integrity inventory (not a cryptographic signature); updated for V23 cognitive Work foundation.",
   "files": [
     {
       "path": ".env.example",
-      "bytes": 791,
-      "sha256": "d0279ca89f415a50ea0a490af7b60666576219901e34882dfd953240e97cb2bb"
+      "bytes": 1091,
+      "sha256": "d1798c9874e16cb145bdecb13645c8e87ccb706e853452334ce994d674e48cee"
     },
     {
       "path": ".github/dependabot.yml",
@@ -123,6 +123,16 @@
       "sha256": "fc2251b2adb208160d3612e8f5d99d86ebf5391a156a526633bafda6ed07c214"
     },
     {
+      "path": "docs/V23_COGNITIVE_EXECUTION_PLAN.md",
+      "sha256": "a99003ce71c67ae0488a1c738dacae485990957c56119c5fccb0d172a74a70ce",
+      "bytes": 12508
+    },
+    {
+      "path": "docs/V23_COGNITIVE_IMPLEMENTATION.md",
+      "bytes": 5771,
+      "sha256": "1ef7cc94cda3e1731e06e35fc00f3cffc28b331c1632edbcce8efd70cd35c060"
+    },
+    {
       "path": "docs/voice-pipeline.md",
       "bytes": 6313,
       "sha256": "d09f1bbf3fee24559faf3a73ada4f62627e3ad4263e00413315a7097469ff291"
@@ -174,13 +184,13 @@
     },
     {
       "path": "pyproject.toml",
-      "bytes": 1168,
-      "sha256": "8905626c717b5145ba34dac6d86ff1f790f9ee8685022d28afd49b9c4167ac65"
+      "bytes": 1220,
+      "sha256": "f3f72bc996bd97d8c14440d8a58f32fdd5a5e001b8b632ab187a287cb7df1cc4"
     },
     {
       "path": "README.md",
-      "bytes": 11850,
-      "sha256": "ff6fcd4118d5d696b95c598754681f4a296d23ad841cc951fc4b3e72b3a363e5"
+      "bytes": 12364,
+      "sha256": "745d50cdaf8c95979e36e1a914cedb9ec17b2a50563ce86c0f734c0647eaa2f6"
     },
     {
       "path": "schemas/work-handoff-example.json",
@@ -248,9 +258,29 @@
       "sha256": "dae3350a0cc47beb3fce019de5ce22d9f776834628f014ab8955651dfbd129b9"
     },
     {
+      "path": "src/rizzler/cognitive_director.py",
+      "sha256": "31de2fc986cef18e41c11e60e5465c37cc87eec6b29cbfbb764d29634f31caaf",
+      "bytes": 4499
+    },
+    {
+      "path": "src/rizzler/cognitive_json.py",
+      "bytes": 835,
+      "sha256": "083fc674deabcf25bd1c8ba12022d3d39a15eec586bb6adaa82f27e8e7b54b4b"
+    },
+    {
+      "path": "src/rizzler/content_engine.py",
+      "sha256": "2c30ec40fcc4ab72071db54b5f9aae1f97bc9e6bf801ebe4d6452b3cceb3f98b",
+      "bytes": 10856
+    },
+    {
       "path": "src/rizzler/contracts.py",
       "bytes": 3042,
       "sha256": "4781d97769ca8ac63557afb7bc8040f2316fade65cdae13928c05bcfb769f485"
+    },
+    {
+      "path": "src/rizzler/hace_runtime.py",
+      "bytes": 5532,
+      "sha256": "0a4ebdb1a7f85d67222aaccce48ac00b5df7b4fea02e314a1715fdbdfd3b1c44"
     },
     {
       "path": "src/rizzler/metrics.py",
@@ -263,9 +293,44 @@
       "sha256": "555ef82e9047c9a8c57c3bc22b89386b1a2684275bdc5c1a0ac5764f9ef164ba"
     },
     {
+      "path": "src/rizzler/source_gateway.py",
+      "sha256": "a2d89e7cd598323d6eaec586378a75aaed4c337701d4734337f110b7585a007f",
+      "bytes": 6043
+    },
+    {
+      "path": "src/rizzler/source_normalizer.py",
+      "sha256": "8e9ff9a2d8833270e55e204a134a02e20889ce042cb21cd5bb8250a575e399f2",
+      "bytes": 13043
+    },
+    {
       "path": "src/rizzler/state.py",
       "bytes": 2230,
       "sha256": "ff5872f6413ecfa6a3ec0e438ef529f2d566dfef0c399209ec5b4572296cdb24"
+    },
+    {
+      "path": "src/rizzler/work_api.py",
+      "sha256": "4994d81b061a4759e2c3d9a59bd2fcf6cd1db688048acb9274c98474be2bf67e",
+      "bytes": 11804
+    },
+    {
+      "path": "src/rizzler/work_design.py",
+      "bytes": 20404,
+      "sha256": "347f95e7d1879b0e42cb8c8c67be4d6546944b365363628e467cfdf4d9f13964"
+    },
+    {
+      "path": "src/rizzler/work_specialists.py",
+      "sha256": "689e4f2982aec5a2206ac96fcedd09a66bfd483e54b7a30803350eaa0a50e29e",
+      "bytes": 18553
+    },
+    {
+      "path": "src/rizzler/work_store.py",
+      "sha256": "dccfae5a82c84b8eb037e872cabe8efcf276d7aed942180b86a131b98f79cc0c",
+      "bytes": 40513
+    },
+    {
+      "path": "src/rizzler/work_worker.py",
+      "sha256": "565a9db0265dd0b4bcecdc7af6f44e419f3d453b06d717998405f23ddfa1ef8d",
+      "bytes": 14844
     },
     {
       "path": "tests/test_contracts.py",
@@ -301,6 +366,26 @@
       "path": "tests/test_state.py",
       "bytes": 1016,
       "sha256": "8e05d8b2b718f64d92951fc16daa3238d6a494d6d7146964589660ef25c3208c"
+    },
+    {
+      "path": "tests/test_v23_cognitive_foundation.py",
+      "sha256": "34ac608a070765b47c5dd85529d83874e8795407cfcde2a701adc8de7fe0b808",
+      "bytes": 8219
+    },
+    {
+      "path": "tests/test_v23_content_engine.py",
+      "sha256": "6ee5d8494ba1304f78147360575186d5cad66bd5e8eaaaab222fb96353d7f28a",
+      "bytes": 5995
+    },
+    {
+      "path": "tests/test_v23_hace_runtime.py",
+      "bytes": 4118,
+      "sha256": "f2b8a9cec8e212b2dc1d12526304129e58b88432a2fa21010fbbdde6725b66d2"
+    },
+    {
+      "path": "tests/test_v23_source_gateway.py",
+      "bytes": 2016,
+      "sha256": "9a7853cd49a2e3a66d2523457f1b83c2503e98ffb89cd19f17a7e88e2d2f8b2f"
     },
     {
       "path": "web/app.js",
