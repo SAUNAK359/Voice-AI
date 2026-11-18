@@ -189,6 +189,24 @@ def normalize_source(data: bytes, mime_type: str, *, source_id: str,
         blocks = parser.blocks
         tables = [{"rows": rows, "location": {"table": i + 1}}
                   for i, rows in enumerate(parser.tables)]
+        # Fallback to article/main-content extraction for sites that wrap
+        # meaningful text in nonsemantic divs instead of p/article headings.
+        # Extractors are never allowed to execute page scripts or remote links.
+        if sum(len(item["text"]) for item in blocks) < 200:
+            try:
+                import trafilatura
+                article = trafilatura.extract(text, include_tables=True,
+                                              include_comments=False)
+                if article and len(article) > sum(len(item["text"]) for item in blocks):
+                    more, extra_tables = _markdown(article[:MAX_SOURCE_BYTES])
+                    if more:
+                        blocks = more
+                        tables.extend(extra_tables)
+                        warnings.append("article_extractor_fallback")
+            except ImportError:
+                warnings.append("article_extractor_not_installed")
+            except Exception:
+                warnings.append("article_extractor_failed")
         if not blocks:
             warnings.append("html_without_readable_main_text")
     elif media in ("text/markdown", "text/x-markdown", "text/plain"):
