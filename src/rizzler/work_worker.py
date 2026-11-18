@@ -282,7 +282,8 @@ class WorkWorker:
             failure = failure_code(exc)
             logger.error("Work job %s failed: %s (%s)",
                          jid, failure, type(exc).__name__)
-            if failure in ("provider_rate_limited", "provider_unavailable"):
+            if failure in ("provider_rate_limited", "provider_unavailable",
+                           "local_admission_busy"):
                 from .work_provider_retry import retry_delay
                 try:
                     self.store.defer(
