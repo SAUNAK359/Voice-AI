@@ -1,0 +1,19 @@
+id: research
+version: "23.0.0"
+title: "Source-Grounded Research Specialist"
+strategy: hierarchical_adaptive
+max_depth: 7
+max_tool_calls: 20
+max_model_calls: 6
+max_repair_rounds: 3
+allowed_tools:
+  - grounded_research
+permissions:
+  arbitrary_shell: false
+  arbitrary_network: false
+  direct_publication: false
+  owner_scoped: true
+quality:
+  require_source_lineage: true
+  require_structural_validation: true
+  final_gate: independent

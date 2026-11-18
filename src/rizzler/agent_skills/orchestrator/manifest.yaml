@@ -1,0 +1,20 @@
+id: orchestrator
+version: "23.0.0"
+title: "Evidence-Aware Cognitive Synthesis Specialist"
+strategy: hierarchical_adaptive
+max_depth: 7
+max_tool_calls: 20
+max_model_calls: 9
+max_repair_rounds: 3
+allowed_tools:
+  - deep_synthesis
+  - hace_plan
+permissions:
+  arbitrary_shell: false
+  arbitrary_network: false
+  direct_publication: false
+  owner_scoped: true
+quality:
+  require_source_lineage: true
+  require_structural_validation: true
+  final_gate: independent
