@@ -280,6 +280,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 raise ValueError("Final quality gate failed artifact checksum")
             preflight = context["preflight"].get(receipt.kind)
             studio = (preflight or {}).get("studio_blueprint") if receipt.kind == "pptx" else None
+            editor = (preflight or {}).get("editor_blueprint") if receipt.kind in ("docx","pdf") else None
+            document_ir = context["artifact_ir"]
             if studio is not None:
                 from .work_studio import validate_storyboard, inspect_storyboard
                 valid_storyboard = validate_storyboard(
@@ -289,11 +291,25 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     inspect_storyboard, checkpoint / receipt.name, valid_storyboard)
                 if not studio_qa["passed"]:
                     raise ValueError("Studio slide coverage and evidence check failed")
+            if editor is not None:
+                from .work_editor import validate_report_plan, report_text, inspect_report_document
+                valid_editor=validate_report_plan(
+                    editor,medium=receipt.kind,
+                    original_sections=context["artifact_ir"].sections,
+                    allowed_sources=context["artifact_ir"].sources)
+                document_ir=compile_ir(
+                    context["artifact_ir"].title,report_text(valid_editor),
+                    list(context["artifact_ir"].sources),context["summary"])
+                editorial_qa=await asyncio.to_thread(
+                    inspect_report_document, checkpoint / receipt.name,
+                    valid_editor, source_urls=context["artifact_ir"].sources)
+                if not editorial_qa["passed"]:
+                    raise ValueError("Format-specific edited document failed semantic QA")
             structural_qa = await asyncio.to_thread(
                 inspect_artifact, checkpoint / receipt.name, receipt.kind,
                 dataset_rows=context["summary"]["rows"] if context["summary"] else None,
                 bundle_receipts=bundle,
-                artifact_ir=None if studio is not None else context["artifact_ir"],
+                artifact_ir=None if studio is not None else document_ir,
                 dataset_summary=context["summary"])
             if receipt.kind in ("pptx", "docx", "pdf", "xlsx") and strict:
                 if not preflight or preflight["sha256"] != receipt.sha256:
@@ -339,6 +355,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         ir = context["artifact_ir"]
         dataset_rows = context["summary"]["rows"] if context["summary"] else None
         studio_blueprint = None
+        editor_blueprint = None
+        document_ir = ir
         if kind == "pptx" and os.environ.get(
                 "RIZZLER_COGNITIVE_STUDIO", "0").lower() in ("1", "true", "yes"):
             from .config import Settings
@@ -347,6 +365,16 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             studio_blueprint = await create_storyboard(
                 payload["objective"], ir, model=cfg.gemini_model,
                 api_key=cfg.gemini_api_key)
+        if kind in ("docx","pdf") and os.environ.get(
+                "RIZZLER_REPORT_STUDIO", "0").lower() in ("1","true","yes"):
+            from .config import Settings
+            from .work_editor import create_report_plan, report_text
+            cfg=Settings.from_env()
+            editor_blueprint=await create_report_plan(
+                payload["objective"],ir,medium=kind,
+                model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+            document_ir=compile_ir(ir.title,report_text(editor_blueprint),
+                                   list(ir.sources),context["summary"])
         # Model calls run once. Recoverable renderer failures regenerate
         # only the file from the validated, immutable content blueprint.
         repairs = 0
@@ -357,17 +385,23 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     render_storyboard, working, studio_blueprint,
                     title=ir.title, sources=ir.sources, table=table)
             else:
-                await asyncio.to_thread(render_one, kind, working, ir.title,
-                                        ir.content, table, list(ir.sources))
+                await asyncio.to_thread(render_one, kind, working,
+                                        document_ir.title, document_ir.content,
+                                        table, list(document_ir.sources))
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
-                    artifact_ir=None if studio_blueprint is not None else ir,
+                    artifact_ir=None if studio_blueprint is not None else document_ir,
                     dataset_summary=context["summary"], visual_required=strict)
                 if studio_blueprint is not None:
                     from .work_studio import inspect_storyboard
                     report["storyboard"] = await asyncio.to_thread(
                         inspect_storyboard, working, studio_blueprint)
+                if editor_blueprint is not None:
+                    from .work_editor import inspect_report_document
+                    report["editorial"] = await asyncio.to_thread(
+                        inspect_report_document, working, editor_blueprint,
+                        source_urls=ir.sources)
                 break
             except ValueError:
                 if attempt_no:
@@ -379,6 +413,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                               "quality":report, "repair_attempts":repairs}
         if studio_blueprint is not None:
             inspections[kind]["studio_blueprint"] = studio_blueprint
+        if editor_blueprint is not None:
+            inspections[kind]["editor_blueprint"] = editor_blueprint
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published specialist artifact failed checksum")
