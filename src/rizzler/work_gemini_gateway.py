@@ -35,7 +35,7 @@ class WorkProviderUnavailable(RuntimeError):
 def model_sequence(primary: str) -> tuple[str, ...]:
     alt = os.environ.get("RIZZLER_WORK_FALLBACK_MODELS",
                          os.environ.get("RIZZLER_WORK_FALLBACK_MODEL",
-                                        "gemini-3.7-flash,gemini-3.8-flash"))
+                                        "gemini-3.6-flash"))
     candidates = [primary] + [x.strip() for x in alt.split(",") if x.strip()]
     models = tuple(dict.fromkeys(candidates))
     if (not 1 <= len(models) <= 3 or
@@ -244,6 +244,12 @@ class GeminiWorkGate:
                 return result
             except asyncio.CancelledError:
                 raise
+            except (asyncio.TimeoutError, TimeoutError):
+                # Deadline is a local transport failure, not a Google HTTP 503.
+                # Record 504-equivalent telemetry and try the independent model.
+                self.record(model, 504)
+                latest = WorkProviderUnavailable(504)
+                continue
             except Exception as exc:
                 status = provider_status(exc)
                 self.record(model, status)
@@ -276,9 +282,13 @@ async def gemini_content(cfg, prompt: str, *, schema: dict | None = None,
                             response_json_schema=schema)
             if system_instruction:
                 args["system_instruction"] = system_instruction
-            return await client.aio.models.generate_content(
-                model=model, contents=prompt,
-                config=types.GenerateContentConfig(**args))
+            # An explicit application deadline prevents one provider call from
+            # monopolizing a Work job for many minutes after a network stall.
+            from .work_async import wait_scope
+            async with asyncio.timeout(float(cfg.request_timeout)):
+                return await client.aio.models.generate_content(
+                    model=model, contents=prompt,
+                    config=types.GenerateContentConfig(**args))
         finally:
             await client.aio.aclose()
     return await gate.run(model_sequence(cfg.gemini_model), invoke,
