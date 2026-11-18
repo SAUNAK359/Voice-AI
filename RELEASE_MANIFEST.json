@@ -229,8 +229,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "git_blob_sha1": "315320df29988cd3148b95120b0baba7167e789d",
-      "bytes": 6075
+      "git_blob_sha1": "998bddf3462dde958b9e649612588173f103e4ac",
+      "bytes": 6689
     },
     {
       "path": "deploy/searxng-settings.yml",
@@ -509,8 +509,8 @@
     },
     {
       "path": "pyproject.toml",
-      "git_blob_sha1": "b29f0c6c5d0227405309781bb52ab8fe91ba590f",
-      "bytes": 1355
+      "git_blob_sha1": "d2607051081a23f9c34df73cfa3586eb2ca497d8",
+      "bytes": 1573
     },
     {
       "path": "README.md",
@@ -653,9 +653,54 @@
       "bytes": 18224
     },
     {
+      "path": "src/rizzler/agent_skills/excel/evals.json",
+      "git_blob_sha1": "9f515b1a0371c951bf60bbfe10e8b4d78481af3d",
+      "bytes": 1097
+    },
+    {
+      "path": "src/rizzler/agent_skills/excel/manifest.yaml",
+      "git_blob_sha1": "2ebd0e99aed28f32ff3dd986544361c1a63e0e92",
+      "bytes": 232
+    },
+    {
       "path": "src/rizzler/agent_skills/excel/SKILL.md",
       "git_blob_sha1": "ae151d6746a9a1d7efa96ffe9a749c6b37a5f828",
       "bytes": 1896
+    },
+    {
+      "path": "src/rizzler/agent_skills/excel/stages.json",
+      "git_blob_sha1": "d92de61d7e9aba8627bb154a5a2f7221ecacbd36",
+      "bytes": 572
+    },
+    {
+      "path": "src/rizzler/agent_skills/orchestrator/evals.json",
+      "git_blob_sha1": "7272362484367130f69963c7ca5c16a3ddeeeef6",
+      "bytes": 1108
+    },
+    {
+      "path": "src/rizzler/agent_skills/orchestrator/manifest.yaml",
+      "git_blob_sha1": "166045959f9d09b607f7ff78b8a3b098ac4ebac2",
+      "bytes": 264
+    },
+    {
+      "path": "src/rizzler/agent_skills/orchestrator/SKILL.md",
+      "git_blob_sha1": "417d698cca611f249e1a3ebfe499fd28165b4347",
+      "bytes": 806
+    },
+    {
+      "path": "src/rizzler/agent_skills/orchestrator/stages.json",
+      "git_blob_sha1": "891781ef8002d58ce113ab902f3dccda5cdca8d8",
+      "bytes": 637
+    },
+    {
+      "path": "src/rizzler/agent_skills/pdf_visual/evals.json",
+      "git_blob_sha1": "6c5bc096a73a1e12e6d9b042f78a29cf5695a157",
+      "bytes": 1109
+    },
+    {
+      "path": "src/rizzler/agent_skills/pdf_visual/manifest.yaml",
+      "git_blob_sha1": "792038c7c89d892d187b9dae51ce94b93c821f49",
+      "bytes": 242
     },
     {
       "path": "src/rizzler/agent_skills/pdf_visual/SKILL.md",
@@ -663,9 +708,59 @@
       "bytes": 1975
     },
     {
+      "path": "src/rizzler/agent_skills/pdf_visual/stages.json",
+      "git_blob_sha1": "bbb86d55514a594f1e28c678f6672a53875f5558",
+      "bytes": 601
+    },
+    {
+      "path": "src/rizzler/agent_skills/powerpoint/evals.json",
+      "git_blob_sha1": "0c182f1fb210938306877f85fc116df3749e86ab",
+      "bytes": 1110
+    },
+    {
+      "path": "src/rizzler/agent_skills/powerpoint/manifest.yaml",
+      "git_blob_sha1": "1ece9d7fbfe4c1b348b212a988855d6fc5405894",
+      "bytes": 243
+    },
+    {
       "path": "src/rizzler/agent_skills/powerpoint/SKILL.md",
       "git_blob_sha1": "191b267dd9e3ce3d03ec669d9053d82b16b97e2d",
       "bytes": 1872
+    },
+    {
+      "path": "src/rizzler/agent_skills/powerpoint/stages.json",
+      "git_blob_sha1": "90c0aaa5cf92260acefbf676606c4ad4b3a1c44b",
+      "bytes": 617
+    },
+    {
+      "path": "src/rizzler/agent_skills/quality/evals.json",
+      "git_blob_sha1": "b51b4e568583c4b9397d120853d3bce4909382e2",
+      "bytes": 1094
+    },
+    {
+      "path": "src/rizzler/agent_skills/quality/manifest.yaml",
+      "git_blob_sha1": "f8a497c023446e82d6529834861840f9f9e4c1d7",
+      "bytes": 248
+    },
+    {
+      "path": "src/rizzler/agent_skills/quality/SKILL.md",
+      "git_blob_sha1": "7203508e17dc1618732fbaaad3cb41d1a6a614e8",
+      "bytes": 746
+    },
+    {
+      "path": "src/rizzler/agent_skills/quality/stages.json",
+      "git_blob_sha1": "7717c0b71f6db17723e577c211f7f9074a735553",
+      "bytes": 601
+    },
+    {
+      "path": "src/rizzler/agent_skills/research/evals.json",
+      "git_blob_sha1": "d01184efdb5207b0182df40c82dbe73561cb9fda",
+      "bytes": 1105
+    },
+    {
+      "path": "src/rizzler/agent_skills/research/manifest.yaml",
+      "git_blob_sha1": "9ba0e02fc330423327505b87857307a7c0be6e62",
+      "bytes": 241
     },
     {
       "path": "src/rizzler/agent_skills/research/SKILL.md",
@@ -673,14 +768,49 @@
       "bytes": 1944
     },
     {
+      "path": "src/rizzler/agent_skills/research/stages.json",
+      "git_blob_sha1": "f69497bd26e77f49e11deaab64fa70223802b132",
+      "bytes": 871
+    },
+    {
+      "path": "src/rizzler/agent_skills/sql_analytics/evals.json",
+      "git_blob_sha1": "0a04b1c59e0ab9907eee8c09676fef96d7c59cdd",
+      "bytes": 1102
+    },
+    {
+      "path": "src/rizzler/agent_skills/sql_analytics/manifest.yaml",
+      "git_blob_sha1": "7e7c8b93e3172372e983b66e2d2c1c2c38282023",
+      "bytes": 243
+    },
+    {
       "path": "src/rizzler/agent_skills/sql_analytics/SKILL.md",
       "git_blob_sha1": "e33aa05b5a557327f33dc4b35658fab17a5f4cd0",
       "bytes": 2048
     },
     {
+      "path": "src/rizzler/agent_skills/sql_analytics/stages.json",
+      "git_blob_sha1": "5facc722deae3605f2e7ce06b11e93787213df6b",
+      "bytes": 643
+    },
+    {
+      "path": "src/rizzler/agent_skills/word/evals.json",
+      "git_blob_sha1": "789b17b4fbf7af3f1f9e9321b8967ff64a948f10",
+      "bytes": 1085
+    },
+    {
+      "path": "src/rizzler/agent_skills/word/manifest.yaml",
+      "git_blob_sha1": "b955bb07ff3496820c7fbc16c36c439a7493aab9",
+      "bytes": 241
+    },
+    {
       "path": "src/rizzler/agent_skills/word/SKILL.md",
       "git_blob_sha1": "5a9e3835a085376adb1d76099b5fa0a8854609cc",
       "bytes": 1821
+    },
+    {
+      "path": "src/rizzler/agent_skills/word/stages.json",
+      "git_blob_sha1": "b4d8f79df2f5241595bac62d5293caca3db70e36",
+      "bytes": 546
     },
     {
       "path": "src/rizzler/api.py",
@@ -899,8 +1029,8 @@
     },
     {
       "path": "src/rizzler/voice_tools.py",
-      "git_blob_sha1": "6243e2209199c9ff633b9760ed8480d770694338",
-      "bytes": 22066
+      "git_blob_sha1": "74802b5627c756d365f73d62247594263d709a00",
+      "bytes": 22478
     },
     {
       "path": "src/rizzler/voice.py",
@@ -964,8 +1094,8 @@
     },
     {
       "path": "src/rizzler/work_agents.py",
-      "git_blob_sha1": "241c1859ec4b3f8cde73c0283c3081d6be4f47bc",
-      "bytes": 7037
+      "git_blob_sha1": "0f5c09d35aa1bb8bbdbfe83e4ceede6340c36382",
+      "bytes": 7031
     },
     {
       "path": "src/rizzler/work_api.py",
@@ -1004,8 +1134,8 @@
     },
     {
       "path": "src/rizzler/work_deepagents_synthesis.py",
-      "git_blob_sha1": "362d84718e81a1c7b1f43342daab068300f48247",
-      "bytes": 7281
+      "git_blob_sha1": "8d87a43bfbda681a0644f6e4ee2b888d7e9bd0fa",
+      "bytes": 7382
     },
     {
       "path": "src/rizzler/work_deepagents.py",
@@ -1048,9 +1178,24 @@
       "bytes": 2775
     },
     {
+      "path": "src/rizzler/work_hace_editorial.py",
+      "git_blob_sha1": "a78f7601d4bdba198b5585af04d63a868b440601",
+      "bytes": 5041
+    },
+    {
+      "path": "src/rizzler/work_hace.py",
+      "git_blob_sha1": "1d669156ac487f848a8769e87b1321df88b1fe46",
+      "bytes": 5669
+    },
+    {
       "path": "src/rizzler/work_ir.py",
       "git_blob_sha1": "dfdce9f17f1cec8cddfb2a8cf4bb8fee816e2a4f",
       "bytes": 2555
+    },
+    {
+      "path": "src/rizzler/work_langmem.py",
+      "git_blob_sha1": "efa830af4c24438550f84417728dcd58edab61cb",
+      "bytes": 4911
     },
     {
       "path": "src/rizzler/work_mcp.py",
@@ -1074,8 +1219,13 @@
     },
     {
       "path": "src/rizzler/work_presentation.py",
-      "git_blob_sha1": "4275198ee8983f4300324f6716eaf2405938ab02",
-      "bytes": 18891
+      "git_blob_sha1": "3d4c37ede8c5aa4ad63f8af2d2a4379f9e4a2c42",
+      "bytes": 18990
+    },
+    {
+      "path": "src/rizzler/work_procedural_memory.py",
+      "git_blob_sha1": "d17ff53feb22b39bcfc494e2c5ebed14b4a71f4d",
+      "bytes": 10338
     },
     {
       "path": "src/rizzler/work_provider_retry.py",
@@ -1123,14 +1273,19 @@
       "bytes": 1220
     },
     {
+      "path": "src/rizzler/work_skill_packages.py",
+      "git_blob_sha1": "3a5e7b3d0d2c3eae68dc769e1029175913beba27",
+      "bytes": 4409
+    },
+    {
       "path": "src/rizzler/work_skills.py",
       "git_blob_sha1": "f36619919f809442a19ce09898993361a81adf87",
       "bytes": 11260
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "003441f029997b41ecca33b67801e29f9d505711",
-      "bytes": 25833
+      "git_blob_sha1": "f41190361af0f18ae9637245e5dbae74be34986d",
+      "bytes": 28378
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -1154,8 +1309,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "git_blob_sha1": "3c62a999828e6cbc3a40c2098c832c896554e88b",
-      "bytes": 19172
+      "git_blob_sha1": "2f566126dae04e9213c6671fea24d2f97a3a5217",
+      "bytes": 20990
     },
     {
       "path": "stack_site.html",
@@ -1506,6 +1661,11 @@
       "path": "tests/test_v22_deepagents_runtime.py",
       "git_blob_sha1": "c4b0893bd8562bab18223d909805fd4e321fde02",
       "bytes": 6994
+    },
+    {
+      "path": "tests/test_v23_hace_langmem.py",
+      "git_blob_sha1": "be6c9e7c47f5fc3bf69102789188135b38cdddc8",
+      "bytes": 9315
     },
     {
       "path": "tests/test_voice_core.cjs",
