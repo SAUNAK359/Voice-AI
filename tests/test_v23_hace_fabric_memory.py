@@ -82,6 +82,64 @@ class HierarchyTests(unittest.TestCase):
                                        claim["fence"],changed)
 
 
+class HACEStageExecutionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_resumable_hierarchy_uses_only_checkpointed_stage_results(self):
+        from rizzler.work_hace_exec import execute
+        from rizzler.work_store import WorkStore
+        with tempfile.TemporaryDirectory() as folder:
+            store=WorkStore(folder)
+            job=store.submit(
+                "owner_1234","Create an evidence-aware technical report",
+                ["md"],"v23-stage-resume-test",[],evidence_scope="uploaded_only")
+            claim=store.claim("worker_1234",lease_seconds=60)
+            doc=hierarchy()
+            store.commit_hace_plan(
+                "owner_1234",job["id"],"worker_1234",claim["fence"],doc)
+            called=[]
+            async def fake(batch,previous,source,sources):
+                called.extend(step["id"] for step in batch)
+                return {"outcomes":[{
+                    "stage_id":step["id"],
+                    "analysis":"Domain-specific technical analysis preserving uncertainty "
+                               "and source boundaries. The explanation includes "
+                               "independent alternatives and explicit limitations.",
+                    "evidence_refs":[],"uncertainties":[
+                        "No independently verified citation was supplied."]
+                } for step in batch]}
+            kwargs=dict(
+                read_checkpoint=lambda sid:store.hace_stage(
+                    "owner_1234",job["id"],sid),
+                commit_checkpoint=lambda item:store.commit_hace_stage(
+                    "owner_1234",job["id"],"worker_1234",claim["fence"],item),
+                stage_model=fake)
+            plan=validate(doc)
+            first=await execute(plan,"Write expert report","Evidence excerpt",[],**kwargs)
+            self.assertEqual(first["stage_count"],3)
+            self.assertEqual(first["model_batches"],2)
+            self.assertEqual(len(called),3)
+            second=await execute(plan,"Write expert report","Evidence excerpt",[],**kwargs)
+            self.assertEqual(second["model_batches"],0)
+            self.assertEqual(len(called),3)
+            with self.assertRaises(Exception):
+                store.hace_stage("another_owner",job["id"],"domain_a")
+
+    async def test_fabricated_source_reference_fails_closed(self):
+        from rizzler.work_hace_exec import execute
+        async def fabricated(batch,previous,source,sources):
+            return {"outcomes":[{
+                "stage_id":step["id"],
+                "analysis":"A sufficiently long synthesis that appears detailed "
+                           "but cites a URL not present in the authorized source "
+                           "inventory and therefore must be rejected.",
+                "evidence_refs":["https://fake.example/unsupported"],
+                "uncertainties":[]}
+                for step in batch]}
+        with self.assertRaises(CognitiveDecisionError):
+            await execute(validate(hierarchy()),
+                          "Review the uploaded data","Evidence",[],
+                          stage_model=fabricated)
+
+
 class ToolFabricTests(unittest.IsolatedAsyncioTestCase):
     async def test_bounded_parallel_program_with_real_dependencies(self):
         active=peak=0
