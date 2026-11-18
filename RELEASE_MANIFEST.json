@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "git_blob_sha1": "3416cb352c393c8de5013e26298fb53aad5bdcb0",
-      "bytes": 5310
+      "git_blob_sha1": "330c3356c80845ca4d28dbda5dd3169d5191a943",
+      "bytes": 5503
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -1114,8 +1114,8 @@
     },
     {
       "path": "src/rizzler/work_cognition.py",
-      "git_blob_sha1": "97dd4209deabccd9589f39ed2b118323353727d0",
-      "bytes": 14728
+      "git_blob_sha1": "2c99d5ce3da60012862a7accf0d660edd41d3b19",
+      "bytes": 14829
     },
     {
       "path": "src/rizzler/work_corpus.py",
@@ -1124,8 +1124,8 @@
     },
     {
       "path": "src/rizzler/work_decision_plane.py",
-      "git_blob_sha1": "9d8f1cb1a3eba17a8cdf81b570c79f997752c72b",
-      "bytes": 5058
+      "git_blob_sha1": "dfe01291045e9b9af667b37930a0bec7b8b117e9",
+      "bytes": 5255
     },
     {
       "path": "src/rizzler/work_deepagents_model.py",
@@ -1139,8 +1139,8 @@
     },
     {
       "path": "src/rizzler/work_deepagents.py",
-      "git_blob_sha1": "4db01bde229d784b7387343a8894c9fdbe5a3d1c",
-      "bytes": 8411
+      "git_blob_sha1": "411c3d226d029bcbd98cacbe60cbd0d2e5d35041",
+      "bytes": 8598
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -1149,8 +1149,8 @@
     },
     {
       "path": "src/rizzler/work_dynamic.py",
-      "git_blob_sha1": "c51489ccc9c7eaae4508a6dde18baf8215b3a3bf",
-      "bytes": 18232
+      "git_blob_sha1": "9f53a5b3ae4e696fb898af18e5baafdee245507b",
+      "bytes": 18387
     },
     {
       "path": "src/rizzler/work_editorial.py",
@@ -1179,8 +1179,8 @@
     },
     {
       "path": "src/rizzler/work_hace_editorial.py",
-      "git_blob_sha1": "709034de330329bebe990d05af9e65fddf9ce4f5",
-      "bytes": 5501
+      "git_blob_sha1": "70ba8e8a93b650550d2e4fb3f55da392f7443e3a",
+      "bytes": 5560
     },
     {
       "path": "src/rizzler/work_hace.py",
@@ -1274,8 +1274,8 @@
     },
     {
       "path": "src/rizzler/work_skill_packages.py",
-      "git_blob_sha1": "3a5e7b3d0d2c3eae68dc769e1029175913beba27",
-      "bytes": 4409
+      "git_blob_sha1": "86193d2c2f23040390d8865738c0e46554fadd56",
+      "bytes": 4464
     },
     {
       "path": "src/rizzler/work_skills.py",
