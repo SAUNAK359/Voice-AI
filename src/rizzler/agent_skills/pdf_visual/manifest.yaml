@@ -1,0 +1,12 @@
+{
+  "id": "pdf_visual",
+  "role": "Professional PDF, chart, diagram, HTML and package rendering",
+  "capabilities": [
+    "render_pdf",
+    "inspect_pdf",
+    "render_auxiliary"
+  ],
+  "max_depth": 5,
+  "max_calls": 24,
+  "permissions": []
+}
