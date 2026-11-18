@@ -86,6 +86,35 @@ class AdaptiveMicroprogram(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(highest,3)
         self.assertEqual(result["audit_all"],{"verified":True})
 
+    async def test_content_addressed_checkpoint_reuse_and_tamper_detection(self):
+        from hashlib import sha256
+        package=load_package("orchestrator")
+        raw={"version":1,"tasks":[
+            {"id":"stage_0","capability":"section_synthesis",
+             "depth":4,"depends_on":[],"arguments":{"index":0}},
+            {"id":"stage_1","capability":"section_synthesis",
+             "depth":4,"depends_on":[],"arguments":{"index":1}}]}
+        tasks=validate_program(raw,package)
+        calls=[]
+        async def writer(args,deps):
+            calls.append(args["index"])
+            return {"result":"Verified output for section "+str(args["index"])}
+        with tempfile.TemporaryDirectory() as root:
+            ns=sha256(b"same evidence and approved blueprint").hexdigest()
+            args={"checkpoint_dir":Path(root),"checkpoint_namespace":ns}
+            first=await execute_program(
+                tasks,{"section_synthesis":writer},**args)
+            second=await execute_program(
+                tasks,{"section_synthesis":writer},**args)
+            self.assertEqual(first,second)
+            self.assertCountEqual(calls,[0,1])
+            files=list(Path(root).glob("*/*.json"))
+            self.assertEqual(len(files),2)
+            files[0].write_text("corrupt")
+            with self.assertRaises(HACEContractError):
+                await execute_program(
+                    tasks,{"section_synthesis":writer},**args)
+
     async def test_missing_handler_fails_closed(self):
         package=load_package("orchestrator")
         tasks=validate_program({"version":1,"tasks":[{
