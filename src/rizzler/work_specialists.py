@@ -329,7 +329,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 evidence[:12500] + "\n\nProvider-attributed source URLs:\n" +
                 "\n".join(context["sources"][:24]))
         instructions += (
-            "\n\nOriginal deliverables: " + json.dumps(sorted(payload["deliverables"])) +
+            "\n\nOriginal deliverables: " + json.dumps(sorted(payload.get("deliverables", []))) +
             "\nProduce a complete editorial source narrative, not a slide script."
         )
         # A dedicated Gemini decision plans the report and presentation's
@@ -343,9 +343,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Preparing evidence and depth blueprint")
             blueprint = await plan_editorial(
-                context["objective"], list(payload["deliverables"]),
+                context["objective"], list(payload.get("deliverables", [])),
                 list(context["sources"]), cfg=WorkModelConfig.from_env())
-            instructions += as_instruction(blueprint, list(payload["deliverables"]))
+            instructions += as_instruction(blueprint, list(payload.get("deliverables", [])))
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Blueprint prepared with "+str(len(blueprint["sections"]))+" sections")
         text = await composer(instructions, context["summary"])
