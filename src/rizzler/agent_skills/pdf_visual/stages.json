@@ -1,0 +1,8 @@
+[
+  "Determine exactly which formats are requested and what constitutes informative content.",
+  "Separate substantive reports from standalone figures, HTML, text, JSON and ZIP packaging.",
+  "Choose typeset sections, real tables, graphical diagrams and suitable evidence-backed charts.",
+  "Render structured pages with styles, typography, citations, accessible tables and correct pagination.",
+  "Inspect extracted text, page sequence, raw-code leakage, clipping, font size and content continuity.",
+  "Repair affected pages or components, then verify file integrity and the required output set."
+]
