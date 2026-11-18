@@ -10,6 +10,8 @@ import re
 
 def transient_code(exc: BaseException) -> str | None:
     cls = type(exc).__name__
+    if cls == "WorkLocalAdmissionBusy":
+        return "local_admission_busy"
     if cls == "WorkProviderUnavailable":
         return "provider_rate_limited" if getattr(exc,"status_code",None)==429 else "provider_unavailable"
     if cls == "DeepAgentPlanningError":
