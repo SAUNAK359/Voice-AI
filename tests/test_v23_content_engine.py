@@ -12,6 +12,13 @@ from rizzler.content_engine import develop_content, _valid_plan
 
 
 class ContentEngineTests(unittest.TestCase):
+    def test_model_json_decoder_handles_fences_and_rejects_extra_prose(self):
+        from rizzler.cognitive_json import decode_model_json
+        self.assertEqual(decode_model_json('```json\\n{"sections": []}\\n```'),
+                         {"sections": []})
+        with self.assertRaises(ValueError):
+            decode_model_json('Explanation: {"sections": []}')
+
     def test_parallel_drafting_retains_independent_sections(self):
         seen = []
         active = [0]
