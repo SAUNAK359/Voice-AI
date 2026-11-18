@@ -32,4 +32,6 @@ where = ["src"]
 testpaths = ["tests"]
 
 [tool.setuptools.package-data]
-rizzler = ["web/*.html", "web/*.css", "web/*.js"]
+rizzler = ["web/*.html", "web/*.css", "web/*.js",
+           "agent_skills/*/SKILL.md", "agent_skills/*/manifest.yaml",
+           "agent_skills/*/stages.json", "agent_skills/*/evals.json"]
