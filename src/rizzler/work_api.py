@@ -273,6 +273,69 @@ def router(store: WorkStore, identity: Identity | None = None,
         except (Conflict,ValueError):
             raise HTTPException(status_code=409,detail="Confirmation invalid or expired") from None
 
+    @api.get("/jobs/{jid}/stream")
+    async def stream_events(req: Request, jid: str, after: int = 0):
+        """Authenticated resumable SSE backed by the durable WorkStore events.
+
+        The connection carries event metadata, never raw prompts, tokens or
+        unapproved artifact bytes. Any restart can resume from the last seq.
+        """
+        from fastapi.responses import StreamingResponse
+        import json as _json
+        who = owner(req)
+        if after < 0:
+            raise HTTPException(status_code=400, detail="Invalid sequence")
+        try:
+            store.get(who, jid)
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
+
+        async def feed():
+            cursor = after
+            quiet = 0
+            while not await req.is_disconnected():
+                records = await asyncio.to_thread(store.events, who, jid, cursor)
+                for event in records:
+                    cursor = event["seq"]
+                    data = _json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+                    yield "id: " + str(cursor) + "\nevent: progress\ndata: " + data + "\n\n"
+                    quiet = 0
+                current = await asyncio.to_thread(store.get, who, jid)
+                if current["status"] in ("completed", "failed", "cancelled"):
+                    yield ("event: terminal\ndata: " +
+                           _json.dumps({"status": current["status"],
+                                        "error_code": current.get("error_code","")}) +
+                           "\n\n")
+                    return
+                quiet += 1
+                if quiet >= 10:
+                    yield ": keepalive\n\n"
+                    quiet = 0
+                await asyncio.sleep(1.5)
+
+        return StreamingResponse(feed(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no",
+                     "X-Content-Type-Options": "nosniff"})
+
+    @api.get("/jobs/{jid}/drafts")
+    def job_drafts(req: Request, jid: str):
+        try:
+            return {"job_id": jid, "artifacts": store.drafts(owner(req), jid),
+                    "verified_final": False}
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
+
+    @api.get("/jobs/{jid}/drafts/{kind}")
+    def download_draft(req: Request, jid: str, kind: str):
+        try:
+            path, info = store.draft_artifact(owner(req), jid, kind)
+            return FileResponse(path, filename="UNVERIFIED_" + info["name"],
+                headers={"Cache-Control": "no-store",
+                         "X-Rizzler-Artifact-Status": "draft-unverified",
+                         "X-Content-Type-Options": "nosniff"})
+        except Missing:
+            raise HTTPException(status_code=404, detail="Draft not available") from None
+
     @api.get("/jobs/{jid}/events")
     def events(req: Request,jid: str,after: int=0):
         if after<0:raise HTTPException(status_code=400,detail="Invalid sequence")
