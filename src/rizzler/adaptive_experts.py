@@ -66,7 +66,9 @@ async def run_expert_subtasks(store, claim: dict, worker_id: str,
     # investigations exist. Ignore the root and low-depth generic stages.
     candidates = [stage for stage in stages if stage.depth > 1]
     candidates.sort(key=lambda stage: (-stage.depth, stage.id))
-    tasks = candidates[:8]
+    # Select high-specificity work under a resource budget, then execute
+    # shallower stages first so deeper specialists receive earlier findings.
+    tasks = sorted(candidates[:8],key=lambda stage:(stage.depth,stage.id))
     if not tasks:
         return {"results": [],"executed":0,"cached":0}
     existing = store.cognitive_events(claim["owner"], claim["id"], limit=200)
@@ -147,7 +149,15 @@ async def run_expert_subtasks(store, claim: dict, worker_id: str,
             return {"task_id":stage.id,"cached":False,"result":result}
 
     try:
-        results=await asyncio.gather(*(run(stage) for stage in tasks))
+        # Inverse pyramid: domain-general findings precede deeper
+        # subdomains; independent experts at a given depth run in parallel.
+        # TaskGroup joins/cancels siblings on failure before the parent
+        # worker marks the stage terminal.
+        for depth in sorted({stage.depth for stage in tasks}):
+            group_tasks=[stage for stage in tasks if stage.depth==depth]
+            async with asyncio.TaskGroup() as group:
+                futures=[group.create_task(run(stage)) for stage in group_tasks]
+            results.extend(task.result() for task in futures)
         return {"results":results,"executed":completed,
                 "cached":len(results)-completed}
     finally:
