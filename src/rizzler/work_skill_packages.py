@@ -7,6 +7,7 @@ No package may invent a new tool or bypass the WorkStore release boundary.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 import json
 import re
@@ -49,6 +50,7 @@ class SkillPackage:
         return text[:max_chars]
 
 
+@lru_cache(maxsize=16)
 def load_package(name: str) -> SkillPackage:
     if not isinstance(name, str) or not IDENT.fullmatch(name):
         raise ValueError("Invalid specialist ID")
