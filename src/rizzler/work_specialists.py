@@ -100,10 +100,17 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     from .work_decision_plane import diagnosis
                     category=failure_code(exc)
                     specific=diagnosis(exc)
+                    # Save only stable internal identifiers, not arbitrary
+                    # provider messages or customer draft text.
+                    if spec.name=="quality" and specific=="unspecified_agent_failure":
+                        specific="quality_stage_"+type(exc).__name__.lower()[:40]
                     try:store.agent_error(jid,worker_id,fence,spec.name,category,specific)
                     except Exception:pass
                     can_recover=(
-                        retries<1 and spec.name!="quality"
+                        retries<1
+                        and (spec.name!="quality" or category in (
+                            "quality_review_failed", "provider_unavailable",
+                            "provider_rate_limited"))
                         and not isinstance(exc,(PermissionError,InterruptedError))
                         and category not in ("provider_budget_exhausted",
                                              "permission_denied","worker_lease_stale")
