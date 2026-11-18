@@ -61,6 +61,11 @@ class ProceduralLedger:
                 last_seq INTEGER NOT NULL,
                 at INTEGER NOT NULL,
                 PRIMARY KEY(owner_tag,specialist))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS reflection_claims(
+                owner_tag TEXT NOT NULL,
+                specialist TEXT NOT NULL,
+                expires INTEGER NOT NULL,
+                PRIMARY KEY(owner_tag,specialist))""")
 
     @contextmanager
     def _tx(self):
@@ -106,6 +111,7 @@ class ProceduralLedger:
         with self._tx() as db:
             db.execute("DELETE FROM signals WHERE owner_tag=?",(tag,))
             db.execute("DELETE FROM reflections WHERE owner_tag=?",(tag,))
+            db.execute("DELETE FROM reflection_claims WHERE owner_tag=?",(tag,))
         store=MemoryStore(self.hints_root,self.secret,limit=40,ttl_days=30)
         store.delete(tag)
 
@@ -128,20 +134,57 @@ class ProceduralLedger:
         return {"owner_tag":tag,"specialist":specialist,"last_seq":newest,
                 "signal_count":n,"categories":dict(stats)}
 
+    def claim_due(self) -> dict | None:
+        """Atomically reserve an aggregate for one background reflection worker."""
+        now=int(time.time())
+        with self._tx() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row=db.execute("""SELECT s.owner_tag,s.specialist,
+                MAX(s.seq) AS newest, COUNT(*) AS n
+                FROM signals s LEFT JOIN reflections r
+                  ON r.owner_tag=s.owner_tag AND r.specialist=s.specialist
+                LEFT JOIN reflection_claims c
+                  ON c.owner_tag=s.owner_tag AND c.specialist=s.specialist
+                WHERE s.seq>COALESCE(r.last_seq,0)
+                  AND COALESCE(c.expires,0)<=?
+                GROUP BY s.owner_tag,s.specialist
+                HAVING n>=4 ORDER BY MAX(s.seq) ASC LIMIT 1""",(now,)).fetchone()
+            if row is None:return None
+            tag,specialist,newest,count=row
+            db.execute("""INSERT INTO reflection_claims(owner_tag,specialist,expires)
+                VALUES(?,?,?) ON CONFLICT(owner_tag,specialist)
+                DO UPDATE SET expires=excluded.expires""",
+                (tag,specialist,now+120))
+            stats=db.execute("""SELECT category,COUNT(*) FROM signals
+                 WHERE owner_tag=? AND specialist=? AND seq<=?
+                 GROUP BY category ORDER BY category""",
+                 (tag,specialist,newest)).fetchall()
+        return {"owner_tag":tag,"specialist":specialist,"last_seq":newest,
+                "signal_count":count,"categories":dict(stats)}
+
     def commit_reflection(self, batch: dict, hint: str | None) -> bool:
         """Save a provisional operational hint only after strict validation."""
         specialist=batch["specialist"]
-        if hint is not None:
-            if not isinstance(hint,str) or not 18 <= len(hint.strip()) <= 300:
-                raise ValueError("Invalid provisional procedural hint")
-            from .memory import MemoryStore
-            store=MemoryStore(self.hints_root,self.secret,limit=40,ttl_days=30)
-            store.remember(batch["owner_tag"],specialist+": "+hint.strip())
+        if hint is not None and (not isinstance(hint,str) or
+                                 not 18 <= len(hint.strip()) <= 300):
+            raise ValueError("Invalid provisional procedural hint")
         with self._tx() as db:
+            db.execute("BEGIN IMMEDIATE")
+            claim=db.execute("""SELECT expires FROM reflection_claims
+                  WHERE owner_tag=? AND specialist=?""",
+                  (batch["owner_tag"],specialist)).fetchone()
+            if claim is None or claim[0]<int(time.time()):
+                raise RuntimeError("Stale or revoked procedural reflection")
+            if hint is not None:
+                from .memory import MemoryStore
+                store=MemoryStore(self.hints_root,self.secret,limit=40,ttl_days=30)
+                store.remember(batch["owner_tag"],specialist+": "+hint.strip())
             db.execute("""INSERT INTO reflections(owner_tag,specialist,last_seq,at)
                 VALUES(?,?,?,?) ON CONFLICT(owner_tag,specialist)
                 DO UPDATE SET last_seq=excluded.last_seq,at=excluded.at""",
                 (batch["owner_tag"],specialist,batch["last_seq"],int(time.time())))
+            db.execute("DELETE FROM reflection_claims WHERE owner_tag=? AND specialist=?",
+                       (batch["owner_tag"],specialist))
         return bool(hint)
 
 
