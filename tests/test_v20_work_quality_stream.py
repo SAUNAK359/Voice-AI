@@ -205,5 +205,38 @@ class GatewayDeadlineTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(metrics["primary"]["transient_errors"], 1)
 
 
+class TargetedRepairTests(unittest.TestCase):
+    def test_one_section_repaired_without_dropping_other_sections(self):
+        from rizzler.work_ir import compile_ir
+        from rizzler.work_editorial import apply_section_repair
+        from rizzler.work_cognition import CognitiveDecisionError
+        ir = compile_ir(
+            "Technical assessment",
+            "## Baseline\nEvidence and validated assumptions are recorded here. "
+            "The calculations remain source-bound.\n\n"
+            "## Failure analysis\nAn initial failure mode is evaluated here. "
+            "The diagnosis is incomplete.\n\n"
+            "## Recommendations\nImplement bounded recovery and source-aware QA.",
+            ["https://example.org/reference"])
+        result = apply_section_repair(ir, {
+            "title": ir.title,
+            "edits": [{"section_index": 1,
+                       "replacement_body": "The failure originated at the final "
+                       "quality stage. Its precise nested exception remains "
+                       "unverified; add durable substage telemetry and selective repair."}],
+            "rationale": "Repair the incomplete failure diagnosis without modifying evidence."
+        })
+        self.assertEqual(result.sources, ir.sources)
+        self.assertEqual(result.sections[0], ir.sections[0])
+        self.assertEqual(result.sections[2], ir.sections[2])
+        self.assertNotEqual(result.sections[1], ir.sections[1])
+        self.assertNotEqual(result.sha256, ir.sha256)
+        with self.assertRaises(CognitiveDecisionError):
+            apply_section_repair(ir, {
+                "title": ir.title, "edits": [{"section_index": 99,
+                  "replacement_body": "An adequately detailed but invalid edit."}],
+                "rationale": "This references a nonexistent section."})
+
+
 if __name__ == "__main__":
     unittest.main()
