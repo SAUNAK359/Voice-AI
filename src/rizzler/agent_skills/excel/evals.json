@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "agent": "excel",
+  "checks": [
+    {
+      "id": "input_provenance",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "formula_errors",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "recalculation_expectations",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "unit_consistency",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "auditability",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "native_chart_integrity",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    }
+  ],
+  "release_thresholds": {
+    "critical_failure_rate": 0,
+    "regression_suite": "must_pass",
+    "p95_latency": "measure_not_assume"
+  },
+  "limitations": "These are evaluation contracts, not claims that production benchmarks have passed."
+}
