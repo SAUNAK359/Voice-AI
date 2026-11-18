@@ -375,6 +375,19 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             instructions += depth.instruction()
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Domain work contract has "+str(len(depth.stages))+" stages")
+            if os.environ.get("RIZZLER_HACE_EXECUTE_STAGES","0")=="1":
+                from .work_hace_exec import execute as execute_hace, as_instruction
+                detailed=await execute_hace(
+                    depth,context["objective"],evidence,
+                    list(context["sources"]),cfg=WorkModelConfig.from_env(),
+                    read_checkpoint=lambda sid:store.hace_stage(owner,jid,sid),
+                    commit_checkpoint=lambda item:store.commit_hace_stage(
+                        owner,jid,worker_id,fence,item),
+                    on_progress=lambda msg:store.record_progress(
+                        jid,worker_id,fence,"editorial_progress",msg))
+                instructions += as_instruction(detailed)
+                store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                      "Specialist findings reconciled bottom up")
         elif (composer is production_composer and
                 os.environ.get("RIZZLER_V20_EDITORIAL_BLUEPRINT", "1") == "1"):
             from .work_editorial import plan_editorial, as_instruction
