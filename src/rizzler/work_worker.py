@@ -19,7 +19,7 @@ from .work_skills import SKILLS, FORMATS, read_dataset, analyze, render_one
 logger=logging.getLogger("rizzler.work.worker")
 
 
-async def compose_work(objective: str, data_summary: dict | None, *, max_chars=30000) -> str:
+async def compose_work(objective: str, data_summary: dict | None, *, max_chars=40000) -> str:
     """Dedicated model request, bounded and without access to filesystem/tools."""
     from .work_dynamic import WorkModelConfig
     cfg=WorkModelConfig.from_env()
@@ -82,13 +82,13 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
     if use_sglang():
         from .production_guard import reserve_provider_call
         reserve_provider_call("work")
-        result=await sglang_complete(prompt,max_tokens=7000,temperature=0.25,
+        result=await sglang_complete(prompt,max_tokens=9000,temperature=0.25,
                                      role="Rizzler evidence-aware synthesis specialist")
         if not 15<=len(result.strip())<=max_chars:
             raise ValueError("SGLang report missing or too long")
         return result
     from .work_gemini_gateway import gemini_content
-    response=await gemini_content(cfg,prompt,max_output_tokens=7000)
+    response=await gemini_content(cfg,prompt,max_output_tokens=9000)
     result=getattr(response,"text","") or ""
     if not 15<=len(result.strip())<=max_chars:
         raise ValueError("Model report missing or too long")
