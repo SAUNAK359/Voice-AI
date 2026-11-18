@@ -259,8 +259,8 @@
     },
     {
       "path": "src/rizzler/adaptive_experts.py",
-      "bytes": 8292,
-      "sha256": "9298658bc19c107ea635abdf0249c4ccda6550c7364ec0bcd905de92d674c855"
+      "bytes": 9008,
+      "sha256": "5a5af0326f8c74766fde5d573f1b419702e5078b27f2e939a5ea1c8877f7e4f4"
     },
     {
       "path": "src/rizzler/artifacts.py",
@@ -374,8 +374,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "a373c7e142d45d8de08866239caa9c607ef0d4033f9ea0dda0a3447f45c2d131",
-      "bytes": 28604
+      "sha256": "9bfb677171987030385cc55408b1963098f1395e817af0c65e663cc6b3e62243",
+      "bytes": 28820
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -389,8 +389,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "db9d05e73d5ede8c3b39129e294ed1576ca29245247f66edc2e07f148cccde38",
-      "bytes": 17782
+      "sha256": "3fe08d8529ff120f4ca7a247c86fe4d79968b48956cda7e6ea93aa150fa175da",
+      "bytes": 18526
     },
     {
       "path": "tests/test_contracts.py",
