@@ -97,6 +97,11 @@ class WorkStore:
               job_id TEXT PRIMARY KEY, record_json TEXT NOT NULL,
               sha256 TEXT NOT NULL, created REAL NOT NULL,
               FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS hace_stage_results(
+              job_id TEXT NOT NULL, stage_id TEXT NOT NULL,
+              result_json TEXT NOT NULL, sha256 TEXT NOT NULL,
+              created REAL NOT NULL, PRIMARY KEY(job_id,stage_id),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE TABLE IF NOT EXISTS job_lineage(
               child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL,
               operation TEXT NOT NULL, created REAL NOT NULL,
@@ -321,6 +326,65 @@ class WorkStore:
                 "VALUES(?,?,?,?)", (jid,raw,digest,time.time()))
             self._event(c,jid,"hace_plan","Hierarchical domain contract committed")
         return proposed
+
+    def hace_stage(self, owner: str, jid: str, stage_id: str) -> dict | None:
+        """Read authenticated, integrity-verified individual specialist analysis."""
+        self.get(owner,jid)
+        with self._tx() as c:
+            record=c.execute(
+                "SELECT result_json,sha256 FROM hace_stage_results "
+                "WHERE job_id=? AND stage_id=?", (jid,stage_id)).fetchone()
+        if record is None:
+            return None
+        raw=record["result_json"]
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=record["sha256"]:
+            raise ValueError("HACE stage checkpoint integrity mismatch")
+        from .work_hace_exec import validate_result
+        data=validate_result(json.loads(raw))
+        if data["stage_id"]!=stage_id:
+            raise ValueError("HACE stage checkpoint identity mismatch")
+        return data
+
+    def commit_hace_stage(self, owner: str, jid: str, worker: str,
+                          fence: int, item: dict) -> dict:
+        """Commit a model-analyzed stage under the active worker's fencing token."""
+        from .work_hace_exec import validate_result
+        doc=validate_result(item)
+        raw=json.dumps(doc,sort_keys=True,separators=(",",":"),
+                       ensure_ascii=False,allow_nan=False)
+        if len(raw.encode("utf-8"))>6000:
+            raise ValueError("HACE stage exceeds checkpoint budget")
+        with self._tx() as c:
+            job=self._active(c,jid,worker,fence)
+            if job["owner"]!=owner:
+                raise Missing("HACE owner mismatch")
+            committed=c.execute(
+                "SELECT record_json,sha256 FROM hace_plans WHERE job_id=?",
+                (jid,)).fetchone()
+            if not committed:
+                raise ValueError("HACE hierarchy must be committed first")
+            if hashlib.sha256(committed["record_json"].encode("utf-8")).hexdigest()!=committed["sha256"]:
+                raise ValueError("HACE hierarchy corrupted")
+            plan=json.loads(committed["record_json"])
+            if doc["stage_id"] not in {s["id"] for s in plan["stages"][1:]}:
+                raise ValueError("Unplanned HACE stage")
+            previous=c.execute(
+                "SELECT result_json,sha256 FROM hace_stage_results "
+                "WHERE job_id=? AND stage_id=?", (jid,doc["stage_id"])).fetchone()
+            if previous:
+                if (hashlib.sha256(previous["result_json"].encode("utf-8")).hexdigest()
+                        !=previous["sha256"]):
+                    raise ValueError("Saved HACE stage was tampered with")
+                if previous["result_json"]!=raw:
+                    raise Conflict("Completed HACE stage is immutable")
+                return doc
+            c.execute(
+                "INSERT INTO hace_stage_results(job_id,stage_id,result_json,sha256,created) "
+                "VALUES(?,?,?,?,?)",(jid,doc["stage_id"],raw,
+                                  hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                                  time.time()))
+            self._event(c,jid,"hace_stage","Domain stage completed")
+        return doc
 
     def record_cognitive_feedback(self, owner: str, jid: str, worker: str,
                                   fence: int, attempt: int, code: str) -> None:
