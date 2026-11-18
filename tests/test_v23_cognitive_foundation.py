@@ -136,6 +136,29 @@ class SourceNormalizerTests(unittest.TestCase):
         self.assertEqual(doc["tables"][0]["location"]["sheet"], "Observed data")
         self.assertEqual(doc["tables"][0]["rows"][1], ["2025", "24.5"])
 
+    def test_docx_preserves_text_and_tables_without_macros(self):
+        try:
+            from docx import Document
+        except ImportError:
+            self.skipTest("python-docx work extra not available")
+        import io
+        doc=Document()
+        doc.add_heading("Trade methodology", level=1)
+        doc.add_paragraph("All source data must be independently reconciled.")
+        table=doc.add_table(rows=2,cols=2)
+        table.cell(0,0).text="Year"
+        table.cell(0,1).text="Value"
+        table.cell(1,0).text="2025"
+        table.cell(1,1).text="15.5"
+        stream=io.BytesIO()
+        doc.save(stream)
+        result=normalize_source(
+            stream.getvalue(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            source_id="word-evidence")
+        self.assertEqual(result["blocks"][0]["type"],"heading")
+        self.assertEqual(result["tables"][0]["rows"][1],["2025","15.5"])
+
     def test_pdf_page_numbers_and_scan_warning(self):
         try:
             import fitz
