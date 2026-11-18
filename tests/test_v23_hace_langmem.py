@@ -164,8 +164,8 @@ class PublicSourceAuditContracts(unittest.IsolatedAsyncioTestCase):
     async def test_public_source_passages_are_attributed_but_not_claim_verified(self):
         from rizzler.work_source_audit import audit_source_records
         def reader(url):
-            return url,"Real public source content with concrete data, dates, "
-                   "definitions, and relevant limitations recorded here. "*3
+            return (url,("Real public source content with concrete data, dates, "
+                         "definitions, and relevant limitations recorded here. ")*3)
         result=await audit_source_records(
             [{"url":"https://example.com/primary"},
              {"url":"https://example.com/primary"},
