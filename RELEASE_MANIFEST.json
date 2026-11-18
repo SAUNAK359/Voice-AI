@@ -1124,8 +1124,8 @@
     },
     {
       "path": "src/rizzler/work_langmem.py",
-      "git_blob_sha1": "ae0ced5f529c5d6f3195387d0ada87706cc4ec38",
-      "bytes": 7047
+      "git_blob_sha1": "f1f75476dda53ce59cd7a88c7a37ba2ce6cc3dc3",
+      "bytes": 7039
     },
     {
       "path": "src/rizzler/work_mcp.py",
@@ -1584,8 +1584,8 @@
     },
     {
       "path": "tests/test_v23_hace_fabric_memory.py",
-      "git_blob_sha1": "347b3870fcf4277d7337b0c96716f5d7f508079f",
-      "bytes": 12681
+      "git_blob_sha1": "58f3d2c0504502307605603c43d933d74fa38b87",
+      "bytes": 13304
     },
     {
       "path": "tests/test_voice_core.cjs",
