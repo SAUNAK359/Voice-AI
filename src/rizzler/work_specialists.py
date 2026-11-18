@@ -354,7 +354,23 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             instructions += as_instruction(blueprint, list(payload.get("deliverables", [])))
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Blueprint prepared with "+str(len(blueprint["sections"]))+" sections")
-        text = await composer(instructions, context["summary"])
+        if (composer is production_composer and
+                os.environ.get("RIZZLER_WORK_ORCHESTRATOR","legacy") == "deepagents" and
+                os.environ.get("RIZZLER_DEEP_AGENTS_SYNTHESIS","1") == "1"):
+            from .work_deepagents_synthesis import synthesize_with_deepagents
+            from .work_dynamic import WorkModelConfig
+            store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                  "Deep Agents synthesis and critique started")
+            text = await synthesize_with_deepagents(
+                instructions, context.get("text") or "",
+                list(context["sources"]), context["summary"],
+                WorkModelConfig.from_env(),
+                on_progress=lambda message: store.record_progress(
+                    jid,worker_id,fence,"editorial_progress",message))
+            store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                  "Deep Agents evidence based draft submitted")
+        else:
+            text = await composer(instructions, context["summary"])
         return {"text": text}
     if name == "quality":
         from .work_repair import validate_repair

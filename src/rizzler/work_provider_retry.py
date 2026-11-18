@@ -14,7 +14,7 @@ def transient_code(exc: BaseException) -> str | None:
         return "local_admission_busy"
     if cls == "WorkProviderUnavailable":
         return "provider_rate_limited" if getattr(exc,"status_code",None)==429 else "provider_unavailable"
-    if cls == "DeepAgentPlanningError":
+    if cls in ("DeepAgentPlanningError", "DeepSynthesisError"):
         message = str(exc)
         if message in ("provider_rate_limited", "provider_unavailable"):
             return message

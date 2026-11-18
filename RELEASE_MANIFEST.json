@@ -229,8 +229,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "git_blob_sha1": "faaa13af4724357f217b420add5ae72dfdf12693",
-      "bytes": 5629
+      "git_blob_sha1": "315320df29988cd3148b95120b0baba7167e789d",
+      "bytes": 6075
     },
     {
       "path": "deploy/searxng-settings.yml",
@@ -984,8 +984,8 @@
     },
     {
       "path": "src/rizzler/work_cognition.py",
-      "git_blob_sha1": "e1c76264117d402e2a2f7a5ba15b89d69a2ac972",
-      "bytes": 14674
+      "git_blob_sha1": "97dd4209deabccd9589f39ed2b118323353727d0",
+      "bytes": 14728
     },
     {
       "path": "src/rizzler/work_corpus.py",
@@ -994,13 +994,23 @@
     },
     {
       "path": "src/rizzler/work_decision_plane.py",
-      "git_blob_sha1": "3521c5d808a180a2c7a80fa5b4bba2d971017548",
-      "bytes": 4757
+      "git_blob_sha1": "9d8f1cb1a3eba17a8cdf81b570c79f997752c72b",
+      "bytes": 5058
+    },
+    {
+      "path": "src/rizzler/work_deepagents_model.py",
+      "git_blob_sha1": "60366aa10214298e1ae5f9208dca5b1520b7dda6",
+      "bytes": 2937
+    },
+    {
+      "path": "src/rizzler/work_deepagents_synthesis.py",
+      "git_blob_sha1": "362d84718e81a1c7b1f43342daab068300f48247",
+      "bytes": 7281
     },
     {
       "path": "src/rizzler/work_deepagents.py",
-      "git_blob_sha1": "95568d1e05fcf1742bc76a403db9c7c4f79eb5e1",
-      "bytes": 8610
+      "git_blob_sha1": "4db01bde229d784b7387343a8894c9fdbe5a3d1c",
+      "bytes": 8411
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -1069,8 +1079,8 @@
     },
     {
       "path": "src/rizzler/work_provider_retry.py",
-      "git_blob_sha1": "e91f8c6b24e24aebbe08a39ba36f5a02ab1df073",
-      "bytes": 2716
+      "git_blob_sha1": "9bbe3579df2bb8f73002df06fb7fa94aeb977dc4",
+      "bytes": 2740
     },
     {
       "path": "src/rizzler/work_quality.py",
@@ -1119,8 +1129,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "8ff31b7267d4aee279b13f9586436b80edd3aca4",
-      "bytes": 24803
+      "git_blob_sha1": "003441f029997b41ecca33b67801e29f9d505711",
+      "bytes": 25833
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -1491,6 +1501,11 @@
       "path": "tests/test_v21_work_admission.py",
       "git_blob_sha1": "e9e2c4d9c7771484777365840325c4a5ac7872d3",
       "bytes": 5322
+    },
+    {
+      "path": "tests/test_v22_deepagents_runtime.py",
+      "git_blob_sha1": "c4b0893bd8562bab18223d909805fd4e321fde02",
+      "bytes": 6994
     },
     {
       "path": "tests/test_voice_core.cjs",
