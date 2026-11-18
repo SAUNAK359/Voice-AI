@@ -45,6 +45,38 @@ def evidence_index(documents: list[dict], *, max_spans: int = 360) -> dict[str, 
                 "source_sha256": digest, "text": passage[:6000],
                 "location": block.get("location", {}), "passage_sha256":
                 hashlib.sha256(passage.encode()).hexdigest()}
+        tables=doc.get("tables",[])
+        if not isinstance(tables,list):
+            raise ValueError("Malformed structured source tables")
+        for table in tables[:24]:
+            if len(spans)>=max_spans:
+                break
+            if not isinstance(table,dict) or not isinstance(table.get("rows"),list):
+                continue
+            rows=table["rows"][:100]
+            if not rows:
+                continue
+            headers=[str(x)[:100] for x in rows[0][:50]] if isinstance(rows[0],list) else []
+            for row_number,row in enumerate(rows[1:],start=2):
+                if len(spans)>=max_spans:
+                    break
+                if not isinstance(row,list):
+                    continue
+                passage="; ".join(
+                    (headers[i] + ": " if i<len(headers) else "") +
+                    str(value)[:170] for i,value in enumerate(row[:50]))
+                passage=" ".join(passage.split())
+                if len(passage)<18:
+                    continue
+                location={**(table.get("location") or {}),"row":row_number}
+                evidence_id=hashlib.sha256(
+                    (source+":"+digest+":"+json.dumps(location,sort_keys=True)+
+                     ":"+passage).encode()).hexdigest()[:24]
+                spans[evidence_id]={
+                    "source_id":source,"source_url":doc.get("source_url"),
+                    "source_sha256":digest,"text":passage[:6000],
+                    "location":location,
+                    "passage_sha256":hashlib.sha256(passage.encode()).hexdigest()}
     return spans
 
 
