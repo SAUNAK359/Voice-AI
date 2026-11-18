@@ -133,10 +133,17 @@ def verify_checkpoint(path: Path, receipt: ArtifactReceipt) -> bool:
 
 def read_skill(name: str) -> str:
     """Load curated documentation on demand, not an untrusted execution script."""
-    if name not in SPECIALISTS:
+    if name not in SPECS:
         raise ValueError("Invalid specialist name")
     file = Path(__file__).with_name("agent_skills") / name / "SKILL.md"
     content = file.read_text(encoding="utf-8")
+    # Enabled HACE specialists must have a checked, versioned manifest whose
+    # tools are a subset of the developer-registered Python capability catalog.
+    import os
+    if os.environ.get("RIZZLER_HACE_ENABLED","0")=="1":
+        from .work_agent_packages import load
+        if load(name).skill != content:
+            raise ValueError("Specialist skill/manifest integrity mismatch")
     if not (100 <= len(content) <= 15000 and content.startswith("#")):
         raise ValueError("Specialist skill specification is missing or malformed")
     return content
