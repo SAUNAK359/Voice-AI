@@ -102,6 +102,13 @@ class WorkStore:
               result_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, PRIMARY KEY(job_id,stage_id),
               FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS memory_jobs(
+              job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+              lease_owner TEXT, lease_until REAL NOT NULL DEFAULT 0,
+              due REAL NOT NULL DEFAULT 0, result_code TEXT NOT NULL DEFAULT '',
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS memory_jobs_due ON memory_jobs(status,due);
             CREATE TABLE IF NOT EXISTS job_lineage(
               child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL,
               operation TEXT NOT NULL, created REAL NOT NULL,
@@ -770,6 +777,70 @@ class WorkStore:
                     (secrets.token_hex(16),row["owner"],jid,time.time()))
                 self._event(c,jid,"automation_plan","Draft schedule pending owner approval")
             self._event(c,jid,"completed","All required outputs verified")
+            # Post-QA LangMem jobs are durable and never delay artifact publish.
+            # They use a separate lease/queue, not an in-flight Work slot.
+            if (os.environ.get("RIZZLER_LANGMEM_ENABLED","0")=="1" and
+                    os.environ.get("RIZZLER_MEMORY_ENABLED","0")=="1"):
+                c.execute(
+                    "INSERT INTO memory_jobs(job_id,owner,status,due) "
+                    "VALUES(?,?,'queued',?) ON CONFLICT(job_id) DO NOTHING",
+                    (jid,row["owner"],time.time()))
+
+    def claim_memory_job(self, worker: str, *, lease_seconds: int=90) -> dict | None:
+        """Lease a QA-completed job for isolated post-processing.
+
+        Claiming and retrying memory work cannot alter the parent Work status,
+        user-visible final artifacts or the separate Gemini Live connection.
+        """
+        if (not isinstance(worker,str) or not 1<=len(worker)<=80 or
+                not 30<=lease_seconds<=300):
+            raise ValueError("Invalid memory worker lease")
+        now=time.time()
+        with self._tx() as c:
+            row=c.execute(
+                "SELECT m.job_id,m.owner,m.attempts FROM memory_jobs m "
+                "JOIN jobs j ON j.id=m.job_id "
+                "WHERE j.status='completed' AND m.attempts<3 "
+                "AND ((m.status='queued' AND m.due<=?) "
+                "OR (m.status='running' AND m.lease_until<=?)) "
+                "ORDER BY m.due,m.job_id LIMIT 1",(now,now)).fetchone()
+            if not row:
+                return None
+            attempts=row["attempts"]+1
+            c.execute(
+                "UPDATE memory_jobs SET status='running',lease_owner=?, "
+                "lease_until=?,attempts=? WHERE job_id=?",
+                (worker,now+lease_seconds,attempts,row["job_id"]))
+            return {"id":row["job_id"],"owner":row["owner"],
+                    "attempts":attempts}
+
+    def complete_memory_job(self, jid: str, worker: str, *,
+                            result_code: str="consolidated", retry: bool=False):
+        if (not isinstance(result_code,str) or
+                not re.fullmatch(r"[a-z0-9_]{1,50}",result_code)):
+            raise ValueError("Unsafe memory outcome category")
+        with self._tx() as c:
+            row=c.execute(
+                "SELECT status,lease_owner,lease_until,attempts FROM memory_jobs "
+                "WHERE job_id=?",(jid,)).fetchone()
+            if (not row or row["status"]!="running"
+                    or row["lease_owner"]!=worker or row["lease_until"]<=time.time()):
+                raise StaleLease("Memory worker lease expired")
+            status="queued" if retry and row["attempts"]<3 else (
+                "failed" if retry else "completed")
+            due=time.time()+min(180,15*2**row["attempts"]) if retry else 0
+            c.execute(
+                "UPDATE memory_jobs SET status=?,lease_owner=NULL,lease_until=0,"
+                "due=?,result_code=? WHERE job_id=?",
+                (status,due,result_code,jid))
+
+    def memory_status(self, owner: str, jid: str) -> dict | None:
+        self.get(owner,jid)
+        with self._tx() as c:
+            row=c.execute(
+                "SELECT status,attempts,result_code FROM memory_jobs "
+                "WHERE job_id=?",(jid,)).fetchone()
+        return dict(row) if row else None
 
     def agent_steps(self, owner: str, jid: str) -> list[dict]:
         """Owner-scoped durable per-agent statuses and SLA evidence."""
