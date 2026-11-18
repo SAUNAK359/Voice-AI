@@ -157,7 +157,19 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                     except Exception as exc:
                         return {"source_id": record["id"], "source_url": record["url"],
                                 "error_category": type(exc).__name__}
-            retrieved=await asyncio.gather(*(acquire(rec) for rec in records[:8]))
+            retrieved=[]
+            # Search grounding may contain redirects, JS-only shells or
+            # temporarily unavailable URLs. Continue through independent
+            # candidates until enough usable source bytes are recovered,
+            # subject to a bounded 16-source acquisition budget.
+            for offset in range(0,min(len(records),16),4):
+                batch=await asyncio.gather(
+                    *(acquire(rec) for rec in records[offset:offset+4]))
+                retrieved.extend(batch)
+                usable=sum("blocks" in doc and
+                           (doc["blocks"] or doc["tables"]) for doc in retrieved)
+                if usable>=3:
+                    break
             extracted=[doc for doc in retrieved if "blocks" in doc and
                        (doc["blocks"] or doc["tables"])]
             fetch_failures=[{"url": doc["source_url"],
