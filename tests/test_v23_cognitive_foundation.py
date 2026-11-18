@@ -47,6 +47,26 @@ class DurableCognitionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 reopened.cognitive_events("owner_1", record["id"])
 
+    def test_checkpoint_atomically_publishes_public_specialist_result(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = WorkStore(Path(d) / "work")
+            record = store.submit("owner_1", "Generate a complete independent report",
+                                  ["md"], "atomic_cognition_001", [])
+            claim = store.claim("worker_1", lease_seconds=45)
+            store.agent_begin(record["id"], "worker_1", claim["fence"],
+                              "orchestrator", 150)
+            from rizzler.work_agents import gate_agent
+            result = {"text": "# Analysis\\nThis report includes a complete "
+                    "verified methodology and explicit limitations in detail."}
+            qa = gate_agent("orchestrator", result, {"md"})
+            store.agent_complete(record["id"], "worker_1", claim["fence"],
+                                 "orchestrator", result, qa)
+            events = store.cognitive_events("owner_1", record["id"])
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["agent"], "orchestrator")
+            self.assertEqual(events[0]["kind"], "finding")
+            self.assertEqual(events[0]["payload"]["quality_passed"], True)
+
     def test_public_events_avoid_unbounded_context(self):
         with tempfile.TemporaryDirectory() as d:
             store = WorkStore(Path(d) / "work")
@@ -94,6 +114,27 @@ class SourceNormalizerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_source(b"test", "text/plain", source_id="test",
                              source_url="https://127.0.0.1/secret")
+
+    def test_xlsx_retrieves_typed_sheet_rows(self):
+        try:
+            from openpyxl import Workbook
+        except ImportError:
+            self.skipTest("openpyxl extra not installed")
+        import io
+        book = Workbook()
+        sheet = book.active
+        sheet.title = "Observed data"
+        sheet.append(["Year", "Exports"])
+        sheet.append([2025, 24.5])
+        content = io.BytesIO()
+        book.save(content)
+        book.close()
+        doc = normalize_source(
+            content.getvalue(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            source_id="xlsx-1")
+        self.assertEqual(doc["tables"][0]["location"]["sheet"], "Observed data")
+        self.assertEqual(doc["tables"][0]["rows"][1], ["2025", "24.5"])
 
     def test_pdf_page_numbers_and_scan_warning(self):
         try:
