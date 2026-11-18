@@ -32,6 +32,14 @@ class WorkProviderUnavailable(RuntimeError):
                          else "provider_unavailable")
 
 
+class WorkLocalAdmissionBusy(WorkProviderUnavailable):
+    """Operator-local queue saturation; no Google 429 response occurred."""
+    def __init__(self):
+        super().__init__(429, retry_after_seconds=5)
+        self.args = ("local_admission_busy",)
+
+
+
 def model_sequence(primary: str) -> tuple[str, ...]:
     alt = os.environ.get("RIZZLER_WORK_FALLBACK_MODELS",
                          os.environ.get("RIZZLER_WORK_FALLBACK_MODEL",
@@ -177,7 +185,7 @@ class GeminiWorkGate:
                               (now, model, budget))
                     return uid
             if time.monotonic() >= deadline:
-                raise WorkProviderUnavailable(429, 60)
+                raise WorkLocalAdmissionBusy()
             await asyncio.sleep(min(1.0, deadline - time.monotonic()))
 
     def release(self, uid: str) -> None:
