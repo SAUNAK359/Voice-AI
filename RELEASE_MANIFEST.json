@@ -1179,13 +1179,13 @@
     },
     {
       "path": "src/rizzler/work_hace_editorial.py",
-      "git_blob_sha1": "a78f7601d4bdba198b5585af04d63a868b440601",
-      "bytes": 5041
+      "git_blob_sha1": "709034de330329bebe990d05af9e65fddf9ce4f5",
+      "bytes": 5501
     },
     {
       "path": "src/rizzler/work_hace.py",
-      "git_blob_sha1": "1d669156ac487f848a8769e87b1321df88b1fe46",
-      "bytes": 5669
+      "git_blob_sha1": "f2950c0c333fc52c837721118d67df69662218c0",
+      "bytes": 8612
     },
     {
       "path": "src/rizzler/work_ir.py",
@@ -1284,8 +1284,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "f41190361af0f18ae9637245e5dbae74be34986d",
-      "bytes": 28378
+      "git_blob_sha1": "5ffb152c2ea1086524ca14249fff741e8ee4642d",
+      "bytes": 28438
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -1664,8 +1664,8 @@
     },
     {
       "path": "tests/test_v23_hace_langmem.py",
-      "git_blob_sha1": "be6c9e7c47f5fc3bf69102789188135b38cdddc8",
-      "bytes": 9315
+      "git_blob_sha1": "dec1b18940953104ef09f93089dd727b45700927",
+      "bytes": 10772
     },
     {
       "path": "tests/test_voice_core.cjs",
