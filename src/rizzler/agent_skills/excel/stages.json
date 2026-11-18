@@ -1,0 +1,8 @@
+[
+  "Identify the analytic questions, source tables, units and workbook consumers.",
+  "Design input, transformation, assumption, summary and dashboard layers with clear lineage.",
+  "Specify formulas, calculated columns, pivot-like summaries and model constraints.",
+  "Build native spreadsheet formulas and reproducible charts using validated source values.",
+  "Check recalculation expectations, invalid references, unit conversions, totals, errors and sheet integrity.",
+  "Return validated editable workbooks with methodology, assumptions and exceptions recorded."
+]

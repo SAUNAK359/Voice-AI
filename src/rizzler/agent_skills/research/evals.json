@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "agent": "research",
+  "checks": [
+    {
+      "id": "authorized_source_scope",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "grounding_provenance",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "coverage_gaps",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "date_freshness",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "source_contradictions",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "no_fabricated_claims",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    }
+  ],
+  "release_thresholds": {
+    "critical_failure_rate": 0,
+    "regression_suite": "must_pass",
+    "p95_latency": "measure_not_assume"
+  },
+  "limitations": "These are evaluation contracts, not claims that production benchmarks have passed."
+}

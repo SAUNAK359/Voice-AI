@@ -1,0 +1,12 @@
+{
+  "id": "word",
+  "role": "Professional long-form document editing and DOCX qualification",
+  "capabilities": [
+    "render_docx",
+    "inspect_docx",
+    "section_synthesis"
+  ],
+  "max_depth": 5,
+  "max_calls": 24,
+  "permissions": []
+}

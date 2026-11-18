@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "agent": "word",
+  "checks": [
+    {
+      "id": "technical_depth",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "semantic_styles",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "table_integrity",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "reference_accuracy",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "paragraph_coherence",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "accessibility",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    }
+  ],
+  "release_thresholds": {
+    "critical_failure_rate": 0,
+    "regression_suite": "must_pass",
+    "p95_latency": "measure_not_assume"
+  },
+  "limitations": "These are evaluation contracts, not claims that production benchmarks have passed."
+}

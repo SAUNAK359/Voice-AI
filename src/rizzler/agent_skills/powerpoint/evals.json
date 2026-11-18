@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "agent": "powerpoint",
+  "checks": [
+    {
+      "id": "editable_slide_objects",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "storyboard_coverage",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "readability_and_clipping",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "chart_source_integrity",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "notes_depth",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "source_citations",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    }
+  ],
+  "release_thresholds": {
+    "critical_failure_rate": 0,
+    "regression_suite": "must_pass",
+    "p95_latency": "measure_not_assume"
+  },
+  "limitations": "These are evaluation contracts, not claims that production benchmarks have passed."
+}

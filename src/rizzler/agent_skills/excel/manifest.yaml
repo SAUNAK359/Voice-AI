@@ -1,0 +1,12 @@
+{
+  "id": "excel",
+  "role": "Analytical workbook modeling, formulas and auditability",
+  "capabilities": [
+    "render_xlsx",
+    "inspect_xlsx",
+    "numeric_verify"
+  ],
+  "max_depth": 5,
+  "max_calls": 24,
+  "permissions": []
+}

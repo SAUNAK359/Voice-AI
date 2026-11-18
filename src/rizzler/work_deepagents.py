@@ -71,9 +71,12 @@ async def plan_with_deepagents(
         raise RuntimeError("Install the [deepagents] extra") from exc
 
     context = _safe_context(payload)
+    from .work_skill_packages import load_package
     catalog = {
         name: {"role": spec.role, "formats": list(spec.formats),
-               "target_seconds": spec.sla_seconds}
+               "target_seconds": spec.sla_seconds,
+               "capabilities": list(load_package(name).capabilities),
+               "hierarchical_depth": load_package(name).max_depth}
         for name, spec in SPECS.items()
     }
     accepted: list[dict] = []

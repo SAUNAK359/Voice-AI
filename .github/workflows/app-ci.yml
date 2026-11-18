@@ -48,19 +48,22 @@ jobs:
         run: python scripts/qualify_mvp.py --offline --output /tmp/rizzler-mvp-acceptance
       - name: Validate the canonical native Kaggle notebook
         run: python scripts/validate_native_notebook.py
-      - name: Verify wheel bundles all six specialist skill playbooks
+      - name: Verify wheel bundles all eight hierarchical specialist skill packages
         run: |
           python -m pip wheel . --no-deps -w /tmp/rizzler-wheels
           python - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile
           wheel = next(Path("/tmp/rizzler-wheels").glob("*.whl"))
-          expected = {"research", "sql_analytics", "powerpoint", "word", "excel", "pdf_visual"}
+          expected = {"research", "sql_analytics", "powerpoint", "word",
+                      "excel", "pdf_visual", "orchestrator", "quality"}
           with ZipFile(wheel) as z:
-              found = {p.split("/")[-2] for p in z.namelist()
-                       if p.startswith("rizzler/agent_skills/") and p.endswith("/SKILL.md")}
-          assert found == expected, (found, expected)
-          print("Six specialist SKILL.md files included in installable wheel")
+              names = set(z.namelist())
+              for specialist in expected:
+                  for name in ("SKILL.md", "manifest.yaml", "stages.json", "evals.json"):
+                      path = f"rizzler/agent_skills/{specialist}/{name}"
+                      assert path in names, f"Missing packaged specialist resource {path}"
+          print("Eight hierarchical specialist skill packages included in wheel")
           PY
       - name: Validate reasoning benchmark runner syntax
         run: python -m py_compile scripts/evaluate_reasoning.py

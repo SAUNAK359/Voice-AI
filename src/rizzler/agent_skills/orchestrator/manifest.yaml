@@ -1,0 +1,12 @@
+{
+  "id": "orchestrator",
+  "role": "Deep domain analysis, editorial synthesis and evidence reconciliation",
+  "capabilities": [
+    "content_outline",
+    "section_synthesis",
+    "editorial_review"
+  ],
+  "max_depth": 5,
+  "max_calls": 24,
+  "permissions": []
+}

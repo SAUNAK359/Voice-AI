@@ -1,0 +1,8 @@
+[
+  "Determine measures, unit conventions, dataset identity, intended analysis and user success criteria.",
+  "Profile schemas, null values, row counts, keys, temporal domains, encoding issues and data quality.",
+  "Identify necessary aggregations, cohorts, joins and measures, with explicit definitions and calculations.",
+  "Execute strictly read-only parameterized queries, independently validate counts and record formula lineage.",
+  "Investigate outliers, missingness, leakage, currency consistency and contradictory computed totals.",
+  "Publish reproducible metric tables and limitations without substituting fabricated statistics."
+]

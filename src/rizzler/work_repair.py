@@ -230,6 +230,11 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
             from .work_cognition import review_semantics
             from .work_dynamic import WorkModelConfig
             acceptance=payload["objective"]
+            if context.get("source_passages"):
+                acceptance += ("\n\nActually fetched source excerpts "
+                              "(public HTTPS; not proof of individual claims):\n"+
+                    "\n".join(p["url"]+" : "+p["excerpt"][:1100]
+                              for p in context["source_passages"][:5]))
             if cognitive:
                 acceptance += ("\nApproved success criteria for independent QA:\n" +
                     "\n".join("- "+x for x in

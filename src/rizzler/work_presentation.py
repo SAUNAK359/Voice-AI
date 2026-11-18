@@ -147,8 +147,10 @@ def complete_source_lineage(story: dict, urls: list[str]) -> dict:
 async def compose_storyboard(objective: str, ir, table=None, *, client=None):
     cfg=WorkModelConfig.from_env()
     header=table[0] if table else []
+    from .work_skill_packages import skill_context
     prompt=(
-        "You are the presentation creative director for an advanced executive "
+        skill_context("powerpoint",depth=5) +
+        "\nYou are the presentation creative director for an advanced executive "
         "work platform. Every major design decision must be yours, based on the "
         "actual user objective, verified evidence and requested audience. "
         "Create a professional, sophisticated, substantive, EDITABLE 16:9 slide "

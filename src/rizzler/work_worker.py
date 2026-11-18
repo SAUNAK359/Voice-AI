@@ -26,7 +26,9 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
     from .work_sglang import enabled as use_sglang, complete as sglang_complete
     if not cfg.gemini_api_key and not use_sglang():
         raise RuntimeError("No Work model is configured")
-    prompt = ("Write a decisive, readable, evidence-aware report for real business use. "
+    from .work_skill_packages import skill_context
+    prompt = (skill_context("orchestrator",depth=5) +
+              "\nWrite a decisive, readable, evidence-aware report for real business use. "
               "Open with an executive summary, explain methods and limits, separate "
               "observations from recommendations, and provide clear next actions. "
               "Use concise headings and avoid filler, invented sources, fabricated "
@@ -95,7 +97,7 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
     return result
 
 
-async def grounded_research(objective: str) -> dict:
+async def grounded_research(objective: str, *, on_event=None) -> dict:
     """Gemini-directed iterative internet research with bounded, recorded recovery.
 
     The LLM chooses every query and when to stop. Runtime code only enforces
@@ -117,7 +119,8 @@ async def grounded_research(objective: str) -> dict:
     from google.genai import types
     from .work_gemini_gateway import GeminiWorkGate, model_sequence, provider_status, WorkProviderUnavailable
     gate=GeminiWorkGate()
-    skill = read_skill("research")[:4500]
+    from .work_skill_packages import skill_context
+    skill = skill_context("research",depth=5)[:6000]
     observations, evidence, sections = [], {}, []
     MAX_ROUNDS = 3
     MAX_QUERIES = 6
@@ -191,11 +194,29 @@ async def grounded_research(objective: str) -> dict:
             questions = decision.questions[:remaining]
             if not questions:
                 raise ResearchEvidenceUnavailable("Research question budget exhausted")
-            results = await asyncio.gather(*[
-                search(question, len(observations)+i)
-                for i,question in enumerate(questions)
-            ])
-            for diagnostic, result in results:
+            # Model-authored questions become a typed, capability-gated,
+            # dependency-aware microprogram. Three independent searches may
+            # run together, but Gemini's global admission remains authoritative.
+            from .work_hace import validate_program, execute_program
+            from .work_skill_packages import load_package
+            tasks=[{"id":"query_"+str(i),
+                    "capability":"grounded_search",
+                    "depth":min(2+round_number,5),
+                    "depends_on":[],
+                    "arguments":{"question":question,
+                                 "number":len(observations)+i}}
+                   for i,question in enumerate(questions)]
+            validated=validate_program(
+                {"version":1,"tasks":tasks},load_package("research"))
+            async def execute_search(args, _predecessors):
+                diagnostic,record=await search(args["question"],args["number"])
+                return {"diagnostic":diagnostic,"record":record}
+            gathered=await execute_program(
+                validated,{"grounded_search":execute_search},
+                max_parallel=3,on_event=on_event)
+            results=[gathered["query_"+str(i)] for i in range(len(tasks))]
+            for entry in results:
+                diagnostic, result=entry["diagnostic"],entry["record"]
                 observations.append(diagnostic)
                 if result is None:
                     continue
@@ -210,6 +231,15 @@ async def grounded_research(objective: str) -> dict:
                 "Gemini search returned no sufficiently grounded evidence after bounded recovery")
         records=list(evidence.values())[:24]
         audit=evidence_summary(records)
+        source_audit=None
+        if (os.environ.get("RIZZLER_WORK_ORCHESTRATOR","legacy")=="deepagents"
+                and os.environ.get("RIZZLER_HACE_SOURCE_AUDIT","1")=="1"):
+            from .work_source_audit import audit_source_records
+            source_audit=await audit_source_records(records)
+            if (source_audit["fetched"]==0 and
+                    os.environ.get("RIZZLER_HACE_REQUIRE_SOURCE_FETCH","0")=="1"):
+                raise ResearchEvidenceUnavailable(
+                    "No directly retrievable public source evidence available")
         audit["research_rounds"]=min(MAX_ROUNDS,round_number+1)
         audit["grounded_queries"]=len(sections)
         audit["model_coverage_accepted"]=coverage_accepted
@@ -222,6 +252,11 @@ async def grounded_research(objective: str) -> dict:
             "Original URLs:\n" + "\n".join("- "+url for url in urls))
         return {"text":"# Grounded research report\n\n" +
                 "\n\n".join(sections) + limitations,
+                "evidence_passages": (
+                    source_audit["evidence_passages"] if source_audit else []),
+                "source_audit": ({k:v for k,v in source_audit.items()
+                                  if k!="evidence_passages"}
+                                 if source_audit else {"status":"not_requested"}),
                 "sources":urls,"evidence":records,
                 "evidence_summary":audit,
                 "partial":not coverage_accepted or bool(any(
@@ -322,7 +357,14 @@ async def serve(store,interval=1):
     """
     capacity=worker_parallelism()
     active=set()
+    reflection=None
     try:
+        from .work_procedural_memory import enabled as procedural_enabled
+        if procedural_enabled():
+            from .work_langmem import periodic_reflection
+            reflection=asyncio.create_task(
+                periodic_reflection(interval_seconds=180),
+                name="bounded-langmem-reflection")
         while True:
             store.schedule_due()
             while len(active)<capacity:
@@ -344,7 +386,11 @@ async def serve(store,interval=1):
         # queued for lease recovery, not falsely marked as completed.
         for task in active:
             task.cancel()
-        await asyncio.gather(*active,return_exceptions=True)
+        if reflection is not None:
+            reflection.cancel()
+        await asyncio.gather(
+            *active,*([reflection] if reflection is not None else []),
+            return_exceptions=True)
 
 
 def main():

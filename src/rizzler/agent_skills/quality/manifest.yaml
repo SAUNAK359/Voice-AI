@@ -1,0 +1,12 @@
+{
+  "id": "quality",
+  "role": "Independent factual, semantic and visual acceptance and repair",
+  "capabilities": [
+    "quality_validate",
+    "quality_repair",
+    "quality_visual"
+  ],
+  "max_depth": 5,
+  "max_calls": 24,
+  "permissions": []
+}

@@ -1,0 +1,12 @@
+{
+  "id": "powerpoint",
+  "role": "Expert slide storytelling, technical diagrams and presentation QA",
+  "capabilities": [
+    "storyboard",
+    "render_pptx",
+    "inspect_pptx"
+  ],
+  "max_depth": 5,
+  "max_calls": 24,
+  "permissions": []
+}

@@ -133,7 +133,7 @@ def verify_checkpoint(path: Path, receipt: ArtifactReceipt) -> bool:
 
 def read_skill(name: str) -> str:
     """Load curated documentation on demand, not an untrusted execution script."""
-    if name not in SPECIALISTS:
+    if name not in SPECS:
         raise ValueError("Invalid specialist name")
     file = Path(__file__).with_name("agent_skills") / name / "SKILL.md"
     content = file.read_text(encoding="utf-8")
