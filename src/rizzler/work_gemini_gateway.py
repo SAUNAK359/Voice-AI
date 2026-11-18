@@ -310,7 +310,9 @@ class GeminiWorkGate:
                 continue
             except Exception as exc:
                 status = provider_status(exc)
-                self.record(model, status)
+                # Unknown SDK/runtime exceptions are not successful inference.
+                # They must not boost the adaptive capacity.
+                self.record(model, status if status is not None else 400)
                 if status == 429:
                     raise WorkProviderUnavailable(429) from None
                 if status in (500, 502, 503, 504):
