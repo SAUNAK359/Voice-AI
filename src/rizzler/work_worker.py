@@ -343,7 +343,14 @@ async def serve(store,interval=1):
     """
     capacity=worker_parallelism()
     active=set()
+    reflection=None
     try:
+        from .work_procedural_memory import enabled as procedural_enabled
+        if procedural_enabled():
+            from .work_langmem import periodic_reflection
+            reflection=asyncio.create_task(
+                periodic_reflection(interval_seconds=180),
+                name="bounded-langmem-reflection")
         while True:
             store.schedule_due()
             while len(active)<capacity:
@@ -365,7 +372,11 @@ async def serve(store,interval=1):
         # queued for lease recovery, not falsely marked as completed.
         for task in active:
             task.cancel()
-        await asyncio.gather(*active,return_exceptions=True)
+        if reflection is not None:
+            reflection.cancel()
+        await asyncio.gather(
+            *active,*([reflection] if reflection is not None else []),
+            return_exceptions=True)
 
 
 def main():
