@@ -97,7 +97,7 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
     return result
 
 
-async def grounded_research(objective: str) -> dict:
+async def grounded_research(objective: str, *, on_event=None) -> dict:
     """Gemini-directed iterative internet research with bounded, recorded recovery.
 
     The LLM chooses every query and when to stop. Runtime code only enforces
@@ -194,11 +194,29 @@ async def grounded_research(objective: str) -> dict:
             questions = decision.questions[:remaining]
             if not questions:
                 raise ResearchEvidenceUnavailable("Research question budget exhausted")
-            results = await asyncio.gather(*[
-                search(question, len(observations)+i)
-                for i,question in enumerate(questions)
-            ])
-            for diagnostic, result in results:
+            # Model-authored questions become a typed, capability-gated,
+            # dependency-aware microprogram. Three independent searches may
+            # run together, but Gemini's global admission remains authoritative.
+            from .work_hace import validate_program, execute_program
+            from .work_skill_packages import load_package
+            tasks=[{"id":"query_"+str(i),
+                    "capability":"grounded_search",
+                    "depth":min(2+round_number,5),
+                    "depends_on":[],
+                    "arguments":{"question":question,
+                                 "number":len(observations)+i}}
+                   for i,question in enumerate(questions)]
+            validated=validate_program(
+                {"version":1,"tasks":tasks},load_package("research"))
+            async def execute_search(args, _predecessors):
+                diagnostic,record=await search(args["question"],args["number"])
+                return {"diagnostic":diagnostic,"record":record}
+            gathered=await execute_program(
+                validated,{"grounded_search":execute_search},
+                max_parallel=3,on_event=on_event)
+            results=[gathered["query_"+str(i)] for i in range(len(tasks))]
+            for entry in results:
+                diagnostic, result=entry["diagnostic"],entry["record"]
                 observations.append(diagnostic)
                 if result is None:
                     continue
