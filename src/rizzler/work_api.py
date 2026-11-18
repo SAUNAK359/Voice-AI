@@ -317,6 +317,13 @@ def router(store: WorkStore, identity: Identity | None = None,
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no",
                      "X-Content-Type-Options": "nosniff"})
 
+    @api.get("/jobs/{jid}/draft-text")
+    def draft_text(req: Request, jid: str):
+        try:
+            return store.draft_text(owner(req), jid)
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
+
     @api.get("/jobs/{jid}/drafts")
     def job_drafts(req: Request, jid: str):
         try:
