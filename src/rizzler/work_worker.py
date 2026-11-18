@@ -271,6 +271,18 @@ class WorkWorker:
                 guard.result()
                 raise RuntimeError("Work lease monitor unexpectedly stopped")
             await execution
+            # Optional LangMem consolidation runs only after WorkStore has
+            # atomically published the final QA-passed job. Failures cannot
+            # invalidate finished artifacts or hold Voice's Gemini Live path.
+            if os.environ.get("RIZZLER_LANGMEM_ENABLED","0") == "1":
+                try:
+                    from .work_langmem import consolidate_completed_job
+                    await asyncio.wait_for(
+                        consolidate_completed_job(self.store,claim["owner"],jid),
+                        timeout=55)
+                except (Exception,asyncio.TimeoutError):
+                    logger.warning(
+                        "Optional post-QA LangMem consolidation unavailable for %s",jid)
         except (StaleLease, InterruptedError):
             failure = "cancelled_or_stale"
         except asyncio.CancelledError:
