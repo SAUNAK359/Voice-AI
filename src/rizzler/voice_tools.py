@@ -167,10 +167,8 @@ class VoiceTools:
                     return {"tool":intent,"text":line,"spoken":line,"verified":False}
                 count=self.memory.delete(owner)
                 try:
-                    from .work_procedural_memory import from_environment
-                    ledger=from_environment()
-                    if ledger is not None:
-                        ledger.delete_owner(owner)
+                    from .work_procedural_memory import delete_all_for_owner
+                    delete_all_for_owner(owner)
                 except Exception:
                     # Never claim all memories were cleared if the secondary
                     # opted-in procedural namespace could not be cleared.
