@@ -77,7 +77,7 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
         from google import genai
         client = genai.Client(api_key=api_key)
     from google.genai import types
-    sections = [{"id":i,"heading":h,"content":body[:1800]}
+    sections = [{"id":i,"heading":h,"content":body[:600]}
                 for i,(h,body) in enumerate(ir.sections)]
     prompt = (
         "You are a senior presentation strategy and information designer. "
@@ -126,12 +126,14 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
 
 
 def render_storyboard(path: Path, blueprint: dict, *, title: str,
-                      sources: tuple[str, ...]) -> None:
+                      sources: tuple[str, ...], table=None) -> None:
     """Render native, editable elements and per-slide evidence notes."""
     from pptx import Presentation
     from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_SHAPE
+    from pptx.chart.data import CategoryChartData
+    from pptx.enum.chart import XL_CHART_TYPE
 
     slides = blueprint["slides"]
     prs=Presentation()
@@ -161,14 +163,48 @@ def render_storyboard(path: Path, blueprint: dict, *, title: str,
         box(slide,.62,.32,12.0,.72,plan["title"],size=27,bold=True)
         box(slide,.75,1.19,11.8,1.02,plan["message"],size=19,ink=teal,bold=True)
         bullets=plan["bullets"];n=len(bullets);kind=plan["kind"]
+        chart_added=False
+        if kind == "metrics" and table and table[1]:
+            # Native, editable visualization of independently computed source
+            # values. Never create a chart from unsupported model numbers.
+            from .work_skills import analyze
+            profile=analyze(*table)
+            if profile["numeric"]:
+                metric=next(iter(profile["numeric"]))
+                col=table[0].index(metric)
+                category=next((i for i,h in enumerate(table[0])
+                               if h not in profile["numeric"]),None)
+                pairs=[]
+                for row_idx,row in enumerate(table[1][:12]):
+                    try:
+                        value=float(row[col])
+                    except (ValueError,TypeError):
+                        continue
+                    if not __import__("math").isfinite(value):
+                        continue
+                    label=row[category][:16] if category is not None else str(row_idx+1)
+                    pairs.append((label,value))
+                if pairs:
+                    chart_data=CategoryChartData()
+                    chart_data.categories=[item[0] for item in pairs]
+                    chart_data.add_series(metric[:40],[item[1] for item in pairs])
+                    chart=slide.shapes.add_chart(
+                        XL_CHART_TYPE.COLUMN_CLUSTERED,Inches(6.05),Inches(2.46),
+                        Inches(6.45),Inches(3.95),chart_data).chart
+                    chart.has_legend=False
+                    chart.value_axis.has_major_gridlines=True
+                    chart_added=True
         if kind in ("comparison","decision"):
             cols=2 if n<5 else 3
         elif kind in ("process","evidence"):
             cols=3 if n>=3 else 2
         else:
             cols=2 if n>=4 else 1
+        if chart_added:
+            cols=1
         rows=(n+cols-1)//cols
-        width=(11.9-(cols-1)*.20)/cols
+        available_width=4.95 if chart_added else 11.9
+        width=(available_width-(cols-1)*.20)/cols
         height=min(1.45,(3.92-(rows-1)*.22)/rows)
         for i,item in enumerate(bullets):
             x=.73+(i%cols)*(width+.20)
