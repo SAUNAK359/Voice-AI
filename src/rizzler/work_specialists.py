@@ -104,20 +104,24 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     # the immutable authorized job DAG. Provider failure is recorded and the
     # original approved graph still runs; no fabricated plan is substituted.
     context["director_brief"] = ""
+    context["director_stages"] = None
     if os.environ.get("RIZZLER_COGNITIVE_PLANNER", "0").lower() in ("1", "true", "yes"):
-        prior = [event for event in store.cognitive_events(owner, jid, limit=200)
-                 if event["agent"] == "cognitive_director" and event["kind"] == "state"]
-        if prior:
-            context["director_brief"] = prior[-1]["payload"].get("brief", "")
+        from .cognitive_director import concise_brief
+        stored = store.cognitive_plan(owner, jid)
+        if stored is not None:
+            context["director_stages"] = stored
+            context["director_brief"] = concise_brief(stored)
         else:
             try:
                 from .config import Settings
-                from .cognitive_director import plan_specialist_briefs, concise_brief
+                from .cognitive_director import plan_specialist_briefs
                 settings = Settings.from_env()
                 planned_briefs = await plan_specialist_briefs(
                     payload["objective"], graph, model=settings.gemini_model,
                     api_key=settings.gemini_api_key)
-                context["director_brief"] = concise_brief(planned_briefs)
+                store.save_cognitive_plan(jid,worker_id,fence,planned_briefs)
+                context["director_stages"] = store.cognitive_plan(owner,jid)
+                context["director_brief"] = concise_brief(context["director_stages"])
                 store.publish_cognition(jid, worker_id, fence,
                                         "cognitive_director", "state",
                                         {"brief": context["director_brief"],
@@ -125,7 +129,6 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                                          "planner_ms": planned_briefs["planner_ms"],
                                          "status": "validated"})
             except Exception as exc:
-                # No prompt, provider response or credentials enter the ledger.
                 store.publish_cognition(jid, worker_id, fence,
                                         "cognitive_director", "gap",
                                         {"category": type(exc).__name__,
@@ -212,6 +215,24 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
+        if (context.get("director_stages") and os.environ.get(
+                "RIZZLER_COGNITIVE_EXPERTS", "0").lower() in ("1","true","yes")):
+            from .config import Settings
+            from .adaptive_experts import run_expert_subtasks, concise_expert_context
+            cfg=Settings.from_env()
+            shared_context = (context.get("text") or "")[:10000] + "\n" + json.dumps(
+                context.get("summary") or {},ensure_ascii=False)[:4500]
+            findings = await run_expert_subtasks(
+                store, {"id":jid,"owner":owner,"fence":fence,"payload":payload},
+                worker_id,context["director_stages"],
+                objective=payload["objective"],
+                sources=context.get("sources",[]),evidence=shared_context,
+                model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+            expert_context = concise_expert_context(findings)
+            if expert_context:
+                objective += ("\n\nDomain-specific expert investigations "
+                              "(independent analyses, not verified truth):\n" +
+                              expert_context)
         if payload.get("research_synthesis"):
             if not context.get("sources") or not context.get("text"):
                 raise ValueError("Requested research synthesis has no source lineage")
