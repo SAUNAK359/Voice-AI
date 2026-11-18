@@ -110,7 +110,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                         retries<1
                         and (spec.name!="quality" or category in (
                             "quality_review_failed", "provider_unavailable",
-                            "provider_rate_limited"))
+                            "provider_rate_limited", "local_admission_busy"))
                         and not isinstance(exc,(PermissionError,InterruptedError))
                         and category not in ("provider_budget_exhausted",
                                              "permission_denied","worker_lease_stale")
