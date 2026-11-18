@@ -231,6 +231,15 @@ async def grounded_research(objective: str, *, on_event=None) -> dict:
                 "Gemini search returned no sufficiently grounded evidence after bounded recovery")
         records=list(evidence.values())[:24]
         audit=evidence_summary(records)
+        source_audit=None
+        if (os.environ.get("RIZZLER_WORK_ORCHESTRATOR","legacy")=="deepagents"
+                and os.environ.get("RIZZLER_HACE_SOURCE_AUDIT","1")=="1"):
+            from .work_source_audit import audit_source_records
+            source_audit=await audit_source_records(records)
+            if (source_audit["fetched"]==0 and
+                    os.environ.get("RIZZLER_HACE_REQUIRE_SOURCE_FETCH","0")=="1"):
+                raise ResearchEvidenceUnavailable(
+                    "No directly retrievable public source evidence available")
         audit["research_rounds"]=min(MAX_ROUNDS,round_number+1)
         audit["grounded_queries"]=len(sections)
         audit["model_coverage_accepted"]=coverage_accepted
@@ -243,6 +252,11 @@ async def grounded_research(objective: str, *, on_event=None) -> dict:
             "Original URLs:\n" + "\n".join("- "+url for url in urls))
         return {"text":"# Grounded research report\n\n" +
                 "\n\n".join(sections) + limitations,
+                "evidence_passages": (
+                    source_audit["evidence_passages"] if source_audit else []),
+                "source_audit": ({k:v for k,v in source_audit.items()
+                                  if k!="evidence_passages"}
+                                 if source_audit else {"status":"not_requested"}),
                 "sources":urls,"evidence":records,
                 "evidence_summary":audit,
                 "partial":not coverage_accepted or bool(any(
