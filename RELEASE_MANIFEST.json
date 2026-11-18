@@ -1014,8 +1014,8 @@
     },
     {
       "path": "src/rizzler/work_editorial.py",
-      "git_blob_sha1": "45ee92d06a520cca2c133da5f7190e789196d883",
-      "bytes": 6094
+      "git_blob_sha1": "7a50a97f010a610b54dca9254b94f8424357f1d5",
+      "bytes": 11215
     },
     {
       "path": "src/rizzler/work_finance.py",
@@ -1029,8 +1029,8 @@
     },
     {
       "path": "src/rizzler/work_gemini_gateway.py",
-      "git_blob_sha1": "a9e51327c866ed9c627d4642f24528b9fd014591",
-      "bytes": 15078
+      "git_blob_sha1": "a610751641a46f940cc5bdb3ec81df3cf2022162",
+      "bytes": 15682
     },
     {
       "path": "src/rizzler/work_graph_exec.py",
@@ -1064,8 +1064,8 @@
     },
     {
       "path": "src/rizzler/work_presentation.py",
-      "git_blob_sha1": "4bada10c58e4b4bacae69422945669c143bd80df",
-      "bytes": 17729
+      "git_blob_sha1": "4275198ee8983f4300324f6716eaf2405938ab02",
+      "bytes": 18891
     },
     {
       "path": "src/rizzler/work_provider_retry.py",
@@ -1089,8 +1089,8 @@
     },
     {
       "path": "src/rizzler/work_repair.py",
-      "git_blob_sha1": "fcda5267c5a5642c114e53d242823a5f83494c11",
-      "bytes": 15319
+      "git_blob_sha1": "fd5a736a11eb22054e0d7f5d2fafb565ec9ce602",
+      "bytes": 15511
     },
     {
       "path": "src/rizzler/work_rich_docs.py",
@@ -1144,7 +1144,7 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "git_blob_sha1": "71002924b0efbadff3f86412ec3f4f85a8fee966",
+      "git_blob_sha1": "75d2b3702b3e409f545f2337463a4c4f9b336546",
       "bytes": 19121
     },
     {
@@ -1484,8 +1484,8 @@
     },
     {
       "path": "tests/test_v20_work_quality_stream.py",
-      "git_blob_sha1": "65bfe1b99baf59ffa42f88adb45432493cec488f",
-      "bytes": 7405
+      "git_blob_sha1": "18f4827db33a84d5a563b4336337933b31f81931",
+      "bytes": 12664
     },
     {
       "path": "tests/test_voice_core.cjs",
