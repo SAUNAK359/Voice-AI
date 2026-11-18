@@ -438,6 +438,11 @@
       "bytes": 2591
     },
     {
+      "path": "docs/v23-release-qualification.md",
+      "git_blob_sha1": "419a58435a305386cb9b3d348cd9091d45b7eff4",
+      "bytes": 5468
+    },
+    {
       "path": "docs/VOICE_SUPERVISOR_V10.md",
       "git_blob_sha1": "bf09e45edf5a0fd1ef68be4b47de09213865e542",
       "bytes": 7230
@@ -1124,8 +1129,8 @@
     },
     {
       "path": "src/rizzler/work_langmem.py",
-      "git_blob_sha1": "f1f75476dda53ce59cd7a88c7a37ba2ce6cc3dc3",
-      "bytes": 7039
+      "git_blob_sha1": "c526ff0564aeda647e386cfe4131c4c728f64a0b",
+      "bytes": 7052
     },
     {
       "path": "src/rizzler/work_mcp.py",
