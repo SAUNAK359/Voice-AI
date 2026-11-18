@@ -67,6 +67,27 @@ class ResearchFrontierTests(unittest.TestCase):
             self.assertTrue({"research","orchestrator","pdf_visual","quality"} <= completed)
 
 
+    def test_strict_evidence_blocks_unverified_provider_grounding(self):
+        with tempfile.TemporaryDirectory() as root:
+            with patch.dict("os.environ",{
+                "RIZZLER_V23_UNIFIED_RESEARCH":"1",
+                "RIZZLER_CLAIM_VERIFY":"1"},clear=False):
+                store=WorkStore(Path(root)/"work")
+                job=store.submit("owner_1","Research official sources",
+                                 ["research","md"],"evidence_required_job_001",[])
+                async def researcher(objective):
+                    return {"text":"# Findings\\nAttribution exists but no actual "
+                            "retrieved passage is verified. This is not "
+                            "enough for a formal evidence-backed report.",
+                            "sources":["https://example.org/data"]}
+                async def composer(objective,summary):
+                    return "# Report\\nThis should never be published without evidence."
+                asyncio.run(WorkWorker(
+                    store,composer=composer,researcher=researcher).once())
+            self.assertEqual(store.get("owner_1",job["id"])["status"],"failed")
+            self.assertEqual(store.artifacts("owner_1",job["id"]),[])
+
+
 class ProviderGovernorTests(unittest.TestCase):
     def test_slots_limit_independent_tasks(self):
         async def exercise(root):
