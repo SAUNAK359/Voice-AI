@@ -104,5 +104,45 @@ class DraftProgressTests(unittest.TestCase):
                          "quality_validation_failed")
 
 
+class EditorialBlueprintTests(unittest.IsolatedAsyncioTestCase):
+    async def test_model_authored_sections_are_validated_without_network(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from rizzler.work_editorial import validate, as_instruction, plan_editorial
+        from rizzler.work_cognition import CognitiveDecisionError
+        draft = {
+            "audience": "Technical stakeholders",
+            "core_question": "How should the system improve substantive reports?",
+            "editorial_depth": "comprehensive",
+            "sections": [
+                {"heading": "Architecture decisions",
+                 "purpose": "Explain causal mechanisms",
+                 "evidence_or_assumptions": "Repository design and explicit assumptions",
+                 "specific_analysis": "Compare alternative orchestration choices"},
+                {"heading": "Quality evaluation",
+                 "purpose": "Investigate user-visible failures",
+                 "evidence_or_assumptions": "Observed failed job and offline checks",
+                 "specific_analysis": "Describe recovery and acceptance criteria"}
+            ],
+            "presentation_strategy": "Use separate diagrams and one clear idea per slide",
+            "report_strategy": "Write detailed sections and source limitations",
+            "evidence_gaps": ["Unverified external timing measurements"]
+        }
+        cfg = SimpleNamespace(gemini_api_key="test",
+                              gemini_model="gemini-test",request_timeout=40)
+        with patch("rizzler.work_editorial.structured_decision",
+                   new=__import__("unittest").mock.AsyncMock(return_value=draft)) as mock:
+            result = await plan_editorial(
+                "Create a detailed document and presentation",
+                ["pdf", "pptx"], [], cfg=cfg)
+        self.assertEqual(result["editorial_depth"], "comprehensive")
+        self.assertIn("Architecture decisions",
+                      as_instruction(validate(result), ["pdf", "pptx"]))
+        self.assertEqual(mock.await_count, 1)
+        bad = dict(result, sections=[result["sections"][0]] * 2)
+        with self.assertRaises(CognitiveDecisionError):
+            validate(bad)
+
+
 if __name__ == "__main__":
     unittest.main()
