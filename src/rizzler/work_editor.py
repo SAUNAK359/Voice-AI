@@ -19,8 +19,10 @@ def validate_report_plan(document: dict, *, medium: str,
                          allowed_sources: tuple[str, ...]) -> dict:
     if medium not in ("docx", "pdf"):
         raise ValueError("Unsupported editorial medium")
-    if (not isinstance(document, dict) or set(document) !=
-            {"schema_version", "medium", "sections"} or
+    if (not isinstance(document, dict) or not {
+            "schema_version","medium","sections"}.issubset(document) or
+            set(document) - {"schema_version", "medium", "sections",
+                             "original_sections_covered", "word_count"} or
             document["schema_version"] != 1 or document["medium"] != medium):
         raise ValueError("Invalid format-specific report envelope")
     raw=document["sections"]
@@ -52,7 +54,7 @@ def validate_report_plan(document: dict, *, medium: str,
         covered.update(ids)
         total_words+=len(body.split())
         out.append({"heading":_display_text(heading),
-                    "body":body.strip(),
+                    "body":_display_text(body),
                     "section_ids":ids,
                     "source_urls":list(dict.fromkeys(refs))})
     if covered!=set(range(len(original_sections))):
@@ -60,6 +62,11 @@ def validate_report_plan(document: dict, *, medium: str,
     original_words=sum(len(body.split()) for _,body in original_sections)
     if total_words < max(450, round(original_words*0.72)):
         raise ValueError("Edited report discarded too much analytical substance")
+    if ("original_sections_covered" in document and
+            document["original_sections_covered"] != sorted(covered)):
+        raise ValueError("Report coverage manifest is inconsistent")
+    if "word_count" in document and document["word_count"] != total_words:
+        raise ValueError("Report length manifest is inconsistent")
     return {"schema_version":1,"medium":medium,"sections":out,
             "original_sections_covered":sorted(covered),
             "word_count":total_words}
