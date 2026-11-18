@@ -200,7 +200,10 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
     finished = set()
 
-    semaphore = asyncio.Semaphore(2)  # Protect speech responsiveness on CPU hosts.
+    # At most three ready, dependency-independent specialists can progress.
+    # Actual provider in-flight requests are additionally limited by the
+    # process-shared Gemini gate (RPM, TPM, circuit health, adaptive cap).
+    semaphore = asyncio.Semaphore(3)
 
     async def stage_group(names):
         selected = [planned[name] for name in names if name in planned]
