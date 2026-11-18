@@ -59,9 +59,9 @@ class DelegationContracts(unittest.IsolatedAsyncioTestCase):
               "professional artifact layouts separately.")
         captured=[]
         def factory(*,model,tools,system_prompt,subagents):
-            self.assertEqual(len(tools),2)
+            self.assertEqual(len(tools),4)
             self.assertEqual(subagents[0]["name"],"editorial_reviewer")
-            self.assertEqual(len(subagents[0]["tools"]),1)
+            self.assertEqual(len(subagents[0]["tools"]),3)
             class Fake:
                 async def ainvoke(self,values,config):
                     evidence=tools[0].invoke({})

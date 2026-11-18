@@ -64,6 +64,14 @@ async def synthesize_with_deepagents(
     evidence_json = json.dumps(supplied,ensure_ascii=False,default=str)
     if len(evidence_json) > 48000:
         raise ValueError("Evidence pack exceeds deep agent bounded context")
+    # Progressive capability discovery: small default tool surface; specialized
+    # skill bodies are loaded on request rather than copied to every prompt.
+    from .work_capability_fabric import read_only_fabric, CapabilityContractError
+    from .work_agents import read_skill
+    skills={name:read_skill(name) for name in (
+        "research","sql_analytics","powerpoint","word","excel","pdf_visual")}
+    fabric=read_only_fabric(evidence_text,source_urls,skills)
+
     accepted: list[str] = []
     feedback: list[str] = []
 
@@ -94,6 +102,29 @@ async def synthesize_with_deepagents(
             on_progress("Deep Agents submitted complete draft for QA")
         return "accepted_for_independent_quality_review"
 
+    @tool
+    def discover_capabilities(query: str) -> str:
+        """Find available approved analysis, evidence and skill tools on demand."""
+        return json.dumps(fabric.discover(query,set()),ensure_ascii=False)
+
+    @tool
+    async def execute_read_program(program_json: str) -> str:
+        """Execute a validated read-only dependency DAG of discovered tools.
+
+        JSON requires {"steps":[{"id":"...", "tool":"...",
+        "arguments":{}, "depends_on":[]}]}. No shell, network or publishing.
+        """
+        try:
+            if len(program_json)>18000:
+                raise CapabilityContractError("Tool program too large")
+            program=json.loads(program_json)
+            output=await fabric.execute(program,set())
+            if on_progress:
+                on_progress("Read only tool program completed")
+            return json.dumps(output,ensure_ascii=False)
+        except (ValueError,TypeError,PermissionError) as exc:
+            return json.dumps({"status":"rejected","error":type(exc).__name__})
+
     instruction = (
         "You are Rizzler's expert long-form Analysis and Editorial Agent. "
         "Deliver a complete, accurate technical/business report suited to the "
@@ -109,6 +140,11 @@ async def synthesize_with_deepagents(
         "or verifying those pages. Respect source restrictions. "
         "If evidence is missing, state the exact gaps and avoid pretending "
         "outside research took place. Preserve original currency and units. "
+        "Use discover_capabilities and execute_read_program when targeted "
+        "read-only evidence inspection or specialist knowledge helps. "
+        "Tool programs can collect independent observations concurrently "
+        "without extra model calls. Never claim a source was verified merely "
+        "because it appeared in a listing. "
         "Write actual Markdown report sections, not slide plans, a short "
         "outline, or vague bullet summaries. After reviewing completeness, "
         "call submit_completed_draft with the entire final report. "
@@ -118,7 +154,8 @@ async def synthesize_with_deepagents(
         factory = create_deep_agent
     agent = factory(
         model=model if model is not None else _model(cfg),
-        tools=[read_evidence_pack,submit_completed_draft],
+        tools=[read_evidence_pack,submit_completed_draft,
+               discover_capabilities,execute_read_program],
         system_prompt=instruction,
         subagents=[{
             "name":"editorial_reviewer",
@@ -127,7 +164,8 @@ async def synthesize_with_deepagents(
             "system_prompt":"Independently critique the report against the "
                             "objective and available evidence. Identify precise "
                             "gaps. Never invent facts or request unauthorized tools.",
-            "tools":[read_evidence_pack],
+            "tools":[read_evidence_pack,discover_capabilities,
+                     execute_read_program],
         }],
     )
     request = json.dumps({

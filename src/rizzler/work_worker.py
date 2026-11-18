@@ -270,6 +270,9 @@ class WorkWorker:
                 # even when the specialist has not reached its next checkpoint.
                 guard.result()
                 raise RuntimeError("Work lease monitor unexpectedly stopped")
+            # WorkStore.finish has committed any post-QA LangMem request to
+            # the independent durable memory_jobs queue. Never wait for memory
+            # inference on the foreground Work worker. The Work result is final.
             await execution
         except (StaleLease, InterruptedError):
             failure = "cancelled_or_stale"
@@ -313,6 +316,44 @@ def worker_parallelism() -> int:
     return int(raw)
 
 
+async def serve_memory(store,interval=3):
+    """Bounded independent LangMem worker; no Work job slot occupied.
+
+    A crash leaves its memory lease reclaimable; only successfully published
+    and QA-passed parent jobs can enter the memory queue.
+    """
+    if (os.environ.get("RIZZLER_LANGMEM_ENABLED","0")!="1" or
+            os.environ.get("RIZZLER_MEMORY_ENABLED","0")!="1"):
+        return
+    from .work_langmem import consolidate_completed_job
+    worker="langmem-"+secrets.token_hex(12)
+    while True:
+        task=await asyncio.to_thread(store.claim_memory_job,worker)
+        if task is None:
+            await asyncio.sleep(interval)
+            continue
+        try:
+            result=await asyncio.wait_for(
+                consolidate_completed_job(store,task["owner"],task["id"]),
+                timeout=60)
+            status=result.get("status","not_verified")
+            if status not in ("consolidated","no_learning_signal",
+                              "no_safe_learning_signal","not_verified"):
+                status="memory_skipped"
+            await asyncio.to_thread(
+                store.complete_memory_job,task["id"],worker,result_code=status)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Optional LangMem worker failed for job %s",task["id"])
+            try:
+                await asyncio.to_thread(
+                    store.complete_memory_job,task["id"],worker,
+                    result_code="consolidation_failed",retry=True)
+            except Exception:
+                logger.warning("LangMem lease unavailable for %s",task["id"])
+
+
 async def serve(store,interval=1):
     """Run independent job leases concurrently with graceful shutdown.
 
@@ -322,6 +363,9 @@ async def serve(store,interval=1):
     """
     capacity=worker_parallelism()
     active=set()
+    memory_task=(asyncio.create_task(
+        serve_memory(store),name="durable-langmem-consolidation")
+        if os.environ.get("RIZZLER_LANGMEM_ENABLED","0")=="1" else None)
     try:
         while True:
             store.schedule_due()
@@ -340,11 +384,14 @@ async def serve(store,interval=1):
             if empty:
                 await asyncio.sleep(interval)
     finally:
-        # SIGTERM/cancellation interrupts workers; their fenced state remains
-        # queued for lease recovery, not falsely marked as completed.
+        # Durable memory tasks are independent and reclaimable after restart.
+        if memory_task is not None:
+            memory_task.cancel()
         for task in active:
             task.cancel()
         await asyncio.gather(*active,return_exceptions=True)
+        if memory_task is not None:
+            await asyncio.gather(memory_task,return_exceptions=True)
 
 
 def main():

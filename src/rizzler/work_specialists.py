@@ -60,6 +60,19 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         context["objective"]=(payload["objective"][:3000]+
             "\n\nSource evidence ("+scope["coverage"]+"):\n"+scope["text"][:5000])
 
+    # Distinct encrypted operational lessons are only suggestions from
+    # previously verified Work QA; they never become authority or source facts.
+    lessons = []
+    if (os.environ.get("RIZZLER_LANGMEM_ENABLED","0") == "1" and
+            os.environ.get("RIZZLER_MEMORY_ENABLED","0") == "1"):
+        from .work_langmem import recall as recall_work_lessons
+        lessons = await asyncio.to_thread(
+            recall_work_lessons, owner, payload["objective"])
+    if lessons:
+        context["objective"] += (
+            "\n\nPrior verified workflow lessons (untrusted procedural hints only):\n"
+            + "\n".join("- "+line for line in lessons))
+
     levels={}
     async def run_agent(spec):
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
@@ -73,9 +86,14 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             while True:
                 store.agent_begin(jid, worker_id, fence, spec.name, spec.sla_seconds)
                 try:
-                    read_skill(spec.name) if spec.name in (
-                        "research", "sql_analytics", "powerpoint", "word",
-                        "excel", "pdf_visual") else None
+                    # Legacy jobs keep their original six-skill behavior.
+                    # HACE enforces all eight versioned packages separately.
+                    if os.environ.get("RIZZLER_HACE_ENABLED","0")=="1":
+                        read_skill(spec.name)
+                    elif spec.name in (
+                            "research","sql_analytics","powerpoint",
+                            "word","excel","pdf_visual"):
+                        read_skill(spec.name)
                     attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
                     attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
                     from .work_reasoning import use
@@ -343,6 +361,42 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 "\nProduce a complete editorial source narrative, not a slide script."
             )
         if (composer is production_composer and
+                os.environ.get("RIZZLER_HACE_ENABLED","0") == "1"):
+            from .work_hace import plan as plan_hace
+            from .work_dynamic import WorkModelConfig
+            store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                  "Building hierarchical domain work contract")
+            from .work_hace import validate as validate_hace
+            from dataclasses import asdict as _asdict
+            cached_hace=store.hace_plan(owner,jid)
+            if cached_hace is not None:
+                depth=validate_hace(cached_hace,
+                    policy=payload.get("evidence_scope","auto"))
+            else:
+                depth = await plan_hace(
+                    context["objective"], evidence[:3500],
+                    payload.get("evidence_scope","auto"),
+                    list(payload.get("deliverables",[])),
+                    WorkModelConfig.from_env())
+                proposed=json.loads(json.dumps(_asdict(depth),ensure_ascii=False))
+                store.commit_hace_plan(owner,jid,worker_id,fence,proposed)
+            instructions += depth.instruction()
+            store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                  "Domain work contract has "+str(len(depth.stages))+" stages")
+            if os.environ.get("RIZZLER_HACE_EXECUTE_STAGES","0")=="1":
+                from .work_hace_exec import execute as execute_hace, as_instruction
+                detailed=await execute_hace(
+                    depth,context["objective"],evidence,
+                    list(context["sources"]),cfg=WorkModelConfig.from_env(),
+                    read_checkpoint=lambda sid:store.hace_stage(owner,jid,sid),
+                    commit_checkpoint=lambda item:store.commit_hace_stage(
+                        owner,jid,worker_id,fence,item),
+                    on_progress=lambda msg:store.record_progress(
+                        jid,worker_id,fence,"editorial_progress",msg))
+                instructions += as_instruction(detailed)
+                store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                      "Specialist findings reconciled bottom up")
+        elif (composer is production_composer and
                 os.environ.get("RIZZLER_V20_EDITORIAL_BLUEPRINT", "1") == "1"):
             from .work_editorial import plan_editorial, as_instruction
             from .work_dynamic import WorkModelConfig

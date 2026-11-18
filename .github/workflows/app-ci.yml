@@ -38,6 +38,21 @@ jobs:
           GEMINI_API_KEY: ""
           RIZZLER_SPEECH_BACKEND: gemini
         run: python -m pytest -q tests/test_v19_cloud_audio.py
+      - name: V20-V23 artifact QA, adaptive admission, HACE, capabilities and LangMem contracts
+        env:
+          GEMINI_API_KEY: ""
+          RIZZLER_WORK_LLM_BACKEND: gemini
+          RIZZLER_HACE_ENABLED: "0"
+          RIZZLER_LANGMEM_ENABLED: "0"
+        run: |
+          python -m pytest -q tests/test_v20_work_quality_stream.py tests/test_v21_work_admission.py tests/test_v22_deepagents_runtime.py tests/test_v23_hace_fabric_memory.py
+          python - <<'PY'
+          from langmem import create_memory_manager
+          from rizzler.work_agent_packages import catalog
+          assert callable(create_memory_manager)
+          assert len(catalog()) == 8
+          print("All eight HACE skill manifests and LangMem package verified")
+          PY
       - name: Full isolated Python regression suite (Python 3.11)
         if: matrix.python-version == '3.11'
         env:
@@ -48,19 +63,22 @@ jobs:
         run: python scripts/qualify_mvp.py --offline --output /tmp/rizzler-mvp-acceptance
       - name: Validate the canonical native Kaggle notebook
         run: python scripts/validate_native_notebook.py
-      - name: Verify wheel bundles all six specialist skill playbooks
+      - name: Verify wheel bundles all eight specialist skills and checked manifests
         run: |
           python -m pip wheel . --no-deps -w /tmp/rizzler-wheels
           python - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile
           wheel = next(Path("/tmp/rizzler-wheels").glob("*.whl"))
-          expected = {"research", "sql_analytics", "powerpoint", "word", "excel", "pdf_visual"}
+          expected = {"research", "sql_analytics", "powerpoint", "word", "excel", "pdf_visual", "quality", "orchestrator"}
           with ZipFile(wheel) as z:
               found = {p.split("/")[-2] for p in z.namelist()
                        if p.startswith("rizzler/agent_skills/") and p.endswith("/SKILL.md")}
+              manifests = {p.split("/")[-2] for p in z.namelist()
+                           if p.startswith("rizzler/agent_skills/") and p.endswith("/manifest.yaml")}
           assert found == expected, (found, expected)
-          print("Six specialist SKILL.md files included in installable wheel")
+          assert manifests == expected, (manifests, expected)
+          print("Eight specialist SKILL.md files and YAML capability manifests bundled")
           PY
       - name: Validate reasoning benchmark runner syntax
         run: python -m py_compile scripts/evaluate_reasoning.py

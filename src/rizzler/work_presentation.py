@@ -147,6 +147,15 @@ def complete_source_lineage(story: dict, urls: list[str]) -> dict:
 async def compose_storyboard(objective: str, ir, table=None, *, client=None):
     cfg=WorkModelConfig.from_env()
     header=table[0] if table else []
+    # Progressive HACE skill specialization becomes part of the model's
+    # storyboard instructions, not merely an ignored file-read side effect.
+    import os
+    skill_context=""
+    if os.environ.get("RIZZLER_HACE_ENABLED","0")=="1":
+        from .work_agents import read_skill
+        skill_context=(
+            "\nApproved PowerPoint specialist expertise (not new privileges):\n"+
+            read_skill("powerpoint")[:8500])
     prompt=(
         "You are the presentation creative director for an advanced executive "
         "work platform. Every major design decision must be yours, based on the "
@@ -186,6 +195,7 @@ async def compose_storyboard(objective: str, ir, table=None, *, client=None):
         "\nResearch and composition content: "+ir.content[:30000]+
         "\nAllowed attributed source URLs: "+json.dumps(list(ir.sources))+
         "\nVerified dataset headers: "+json.dumps(header)+
+        skill_context+
         "\nProduce only schema-conforming JSON.")
     last_error="none"
     for attempt in range(3):

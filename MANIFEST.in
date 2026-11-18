@@ -1,1 +1,1 @@
-recursive-include src/rizzler/agent_skills *.md
+recursive-include src/rizzler/agent_skills *.md *.yaml

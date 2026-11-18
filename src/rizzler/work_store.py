@@ -93,6 +93,22 @@ class WorkStore:
               job_id TEXT PRIMARY KEY, record_json TEXT NOT NULL,
               sha256 TEXT NOT NULL, created REAL NOT NULL,
               FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS hace_plans(
+              job_id TEXT PRIMARY KEY, record_json TEXT NOT NULL,
+              sha256 TEXT NOT NULL, created REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS hace_stage_results(
+              job_id TEXT NOT NULL, stage_id TEXT NOT NULL,
+              result_json TEXT NOT NULL, sha256 TEXT NOT NULL,
+              created REAL NOT NULL, PRIMARY KEY(job_id,stage_id),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE TABLE IF NOT EXISTS memory_jobs(
+              job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+              lease_owner TEXT, lease_until REAL NOT NULL DEFAULT 0,
+              due REAL NOT NULL DEFAULT 0, result_code TEXT NOT NULL DEFAULT '',
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS memory_jobs_due ON memory_jobs(status,due);
             CREATE TABLE IF NOT EXISTS job_lineage(
               child_id TEXT PRIMARY KEY, parent_id TEXT NOT NULL,
               operation TEXT NOT NULL, created REAL NOT NULL,
@@ -266,6 +282,116 @@ class WorkStore:
                 raise ValueError("Stored cognitive preflight checksum failed")
             from .work_preflight import verify_committed
             return verify_committed(json.loads(raw), json.loads(row["payload"]))
+
+    def hace_plan(self, owner: str, jid: str) -> dict | None:
+        """Return checksum-verified, immutable hierarchy, never private reasoning."""
+        with self._tx() as c:
+            job=c.execute("SELECT payload FROM jobs WHERE id=? AND owner=?",
+                          (jid,owner)).fetchone()
+            if job is None:
+                raise Missing("Job not found")
+            row=c.execute("SELECT record_json,sha256 FROM hace_plans WHERE job_id=?",
+                          (jid,)).fetchone()
+        if row is None:
+            return None
+        raw=row["record_json"]
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=row["sha256"]:
+            raise ValueError("Stored HACE plan integrity mismatch")
+        from .work_hace import validate
+        original=json.loads(job["payload"])
+        doc=json.loads(raw)
+        validate(doc,policy=original.get("evidence_scope","auto"))
+        return doc
+
+    def commit_hace_plan(self, owner: str, jid: str, worker: str,
+                         fence: int, proposed: dict) -> dict:
+        """Commit exactly one validated model-authored hierarchy under the lease."""
+        from .work_hace import validate
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            if row["owner"]!=owner:
+                raise Missing("Job owner mismatch")
+            payload=json.loads(row["payload"])
+            validate(proposed,policy=payload.get("evidence_scope","auto"))
+            raw=json.dumps(proposed,sort_keys=True,ensure_ascii=False,
+                           separators=(",",":"),allow_nan=False)
+            if len(raw.encode("utf-8"))>26000:
+                raise ValueError("HACE plan storage budget exceeded")
+            saved=c.execute(
+                "SELECT record_json,sha256 FROM hace_plans WHERE job_id=?",
+                (jid,)).fetchone()
+            digest=hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            if saved:
+                if (hashlib.sha256(saved["record_json"].encode("utf-8")).hexdigest()
+                        !=saved["sha256"]):
+                    raise ValueError("Committed HACE plan corrupted")
+                if saved["record_json"]!=raw:
+                    raise Conflict("Committed HACE plan cannot change")
+                return proposed
+            c.execute(
+                "INSERT INTO hace_plans(job_id,record_json,sha256,created) "
+                "VALUES(?,?,?,?)", (jid,raw,digest,time.time()))
+            self._event(c,jid,"hace_plan","Hierarchical domain contract committed")
+        return proposed
+
+    def hace_stage(self, owner: str, jid: str, stage_id: str) -> dict | None:
+        """Read authenticated, integrity-verified individual specialist analysis."""
+        self.get(owner,jid)
+        with self._tx() as c:
+            record=c.execute(
+                "SELECT result_json,sha256 FROM hace_stage_results "
+                "WHERE job_id=? AND stage_id=?", (jid,stage_id)).fetchone()
+        if record is None:
+            return None
+        raw=record["result_json"]
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=record["sha256"]:
+            raise ValueError("HACE stage checkpoint integrity mismatch")
+        from .work_hace_exec import validate_result
+        data=validate_result(json.loads(raw))
+        if data["stage_id"]!=stage_id:
+            raise ValueError("HACE stage checkpoint identity mismatch")
+        return data
+
+    def commit_hace_stage(self, owner: str, jid: str, worker: str,
+                          fence: int, item: dict) -> dict:
+        """Commit a model-analyzed stage under the active worker's fencing token."""
+        from .work_hace_exec import validate_result
+        doc=validate_result(item)
+        raw=json.dumps(doc,sort_keys=True,separators=(",",":"),
+                       ensure_ascii=False,allow_nan=False)
+        if len(raw.encode("utf-8"))>6000:
+            raise ValueError("HACE stage exceeds checkpoint budget")
+        with self._tx() as c:
+            job=self._active(c,jid,worker,fence)
+            if job["owner"]!=owner:
+                raise Missing("HACE owner mismatch")
+            committed=c.execute(
+                "SELECT record_json,sha256 FROM hace_plans WHERE job_id=?",
+                (jid,)).fetchone()
+            if not committed:
+                raise ValueError("HACE hierarchy must be committed first")
+            if hashlib.sha256(committed["record_json"].encode("utf-8")).hexdigest()!=committed["sha256"]:
+                raise ValueError("HACE hierarchy corrupted")
+            plan=json.loads(committed["record_json"])
+            if doc["stage_id"] not in {s["id"] for s in plan["stages"][1:]}:
+                raise ValueError("Unplanned HACE stage")
+            previous=c.execute(
+                "SELECT result_json,sha256 FROM hace_stage_results "
+                "WHERE job_id=? AND stage_id=?", (jid,doc["stage_id"])).fetchone()
+            if previous:
+                if (hashlib.sha256(previous["result_json"].encode("utf-8")).hexdigest()
+                        !=previous["sha256"]):
+                    raise ValueError("Saved HACE stage was tampered with")
+                if previous["result_json"]!=raw:
+                    raise Conflict("Completed HACE stage is immutable")
+                return doc
+            c.execute(
+                "INSERT INTO hace_stage_results(job_id,stage_id,result_json,sha256,created) "
+                "VALUES(?,?,?,?,?)",(jid,doc["stage_id"],raw,
+                                  hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                                  time.time()))
+            self._event(c,jid,"hace_stage","Domain stage completed")
+        return doc
 
     def record_cognitive_feedback(self, owner: str, jid: str, worker: str,
                                   fence: int, attempt: int, code: str) -> None:
@@ -651,6 +777,70 @@ class WorkStore:
                     (secrets.token_hex(16),row["owner"],jid,time.time()))
                 self._event(c,jid,"automation_plan","Draft schedule pending owner approval")
             self._event(c,jid,"completed","All required outputs verified")
+            # Post-QA LangMem jobs are durable and never delay artifact publish.
+            # They use a separate lease/queue, not an in-flight Work slot.
+            if (os.environ.get("RIZZLER_LANGMEM_ENABLED","0")=="1" and
+                    os.environ.get("RIZZLER_MEMORY_ENABLED","0")=="1"):
+                c.execute(
+                    "INSERT INTO memory_jobs(job_id,owner,status,due) "
+                    "VALUES(?,?,'queued',?) ON CONFLICT(job_id) DO NOTHING",
+                    (jid,row["owner"],time.time()))
+
+    def claim_memory_job(self, worker: str, *, lease_seconds: int=90) -> dict | None:
+        """Lease a QA-completed job for isolated post-processing.
+
+        Claiming and retrying memory work cannot alter the parent Work status,
+        user-visible final artifacts or the separate Gemini Live connection.
+        """
+        if (not isinstance(worker,str) or not 1<=len(worker)<=80 or
+                not 30<=lease_seconds<=300):
+            raise ValueError("Invalid memory worker lease")
+        now=time.time()
+        with self._tx() as c:
+            row=c.execute(
+                "SELECT m.job_id,m.owner,m.attempts FROM memory_jobs m "
+                "JOIN jobs j ON j.id=m.job_id "
+                "WHERE j.status='completed' AND m.attempts<3 "
+                "AND ((m.status='queued' AND m.due<=?) "
+                "OR (m.status='running' AND m.lease_until<=?)) "
+                "ORDER BY m.due,m.job_id LIMIT 1",(now,now)).fetchone()
+            if not row:
+                return None
+            attempts=row["attempts"]+1
+            c.execute(
+                "UPDATE memory_jobs SET status='running',lease_owner=?, "
+                "lease_until=?,attempts=? WHERE job_id=?",
+                (worker,now+lease_seconds,attempts,row["job_id"]))
+            return {"id":row["job_id"],"owner":row["owner"],
+                    "attempts":attempts}
+
+    def complete_memory_job(self, jid: str, worker: str, *,
+                            result_code: str="consolidated", retry: bool=False):
+        if (not isinstance(result_code,str) or
+                not re.fullmatch(r"[a-z0-9_]{1,50}",result_code)):
+            raise ValueError("Unsafe memory outcome category")
+        with self._tx() as c:
+            row=c.execute(
+                "SELECT status,lease_owner,lease_until,attempts FROM memory_jobs "
+                "WHERE job_id=?",(jid,)).fetchone()
+            if (not row or row["status"]!="running"
+                    or row["lease_owner"]!=worker or row["lease_until"]<=time.time()):
+                raise StaleLease("Memory worker lease expired")
+            status="queued" if retry and row["attempts"]<3 else (
+                "failed" if retry else "completed")
+            due=time.time()+min(180,15*2**row["attempts"]) if retry else 0
+            c.execute(
+                "UPDATE memory_jobs SET status=?,lease_owner=NULL,lease_until=0,"
+                "due=?,result_code=? WHERE job_id=?",
+                (status,due,result_code,jid))
+
+    def memory_status(self, owner: str, jid: str) -> dict | None:
+        self.get(owner,jid)
+        with self._tx() as c:
+            row=c.execute(
+                "SELECT status,attempts,result_code FROM memory_jobs "
+                "WHERE job_id=?",(jid,)).fetchone()
+        return dict(row) if row else None
 
     def agent_steps(self, owner: str, jid: str) -> list[dict]:
         """Owner-scoped durable per-agent statuses and SLA evidence."""
