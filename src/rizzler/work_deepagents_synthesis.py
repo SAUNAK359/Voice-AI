@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from typing import Any
+from typing import Any, Callable
 
 
 class DeepSynthesisError(RuntimeError):
@@ -33,6 +33,7 @@ async def synthesize_with_deepagents(
     data_summary: dict | None, cfg, *,
     model: Any = None, factory: Any = None,
     max_chars: int = 40000,
+    on_progress: Callable[[str], None] | None = None,
 ) -> str:
     """Produce a durable-ready report; all independent QA happens downstream.
 
@@ -69,6 +70,8 @@ async def synthesize_with_deepagents(
     @tool
     def read_evidence_pack() -> str:
         """Read the approved evidence, exact user objective, and computed data."""
+        if on_progress:
+            on_progress("Evidence pack examined by Deep Agents")
         return evidence_json
 
     @tool
@@ -87,6 +90,8 @@ async def synthesize_with_deepagents(
             feedback.append(str(exc)[:90])
             return "rejected:" + str(exc)
         accepted.append(draft)
+        if on_progress:
+            on_progress("Deep Agents submitted complete draft for QA")
         return "accepted_for_independent_quality_review"
 
     instruction = (
