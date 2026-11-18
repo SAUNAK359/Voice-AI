@@ -56,8 +56,12 @@ async function showDrafts(jid){
  let draft=null;
  try{draft=await api('/api/work/jobs/'+encodeURIComponent(jid)+'/draft-text').then(r=>r.json())}
  catch(_){}
- if(!items.length&&!draft?.text)return;
- const label=document.createElement('p');label.textContent='Intermediate drafts — UNVERIFIED';
+ let feedback=[];
+ try{feedback=(await api('/api/work/jobs/'+encodeURIComponent(jid)+'/quality-feedback')
+     .then(r=>r.json())).iterations||[]}
+ catch(_){}
+ if(!items.length&&!draft?.text&&!feedback.length)return;
+ const label=document.createElement('p');label.textContent='Intermediate drafts and Quality findings — UNVERIFIED';
  label.style.fontWeight='600';panel.append(label);
  if(draft?.text){
   const detail=document.createElement('details');
@@ -65,6 +69,20 @@ async function showDrafts(jid){
   const pre=document.createElement('pre');
   pre.style.cssText='max-height:320px;overflow:auto;white-space:pre-wrap';
   pre.textContent=draft.text;detail.append(title,pre);panel.append(detail);
+ }
+ for(const pass of feedback){
+  if(!pass.findings?.length)continue;
+  const details=document.createElement('details');
+  const title=document.createElement('summary');
+  title.textContent='Quality iteration '+(pass.iteration+1)+
+                    ' — '+pass.findings.length+' identified defects';
+  const list=document.createElement('ul');
+  for(const issue of pass.findings.slice(0,20)){
+   const li=document.createElement('li');
+   li.textContent=(issue.kind||'quality')+': '+(issue.problem||'Missing detail');
+   list.append(li);
+  }
+  details.append(title,list);panel.append(details);
  }
  for(const item of items){
   const btn=document.createElement('button');btn.type='button';
