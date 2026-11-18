@@ -19,6 +19,16 @@ from .work_ir import compile_ir
 from .work_skills import render_one
 from .work_visual import quality_mode
 
+class QualityReviewFailure(RuntimeError):
+    """Model QA failed to execute; unlike a negative QA verdict, retryable."""
+
+class QualityRepairFailure(RuntimeError):
+    """Repair execution failed before its output could be verified."""
+
+class QualityValidationFailure(RuntimeError):
+    """Unexpected local validation error; never publish unchecked artifacts."""
+
+
 async def _revision(ir, objective, defects, dataset_summary, attempt_number):
     from .work_dynamic import WorkModelConfig
     from .work_sglang import enabled as use_sglang, decision as sglang_decision
@@ -190,8 +200,12 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
     max_revisions=2 if semantic_required else 0
     for iteration in range(max_revisions+1):
         progress("quality_check", "QA iteration "+str(iteration+1))
-        reports,defects=await _verify_bundle(
-            store,claim["owner"],checkpoint,context,payload,progress=progress)
+        try:
+            reports,defects=await _verify_bundle(
+                store,claim["owner"],checkpoint,context,payload,progress=progress)
+        except Exception as exc:
+            progress("quality_result", "Bundle validation exception "+type(exc).__name__)
+            raise QualityValidationFailure("quality_bundle_validation_exception") from exc
         cognitive_qa=(
             bool(cognitive) or
             (quality_mode()=="agentic" and
@@ -208,10 +222,14 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
                 acceptance += ("\nApproved success criteria for independent QA:\n" +
                     "\n".join("- "+x for x in
                               cognitive["understanding"]["success_criteria"]))
-            semantic=await review_semantics(
-                acceptance,context["artifact_ir"].content,
-                list(context["artifact_ir"].sources),
-                list(payload["deliverables"]),reports,WorkModelConfig.from_env())
+            try:
+                semantic=await review_semantics(
+                    acceptance,context["artifact_ir"].content,
+                    list(context["artifact_ir"].sources),
+                    list(payload["deliverables"]),reports,WorkModelConfig.from_env())
+            except Exception as exc:
+                progress("quality_result", "Semantic review exception "+type(exc).__name__)
+                raise QualityReviewFailure("semantic_review_execution_failed") from exc
             if not semantic["passed"]:
                 defects.extend(semantic["findings"])
             # Integrity checks remain independent of subjective LLM feedback.
@@ -234,9 +252,13 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
             progress("quality_result", "Quality repair budget exhausted")
             raise ValueError("Artifact failed QA after repair budget; no final deliverables published")
         progress("quality_repair", "Revising artifact bundle version "+str(iteration+1))
-        revision=await _revision(context["artifact_ir"],payload["objective"],defects,
-                                 context.get("summary"),iteration+1)
-        audit=await _rebuild(store,claim,worker_id,checkpoint,context,payload,iteration+1,revision)
+        try:
+            revision=await _revision(context["artifact_ir"],payload["objective"],defects,
+                                    context.get("summary"),iteration+1)
+            audit=await _rebuild(store,claim,worker_id,checkpoint,context,payload,iteration+1,revision)
+        except Exception as exc:
+            progress("quality_result", "Repair exception "+type(exc).__name__)
+            raise QualityRepairFailure("quality_repair_execution_failed") from exc
         progress("quality_repair", "Rebuilt bundle version "+str(iteration+1))
         audit["defects"]=defects
         history.append(audit)
