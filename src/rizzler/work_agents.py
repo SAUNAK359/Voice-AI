@@ -55,7 +55,9 @@ def plan(payload: dict[str, Any]) -> list[AgentSpec]:
         tasks.append("sql_analytics")
     if not uploads and "data_analysis" in formats:
         raise ValueError("Data analysis requires a source dataset")
-    if not ("research" in formats):
+    if not ("research" in formats) or payload.get("research_synthesis") is True:
+        # On opted-in jobs, a dedicated deep-content synthesis follows
+        # independently grounded research rather than reusing snippets verbatim.
         tasks.append("orchestrator")
     for agent in ("powerpoint", "word", "excel", "pdf_visual"):
         if formats.intersection(SPECS[agent].formats):
