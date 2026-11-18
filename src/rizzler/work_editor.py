@@ -143,3 +143,52 @@ def report_text(blueprint: dict) -> str:
     return "\n\n".join(
         "## " + item["heading"] + "\n" + item["body"]
         for item in blueprint["sections"])
+
+
+def inspect_report_document(path, blueprint: dict, *,
+                            source_urls: tuple[str, ...]) -> dict:
+    """Independently read the generated file and verify editorial coverage.
+
+    This is a rendered-text reconciliation, not a factual truth assessment.
+    """
+    from pathlib import Path
+    path=Path(path)
+    if blueprint["medium"] == "docx":
+        from docx import Document
+        doc=Document(path)
+        paragraphs=[p.text for p in doc.paragraphs]
+        extracted="\n".join(paragraphs)
+    elif blueprint["medium"] == "pdf":
+        import fitz
+        with fitz.open(path) as pdf:
+            extracted="\n".join(page.get_text("text",sort=True) for page in pdf)
+    else:
+        raise ValueError("Unsupported report verification medium")
+    normalized=" ".join(extracted.split()).casefold()
+    if len(normalized)<1200:
+        raise ValueError("Editorial artifact lacks substantive visible content")
+    for section in blueprint["sections"]:
+        title=" ".join(section["heading"].split()).casefold()
+        if title not in normalized:
+            raise ValueError("Generated document lost a required section heading")
+        body=" ".join(section["body"].split()).casefold()
+        # PDF line-breaking and encoding make full byte equality unreliable;
+        # check multiple substantial nonoverlapping excerpts instead.
+        chunks=[body[i:i+65] for i in (
+            0, max(0, len(body)//2-30), max(0,len(body)-65))]
+        if any(fragment not in normalized for fragment in chunks if len(fragment)>40):
+            # Word keeps verbatim paragraph text. PDF may insert linebreak
+            # artifacts, which must be reviewed rather than falsely passing.
+            raise ValueError("Rendered editorial section differs from approved plan")
+    # Source hosts at minimum must be readable in the generated file.
+    from urllib.parse import urlsplit
+    for source in source_urls:
+        hostname=urlsplit(source).hostname
+        if hostname and hostname.casefold() not in normalized:
+            raise ValueError("Rendered report lacks source attribution")
+    return {"passed":True,
+            "format":blueprint["medium"],
+            "word_count":len(normalized.split()),
+            "sections":len(blueprint["sections"]),
+            "checks":["editorial_coverage_preserved",
+                      "readable_rendered_body","source_hosts_present"]}
