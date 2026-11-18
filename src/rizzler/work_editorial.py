@@ -57,7 +57,8 @@ def validate(plan: dict) -> dict:
         if type(item) is not dict or set(item) != set(SECTION["properties"]):
             raise CognitiveDecisionError("Editorial blueprint section invalid")
         for key, value in item.items():
-            if type(value) is not str or not 4 <= len(value.strip()) <= 450:
+            limit = 100 if key == "heading" else 450
+            if type(value) is not str or not 4 <= len(value.strip()) <= limit:
                 raise CognitiveDecisionError("Editorial blueprint section incomplete")
         title = item["heading"].casefold().strip()
         if title in seen:
