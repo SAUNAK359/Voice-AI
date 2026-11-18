@@ -53,9 +53,19 @@ async function showDrafts(jid){
  let items=[];
  try{items=(await api('/api/work/jobs/'+encodeURIComponent(jid)+'/drafts').then(r=>r.json())).artifacts||[]}
  catch(_){return}
- if(!items.length)return;
+ let draft=null;
+ try{draft=await api('/api/work/jobs/'+encodeURIComponent(jid)+'/draft-text').then(r=>r.json())}
+ catch(_){}
+ if(!items.length&&!draft?.text)return;
  const label=document.createElement('p');label.textContent='Intermediate drafts — UNVERIFIED';
  label.style.fontWeight='600';panel.append(label);
+ if(draft?.text){
+  const detail=document.createElement('details');
+  const title=document.createElement('summary');title.textContent='Live writer draft — view text';
+  const pre=document.createElement('pre');
+  pre.style.cssText='max-height:320px;overflow:auto;white-space:pre-wrap';
+  pre.textContent=draft.text;detail.append(title,pre);panel.append(detail);
+ }
  for(const item of items){
   const btn=document.createElement('button');btn.type='button';
   btn.textContent=item.kind.toUpperCase()+' draft';
