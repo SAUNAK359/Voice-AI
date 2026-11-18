@@ -33,6 +33,9 @@ class QualityRejected(ValueError):
 
 
 async def _revision(ir, objective, defects, dataset_summary, attempt_number):
+    if os.environ.get("RIZZLER_V20_SECTION_REPAIR", "1") == "1":
+        from .work_editorial import revise_sections
+        return await revise_sections(ir,objective,defects,dataset_summary)
     from .work_dynamic import WorkModelConfig
     from .work_sglang import enabled as use_sglang, decision as sglang_decision
     from .work_reasoning import config,use
