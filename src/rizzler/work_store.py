@@ -81,6 +81,11 @@ class WorkStore:
               PRIMARY KEY(job_id,agent),
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS agent_steps_status ON agent_steps(status,updated);
+            CREATE TABLE IF NOT EXISTS quality_feedback(
+              job_id TEXT NOT NULL, iteration INTEGER NOT NULL,
+              report_json TEXT NOT NULL, at REAL NOT NULL,
+              PRIMARY KEY(job_id,iteration),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
@@ -836,6 +841,46 @@ class WorkStore:
                 (state,state,error_code if state=="failed" else "",time.time(),jid,fence))
             self._settle_agents(c, jid, state)
             self._event(c,jid,state,"Execution "+state)
+
+    def record_quality_feedback(self, jid: str, worker: str, fence: int,
+                                iteration: int, defects: list[dict]) -> None:
+        """Persist owner-scoped sanitized Quality findings under the worker lease."""
+        if not isinstance(iteration, int) or not 0 <= iteration <= 5:
+            raise ValueError("Invalid Quality iteration")
+        if not isinstance(defects, list) or len(defects) > 40:
+            raise ValueError("Invalid Quality findings")
+        safe = []
+        for item in defects:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid Quality finding")
+            kind, problem = item.get("kind"), item.get("problem")
+            if not isinstance(kind, str) or not 1 <= len(kind) <= 60:
+                raise ValueError("Invalid Quality finding kind")
+            if not isinstance(problem, str) or not 1 <= len(problem) <= 450:
+                raise ValueError("Invalid Quality finding description")
+            safe.append({"kind": kind[:60], "problem": problem[:450]})
+        record = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+        if len(record.encode("utf-8")) > 16000:
+            raise ValueError("Quality feedback storage limit exceeded")
+        with self._tx() as c:
+            self._active(c, jid, worker, fence)
+            c.execute(
+                "INSERT INTO quality_feedback(job_id,iteration,report_json,at) "
+                "VALUES(?,?,?,?) ON CONFLICT(job_id,iteration) DO UPDATE SET "
+                "report_json=excluded.report_json,at=excluded.at",
+                (jid, iteration, record, time.time()))
+            self._event(c,jid,"quality_result",
+                        "Iteration "+str(iteration+1)+" found "+str(len(safe))+" defects")
+
+    def quality_feedback(self, owner: str, jid: str) -> list[dict]:
+        """Expose exact stored QA reasons only to the authenticated job owner."""
+        self.get(owner, jid)
+        with self._tx() as c:
+            return [{"iteration": row["iteration"],
+                     "findings": json.loads(row["report_json"])}
+                    for row in c.execute(
+                        "SELECT iteration,report_json FROM quality_feedback "
+                        "WHERE job_id=? ORDER BY iteration", (jid,))]
 
     def draft_text(self, owner: str, jid: str) -> dict:
         """Read only a committed writer checkpoint for the authenticated owner.
