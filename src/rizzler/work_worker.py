@@ -16,7 +16,7 @@ from .work_store import WorkStore, StaleLease
 from .work_skills import SKILLS, FORMATS, read_dataset, analyze, render_one
 
 
-async def compose_work(objective: str, data_summary: dict | None, *, max_chars=18000) -> str:
+async def compose_work(objective: str, data_summary: dict | None, *, max_chars=42000) -> str:
     """Dedicated model request, bounded and without access to filesystem/tools."""
     from .config import Settings
     cfg=Settings.from_env()
