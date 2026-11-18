@@ -35,10 +35,10 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
                 config=types.GenerateContentConfig(
                     temperature=0.25, max_output_tokens=max_tokens,
                     response_mime_type="text/plain"))
-                output = (getattr(response, "text", "") or "").strip()
-                if not output:
-                    raise ValueError("Empty content specialist response")
-                return output
+            output = (getattr(response, "text", "") or "").strip()
+            if not output:
+                raise ValueError("Empty content specialist response")
+            return output
         try:
             result = await develop_content(
                 objective, data_summary, generate,
