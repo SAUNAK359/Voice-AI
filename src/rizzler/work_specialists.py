@@ -358,10 +358,19 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             from .work_dynamic import WorkModelConfig
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Building hierarchical domain work contract")
-            depth = await plan_hace(
-                context["objective"], evidence[:3500],
-                payload.get("evidence_scope","auto"),
-                list(payload.get("deliverables",[])), WorkModelConfig.from_env())
+            from .work_hace import validate as validate_hace
+            from dataclasses import asdict as _asdict
+            cached_hace=store.hace_plan(owner,jid)
+            if cached_hace is not None:
+                depth=validate_hace(cached_hace,
+                    policy=payload.get("evidence_scope","auto"))
+            else:
+                depth = await plan_hace(
+                    context["objective"], evidence[:3500],
+                    payload.get("evidence_scope","auto"),
+                    list(payload.get("deliverables",[])),
+                    WorkModelConfig.from_env())
+                store.commit_hace_plan(owner,jid,worker_id,fence,_asdict(depth))
             instructions += depth.instruction()
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Domain work contract has "+str(len(depth.stages))+" stages")
