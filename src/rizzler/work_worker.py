@@ -25,6 +25,29 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=1
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=cfg.gemini_api_key)
+    if os.environ.get("RIZZLER_COGNITIVE_CONTENT", "0").lower() in ("1", "true", "yes"):
+        from .content_engine import develop_content
+        async def generate(prompt: str, max_tokens: int) -> str:
+            async with asyncio.timeout(min(90, cfg.request_timeout)):
+                from .production_guard import reserve_provider_call
+                reserve_provider_call("work")
+                response = await client.aio.models.generate_content(
+                    model=cfg.gemini_model, contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.25,
+                        max_output_tokens=max_tokens,
+                        response_mime_type="text/plain"))
+                output = (getattr(response, "text", "") or "").strip()
+                if not output:
+                    raise ValueError("Empty content specialist response")
+                return output
+        try:
+            result = await develop_content(
+                objective, data_summary, generate,
+                max_characters=min(max_chars, 42000), parallelism=3)
+            return result["text"]
+        finally:
+            await client.aio.aclose()
     prompt = ("Write a decisive, readable, evidence-aware report for real business use. "
               "Open with an executive summary, explain methods and limits, separate "
               "observations from recommendations, and provide clear next actions. "
