@@ -229,8 +229,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "git_blob_sha1": "998bddf3462dde958b9e649612588173f103e4ac",
-      "bytes": 6689
+      "git_blob_sha1": "34f39de15ad062f2be1107be3a87e0fea2bef2c2",
+      "bytes": 7007
     },
     {
       "path": "deploy/searxng-settings.yml",
@@ -1249,8 +1249,8 @@
     },
     {
       "path": "src/rizzler/work_repair.py",
-      "git_blob_sha1": "dd3cd1cfaeda75b3b728dc432301a4d58e4f3dc1",
-      "bytes": 15660
+      "git_blob_sha1": "005442831f37d817295de31e173a92f9b674e171",
+      "bytes": 15998
     },
     {
       "path": "src/rizzler/work_rich_docs.py",
@@ -1283,9 +1283,14 @@
       "bytes": 11260
     },
     {
+      "path": "src/rizzler/work_source_audit.py",
+      "git_blob_sha1": "ab67e035a16a6998ffcf314b51f256a010210eed",
+      "bytes": 2973
+    },
+    {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "5ffb152c2ea1086524ca14249fff741e8ee4642d",
-      "bytes": 28438
+      "git_blob_sha1": "e7a1567cd4fc8c423a4927bdce5d76e4594b1e6f",
+      "bytes": 29238
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -1309,8 +1314,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "git_blob_sha1": "2f566126dae04e9213c6671fea24d2f97a3a5217",
-      "bytes": 20990
+      "git_blob_sha1": "81f5fa6ecb3463adc4cff9a68624f01c1c382808",
+      "bytes": 21889
     },
     {
       "path": "stack_site.html",
@@ -1664,8 +1669,8 @@
     },
     {
       "path": "tests/test_v23_hace_langmem.py",
-      "git_blob_sha1": "dec1b18940953104ef09f93089dd727b45700927",
-      "bytes": 10772
+      "git_blob_sha1": "f7186e1b8054c8b6c5364a12836fe5422891e8f3",
+      "bytes": 11747
     },
     {
       "path": "tests/test_voice_core.cjs",
