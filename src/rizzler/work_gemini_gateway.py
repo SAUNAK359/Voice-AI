@@ -91,7 +91,13 @@ class GeminiWorkGate:
             connection.execute("PRAGMA journal_mode=WAL")
         self.rpm = int(_config_float("RIZZLER_WORK_PROVIDER_RPM", 6, 1, 1000))
         self.tpm = int(_config_float("RIZZLER_WORK_PROVIDER_TPM", 24000, 1000, 10_000_000))
-        self.parallel = int(_config_float("RIZZLER_WORK_PROVIDER_PARALLEL", 1, 1, 8))
+        self.parallel = int(_config_float("RIZZLER_WORK_PROVIDER_PARALLEL", 3, 1, 8))
+        # Runtime health controls capacity below the operator's fixed maximum.
+        self.adaptive = os.environ.get("RIZZLER_WORK_PROVIDER_ADAPTIVE", "1") == "1"
+        self.recover_successes = int(_config_float(
+            "RIZZLER_WORK_PROVIDER_RECOVERY_SUCCESSES", 4, 1, 50))
+        self.recover_seconds = _config_float(
+            "RIZZLER_WORK_PROVIDER_RECOVERY_SECONDS", 30, 5, 600)
         self.gap = _config_float("RIZZLER_WORK_PROVIDER_GAP_SECONDS", 1.5, 0, 30)
         self.wait = _config_float("RIZZLER_WORK_PROVIDER_WAIT_SECONDS", 35, 1, 180)
         self.lease = _config_float("RIZZLER_WORK_PROVIDER_LEASE_SECONDS", 180, 30, 900)
@@ -107,6 +113,11 @@ class GeminiWorkGate:
                 model TEXT PRIMARY KEY, successes INTEGER NOT NULL,
                 transient_errors INTEGER NOT NULL, rejected INTEGER NOT NULL)""")
             c.execute("CREATE INDEX IF NOT EXISTS requests_called ON requests(called)")
+            c.execute("""CREATE TABLE IF NOT EXISTS adaptive_state(
+                key TEXT PRIMARY KEY, capacity INTEGER NOT NULL,
+                healthy INTEGER NOT NULL, recovery_after REAL NOT NULL)""")
+            c.execute("INSERT OR IGNORE INTO adaptive_state VALUES('__work__',?,?,?)",
+                      (self.parallel,0,0))
 
     @contextmanager
     def _tx(self):
@@ -148,8 +159,15 @@ class GeminiWorkGate:
                     "SELECT COUNT(*),COALESCE(SUM(budget),0),MAX(called) FROM requests"
                 ).fetchone()
                 active = c.execute("SELECT COUNT(*) FROM active").fetchone()[0]
+                if self.adaptive:
+                    row = c.execute(
+                        "SELECT capacity FROM adaptive_state WHERE key='__work__'"
+                    ).fetchone()
+                    effective = min(self.parallel,max(1,int(row[0]))) if row else 1
+                else:
+                    effective = self.parallel
                 permitted = (calls < self.rpm and used + budget <= self.tpm and
-                             active < self.parallel and
+                             active < effective and
                              (latest is None or now - latest >= self.gap))
                 if permitted:
                     uid = secrets.token_hex(12)
@@ -176,6 +194,33 @@ class GeminiWorkGate:
                  (model,int(status is None),
                   int(status in (429,500,502,503,504)),
                   int(status is not None and status not in (429,500,502,503,504))))
+            if self.adaptive:
+                row = c.execute(
+                    "SELECT capacity,healthy,recovery_after FROM adaptive_state "
+                    "WHERE key='__work__'"
+                ).fetchone()
+                capacity, healthy, recovery_after = (
+                    (int(row[0]),int(row[1]),float(row[2]))
+                    if row else (self.parallel,0,0))
+                now = time.time()
+                if status in (429, 500, 502, 503, 504):
+                    capacity = 1 if status == 429 else max(1, capacity - 1)
+                    healthy = 0
+                    recovery_after = now + (60 if status == 429
+                                             else self.recover_seconds)
+                elif status is None:
+                    healthy += 1
+                    if (capacity < self.parallel and
+                            now >= recovery_after and
+                            healthy >= self.recover_successes):
+                        capacity += 1
+                        healthy = 0
+                        recovery_after = now + self.recover_seconds
+                c.execute("""INSERT INTO adaptive_state(key,capacity,healthy,recovery_after)
+                    VALUES('__work__',?,?,?) ON CONFLICT(key) DO UPDATE SET
+                    capacity=excluded.capacity,healthy=excluded.healthy,
+                    recovery_after=excluded.recovery_after""",
+                    (capacity,healthy,recovery_after))
             if status == 429:
                 # 429 often applies to the entire Google project. Prevent
                 # unrelated queued Work jobs from immediately retrying it.
@@ -209,6 +254,10 @@ class GeminiWorkGate:
             circuits = c.execute(
                 "SELECT COUNT(*) FROM circuits WHERE open_until>?", (now,)
             ).fetchone()[0]
+            controller=c.execute(
+                "SELECT capacity,healthy,recovery_after FROM adaptive_state "
+                "WHERE key='__work__'"
+            ).fetchone()
             outcomes=[{"model":row[0],"successes":row[1],
                        "transient_errors":row[2],"rejected":row[3]}
                       for row in c.execute(
@@ -217,7 +266,16 @@ class GeminiWorkGate:
         return {"calls_last_60_seconds": calls, "active": active,
                 "model_outcomes":outcomes,
                 "model_circuits_open": circuits, "rpm_limit": self.rpm,
-                "estimated_tpm_limit": self.tpm, "parallel_limit": self.parallel}
+                "estimated_tpm_limit": self.tpm,
+                "parallel_limit": self.parallel,
+                "adaptive_enabled": self.adaptive,
+                "effective_parallel_limit": (
+                    min(self.parallel,max(1,int(controller[0])))
+                    if self.adaptive and controller else self.parallel),
+                "healthy_calls_since_reduction": (
+                    int(controller[1]) if controller else 0),
+                "next_recovery_epoch": (
+                    float(controller[2]) if controller else 0)}
 
     async def run(self, models: tuple[str, ...],
                   call: Callable[[str], Awaitable[T]], *,
