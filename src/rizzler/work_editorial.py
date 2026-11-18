@@ -121,3 +121,104 @@ def as_instruction(plan: dict, deliverables: list[str]) -> str:
         "Do not simply recite these blueprint instructions or claim research "
         "was performed when it was not. Do not omit known limitations."
     )
+
+REPAIR_EDIT = {
+    "type": "object",
+    "properties": {
+        "section_index": {"type": "integer"},
+        "replacement_body": {"type": "string"},
+    },
+    "required": ["section_index", "replacement_body"],
+    "additionalProperties": False,
+}
+REPAIR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "edits": {"type": "array", "items": REPAIR_EDIT},
+        "rationale": {"type": "string"},
+    },
+    "required": ["title", "edits", "rationale"],
+    "additionalProperties": False,
+}
+
+
+def apply_section_repair(ir, payload: dict, dataset_summary=None):
+    """Apply model-selected edits by bounded index; untouched sections stay exact."""
+    from .work_ir import compile_ir
+    if type(payload) is not dict or set(payload) != set(REPAIR_SCHEMA["properties"]):
+        raise CognitiveDecisionError("Invalid section repair shape")
+    title, edits = payload["title"], payload["edits"]
+    rationale = payload["rationale"]
+    if type(title) is not str or not 5 <= len(title.strip()) <= 120:
+        raise CognitiveDecisionError("Invalid repaired title")
+    if type(rationale) is not str or not 8 <= len(rationale) <= 450:
+        raise CognitiveDecisionError("Invalid repair rationale")
+    if type(edits) is not list or not 1 <= len(edits) <= 4:
+        raise CognitiveDecisionError("Model must choose one to four targeted edits")
+    sections = list(ir.sections)
+    indexes = set()
+    for item in edits:
+        if type(item) is not dict or set(item) != set(REPAIR_EDIT["properties"]):
+            raise CognitiveDecisionError("Invalid section edit")
+        index, body = item["section_index"], item["replacement_body"]
+        if (type(index) is not int or index < 0 or index >= len(sections) or
+                index in indexes):
+            raise CognitiveDecisionError("Invalid or repeated section index")
+        if type(body) is not str or not 40 <= len(body.strip()) <= 7500:
+            raise CognitiveDecisionError("Replacement section is empty or oversized")
+        indexes.add(index)
+        sections[index] = (sections[index][0], body.strip())
+    # Nonedited section text and immutable source list are never model-regenerated.
+    content = "\n\n".join("## " + heading + "\n\n" + body
+                            for heading, body in sections)
+    if len(content) > 45000:
+        raise CognitiveDecisionError("Repaired report exceeds renderer contract")
+    revised = compile_ir(title, content, list(ir.sources), dataset_summary)
+    if revised.sha256 == ir.sha256:
+        raise CognitiveDecisionError("Section repair produced no changes")
+    return revised
+
+
+async def revise_sections(ir, objective: str, defects: list[dict],
+                          dataset_summary: dict | None = None,
+                          *, cfg=None):
+    """Request bounded local edits from Gemini; never request a full rewrite."""
+    if cfg is None:
+        cfg = WorkModelConfig.from_env()
+    context = [{"index": idx, "heading": heading,
+                "body_excerpt": body[:1900]}
+               for idx, (heading, body) in enumerate(ir.sections)]
+    prompt = (
+        "You are Rizzler's artifact repair editor. Diagnose the reported QA "
+        "defects and select ONLY the specific existing section indices requiring "
+        "revision. Preserve all other sections exactly, without summarizing "
+        "or dropping them. Do not rewrite an entire report to fix one paragraph "
+        "or a slide layout. Return 1-4 targeted section replacement bodies, "
+        "including concrete analysis, not generic filler; each replacement "
+        "must preserve verifiable facts, original currency, source limitations "
+        "and nondefective conclusions. Do not invent evidence, sources, statistics "
+        "or dates. Source links and uploaded source values are immutable. "
+        "If a reviewer complains about layout only, improve overly dense "
+        "section wording without deleting substantive findings. "
+        "Only choose indexes supplied by the host; do not add unsupported tools. "
+        "\nObjective: " + json.dumps(objective[:2500]) +
+        "\nCurrent report title: " + json.dumps(ir.title) +
+        "\nSection-indexed current content: " +
+        json.dumps(context, ensure_ascii=False)[:30000] +
+        "\nSpecific QA defects: " +
+        json.dumps(defects, ensure_ascii=False, default=str)[:4500] +
+        "\nImmutable verified dataset summary: " +
+        json.dumps(dataset_summary or {}, ensure_ascii=False, default=str)[:1800] +
+        "\nRespond with exactly the typed repair schema."
+    )
+    last_error = ""
+    for attempt in range(2):
+        candidate = await structured_decision(
+            prompt + last_error, REPAIR_SCHEMA, cfg, max_tokens=6500)
+        try:
+            return apply_section_repair(ir, candidate, dataset_summary)
+        except CognitiveDecisionError as exc:
+            last_error = ("\nLast proposed edit was rejected: " +
+                          str(exc)[:140] + ". Return a corrected repair.")
+    raise CognitiveDecisionError("Model exhausted targeted section-repair attempts")
