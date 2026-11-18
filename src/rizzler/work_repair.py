@@ -204,8 +204,14 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
     for iteration in range(max_revisions+1):
         progress("quality_check", "QA iteration "+str(iteration+1))
         try:
-            reports,defects=await _verify_bundle(
-                store,claim["owner"],checkpoint,context,payload,progress=progress)
+            if store is None:
+                # Preserve the legacy injected validator protocol for offline QA.
+                reports, defects = await _verify_bundle(
+                    store, claim["owner"], checkpoint, context, payload)
+            else:
+                reports, defects = await _verify_bundle(
+                    store, claim["owner"], checkpoint, context, payload,
+                    progress=progress)
         except Exception as exc:
             progress("quality_result", "Bundle validation exception "+type(exc).__name__)
             raise QualityValidationFailure("quality_bundle_validation_exception") from exc
