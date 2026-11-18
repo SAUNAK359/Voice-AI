@@ -94,7 +94,12 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
     skill=read_skill("research")[:4500]
     if feature_enabled("RIZZLER_RESEARCH_FRONTIER"):
         from .research_frontier import propose_frontier, investigation_prompt
-        tasks=await propose_frontier(objective, model=cfg.gemini_model, client=client)
+        try:
+            tasks=await propose_frontier(
+                objective,model=cfg.gemini_model,client=client)
+        except BaseException:
+            await client.aio.aclose()
+            raise
         requests=tuple((task["name"], investigation_prompt(task, objective))
                        for task in tasks)
     else:
