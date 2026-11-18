@@ -496,6 +496,32 @@ class WorkStore:
             c.execute("""UPDATE agent_steps SET status='completed',updated=?,finished=?,
                          result_json=?,result_sha256=?,qa_json=? WHERE job_id=? AND agent=?""",
                       (now,now,raw,hashlib.sha256(raw.encode()).hexdigest(),qa,jid,agent))
+            # Commit the public cognitive finding WITH the specialist
+            # checkpoint. A process crash cannot produce a completed agent
+            # that sibling workers never discover in the shared ledger.
+            public = {"result_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                      "quality_passed": True}
+            if isinstance(result.get("sources"), list):
+                public["source_refs"] = [
+                    u[:350] for u in result["sources"][:8] if isinstance(u,str)]
+            if isinstance(result.get("receipts"), list):
+                public["artifact_kinds"] = [
+                    item.get("kind") for item in result["receipts"][:12]
+                    if isinstance(item,dict)]
+            if isinstance(result.get("summary"), dict):
+                public["metrics"] = {
+                    "rows": result["summary"].get("rows"),
+                    "columns": result["summary"].get("columns")}
+            event_kind = ("verification" if agent == "quality" else
+                          "artifact" if "receipts" in result else "finding")
+            payload_json = json.dumps(public, sort_keys=True,
+                                      separators=(",", ":"), allow_nan=False)
+            c.execute(
+                """INSERT INTO cognitive_events(job_id,owner,agent,kind,
+                   payload_json,payload_sha256,at) VALUES(?,?,?,?,?,?,?)""",
+                (jid, self._active(c,jid,worker,fence)["owner"], agent,
+                 event_kind, payload_json,
+                 hashlib.sha256(payload_json.encode("utf-8")).hexdigest(), now))
             self._event(c,jid,"agent_completed",agent+" specialist completed")
 
     def agent_error(self, jid: str, worker: str, fence: int, agent: str,
