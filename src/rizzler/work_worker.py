@@ -1,6 +1,8 @@
 """Separate Work Agent worker process. Model text is not a substitute for sources."""
 from __future__ import annotations
 
+from .v23_flags import enabled as feature_enabled
+
 import argparse
 import asyncio
 import hashlib
@@ -25,7 +27,7 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=cfg.gemini_api_key)
-    if os.environ.get("RIZZLER_COGNITIVE_CONTENT", "0").lower() in ("1", "true", "yes"):
+    if feature_enabled("RIZZLER_COGNITIVE_CONTENT"):
         from .content_engine import develop_content
         async def generate(prompt: str, max_tokens: int) -> str:
             from .cognitive_provider import generate_with_recovery
@@ -43,8 +45,7 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
             result = await develop_content(
                 objective, data_summary, generate,
                 max_characters=min(max_chars, 42000), parallelism=3,
-                review=os.environ.get("RIZZLER_COGNITIVE_REVIEW", "0").lower()
-                in ("1", "true", "yes"))
+                review=feature_enabled("RIZZLER_COGNITIVE_REVIEW"))
             return result["text"]
         finally:
             await client.aio.aclose()
@@ -91,8 +92,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
     from google.genai import types
     client=genai.Client(api_key=cfg.gemini_api_key)
     skill=read_skill("research")[:4500]
-    if os.environ.get("RIZZLER_RESEARCH_FRONTIER","0").lower() in (
-            "1","true","yes"):
+    if feature_enabled("RIZZLER_RESEARCH_FRONTIER"):
         from .research_frontier import propose_frontier, investigation_prompt
         tasks=await propose_frontier(objective, model=cfg.gemini_model, client=client)
         requests=tuple((task["name"], investigation_prompt(task, objective))
@@ -146,7 +146,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
         # A real source-byte acquisition pass is separate from Google Search
         # attribution; inaccessible or script-only pages remain explicitly
         # unverified. Connector DNS resolution blocks private network targets.
-        if os.environ.get("RIZZLER_EVIDENCE_FETCH", "0").lower() in ("1", "true", "yes"):
+        if feature_enabled("RIZZLER_EVIDENCE_FETCH"):
             from .source_gateway import fetch_source
             throttle=asyncio.Semaphore(3)
             async def acquire(record):
@@ -204,7 +204,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 except Exception as exc:
                     audit["content_synthesis"]="failed_" + type(exc).__name__
         claims=[]
-        if os.environ.get("RIZZLER_CLAIM_VERIFY", "0").lower() in ("1", "true", "yes"):
+        if feature_enabled("RIZZLER_CLAIM_VERIFY"):
             from .evidence_graph import evidence_index, validate_claims, evidence_brief, claim_summary
             from .cognitive_json import decode_model_json
             spans=evidence_index(extracted)
