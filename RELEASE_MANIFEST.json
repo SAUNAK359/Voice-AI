@@ -29,8 +29,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "git_blob_sha1": "3416cb352c393c8de5013e26298fb53aad5bdcb0",
-      "bytes": 5310
+      "git_blob_sha1": "aaa6fcc89b0c6e3103d91e0c5248106a1305ad05",
+      "bytes": 5352
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -229,8 +229,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "git_blob_sha1": "0279970db0af0c3b681552ff719c051a77e93940",
-      "bytes": 6647
+      "git_blob_sha1": "321359d564c9c09a04804e0d90efe229f936c8ca",
+      "bytes": 6900
     },
     {
       "path": "deploy/searxng-settings.yml",
@@ -489,8 +489,8 @@
     },
     {
       "path": "MANIFEST.in",
-      "git_blob_sha1": "88361afa033dc7ba641acc90445cde28eab7e388",
-      "bytes": 48
+      "git_blob_sha1": "83d35cd3d686c6412a9f06acec77f411f18f0136",
+      "bytes": 55
     },
     {
       "path": "notebooks/Rizzler_V11_Unified_Native_Kaggle.ipynb",
@@ -509,8 +509,8 @@
     },
     {
       "path": "pyproject.toml",
-      "git_blob_sha1": "96a7d805a1e24baab6557e60040ea000395f9863",
-      "bytes": 1463
+      "git_blob_sha1": "54b1619a8bd40a99a92606da75a2b86b711d905b",
+      "bytes": 1522
     },
     {
       "path": "README.md",
@@ -1108,9 +1108,14 @@
       "bytes": 2775
     },
     {
+      "path": "src/rizzler/work_hace_exec.py",
+      "git_blob_sha1": "49c245840e02fdc2ae1e9580d34331c9198198ca",
+      "bytes": 10694
+    },
+    {
       "path": "src/rizzler/work_hace.py",
-      "git_blob_sha1": "45365be637d12084b87c449058702faa3efbabac",
-      "bytes": 8385
+      "git_blob_sha1": "2e48507d47f795249be9e10e8e6fd785d00b1405",
+      "bytes": 8387
     },
     {
       "path": "src/rizzler/work_ir.py",
@@ -1199,8 +1204,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "85ccb4b386e5aed2cb9f9daeb86d6039aef84268",
-      "bytes": 27695
+      "git_blob_sha1": "c799c23f19748dff8d7a366043789177b58eca43",
+      "bytes": 28888
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -1209,8 +1214,8 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "git_blob_sha1": "b514e91da7d6fc2e10c85a3e55d6b8fc22275b4e",
-      "bytes": 66109
+      "git_blob_sha1": "abe408459ed4d84f480fd7c697a63e56b209f0a1",
+      "bytes": 69545
     },
     {
       "path": "src/rizzler/work_structured_research.py",
@@ -1579,8 +1584,8 @@
     },
     {
       "path": "tests/test_v23_hace_fabric_memory.py",
-      "git_blob_sha1": "89ff8f62121da28f265a8d43c0341c23baeaeb91",
-      "bytes": 9546
+      "git_blob_sha1": "347b3870fcf4277d7337b0c96716f5d7f508079f",
+      "bytes": 12681
     },
     {
       "path": "tests/test_voice_core.cjs",
