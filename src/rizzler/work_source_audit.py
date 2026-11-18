@@ -59,7 +59,8 @@ async def audit_source_records(records: list[dict], *,
                         "attribution":"direct_public_https_fetch",
                         "content_fetched":True,
                         "claim_verified":False}
-            except (ValueError,RuntimeError,TimeoutError,OSError,asyncio.TimeoutError):
+            except (ValueError,RuntimeError,TimeoutError,OSError,
+                    ImportError,asyncio.TimeoutError):
                 return None
     results=await asyncio.gather(*(fetch(url) for url in urls))
     passages=[item for item in results if item is not None]
