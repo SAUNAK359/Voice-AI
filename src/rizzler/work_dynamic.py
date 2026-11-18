@@ -202,7 +202,10 @@ async def generate(payload: dict, settings, *, client=None) -> dict:
         # an entire recursive supervisor run, while retaining the same strict
         # dependency, evidence and artifact contracts. The model still selects
         # every specialist and dependency (never keyword-based routing).
-        capabilities=[{"name":name,"role":spec.role,"formats":list(spec.formats)}
+        from .work_skill_packages import load_package
+        capabilities=[{"name":name,"role":spec.role,
+                       "formats":list(spec.formats),
+                       "capabilities":list(load_package(name).capabilities)}
                       for name,spec in SPECS.items()]
         instruction=(
             "You are Rizzler's autonomous Work supervisor. Return ONE complete "
