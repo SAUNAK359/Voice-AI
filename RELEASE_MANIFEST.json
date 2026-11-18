@@ -4,8 +4,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 1091,
-      "sha256": "d1798c9874e16cb145bdecb13645c8e87ccb706e853452334ce994d674e48cee"
+      "bytes": 2069,
+      "sha256": "74500595b2a04b7dd95bb73d0f2111ed82f28f8516503c5a8cd4ed8e1d4f9152"
     },
     {
       "path": ".github/dependabot.yml",
@@ -133,6 +133,11 @@
       "sha256": "1ef7cc94cda3e1731e06e35fc00f3cffc28b331c1632edbcce8efd70cd35c060"
     },
     {
+      "path": "docs/V23_E2E_COMPLETENESS_AUDIT.md",
+      "bytes": 10545,
+      "sha256": "f77b0265c6956d36dbddecf3be6e176d9c8f44edb5614a1f4fb5184ec63765b7"
+    },
+    {
       "path": "docs/voice-pipeline.md",
       "bytes": 6313,
       "sha256": "d09f1bbf3fee24559faf3a73ada4f62627e3ad4263e00413315a7097469ff291"
@@ -189,8 +194,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 12364,
-      "sha256": "745d50cdaf8c95979e36e1a914cedb9ec17b2a50563ce86c0f734c0647eaa2f6"
+      "bytes": 12827,
+      "sha256": "425f7d30d1b4a90c819f7e5a10aa5590ab1122bdc43ad9255f611be2949d0a85"
     },
     {
       "path": "schemas/work-handoff-example.json",
@@ -253,19 +258,29 @@
       "sha256": "221be19b3a0de4341df75e9393bb73a0cc53e372e39526728ddc126573e824cf"
     },
     {
+      "path": "src/rizzler/adaptive_experts.py",
+      "bytes": 8292,
+      "sha256": "9298658bc19c107ea635abdf0249c4ccda6550c7364ec0bcd905de92d674c855"
+    },
+    {
       "path": "src/rizzler/artifacts.py",
       "bytes": 2417,
       "sha256": "dae3350a0cc47beb3fce019de5ce22d9f776834628f014ab8955651dfbd129b9"
     },
     {
       "path": "src/rizzler/cognitive_director.py",
-      "sha256": "31de2fc986cef18e41c11e60e5465c37cc87eec6b29cbfbb764d29634f31caaf",
-      "bytes": 4499
+      "sha256": "6cc3c5ae11b7c610431a56bcdf76c7bac69365092b0000724f95f08ab35a8217",
+      "bytes": 4521
     },
     {
       "path": "src/rizzler/cognitive_json.py",
       "bytes": 835,
       "sha256": "083fc674deabcf25bd1c8ba12022d3d39a15eec586bb6adaa82f27e8e7b54b4b"
+    },
+    {
+      "path": "src/rizzler/cognitive_provider.py",
+      "bytes": 6654,
+      "sha256": "d71450d58966a05ca5a7721b5d02b3bcd682bc1b00fe1797fa747b95fcc7265d"
     },
     {
       "path": "src/rizzler/content_engine.py",
@@ -278,6 +293,11 @@
       "sha256": "4781d97769ca8ac63557afb7bc8040f2316fade65cdae13928c05bcfb769f485"
     },
     {
+      "path": "src/rizzler/evidence_graph.py",
+      "bytes": 5662,
+      "sha256": "7eeb2c920dc17c5515c9aa4ffb9613576c13157c1302d42f0951fdd72939483d"
+    },
+    {
       "path": "src/rizzler/hace_runtime.py",
       "bytes": 5532,
       "sha256": "0a4ebdb1a7f85d67222aaccce48ac00b5df7b4fea02e314a1715fdbdfd3b1c44"
@@ -288,24 +308,34 @@
       "sha256": "7433eaba3ddc9abc20ca5d6e723e14b6f6c1c39c20c008514e65f3a36fcce507"
     },
     {
+      "path": "src/rizzler/research_frontier.py",
+      "bytes": 4507,
+      "sha256": "74252a04d91acc35ee2d80073e0ae5b1b54322057bc42d5ba6add818ab0ddbff"
+    },
+    {
       "path": "src/rizzler/security.py",
       "bytes": 1776,
       "sha256": "555ef82e9047c9a8c57c3bc22b89386b1a2684275bdc5c1a0ac5764f9ef164ba"
     },
     {
       "path": "src/rizzler/source_gateway.py",
-      "sha256": "a2d89e7cd598323d6eaec586378a75aaed4c337701d4734337f110b7585a007f",
-      "bytes": 6043
+      "sha256": "35e1ac05fa7abd08af26279bb71c0b392bef13fdf8c050cf69025f75961aa334",
+      "bytes": 6122
     },
     {
       "path": "src/rizzler/source_normalizer.py",
-      "sha256": "8e9ff9a2d8833270e55e204a134a02e20889ce042cb21cd5bb8250a575e399f2",
-      "bytes": 13043
+      "sha256": "85f24b44957dd6ed9a41e4f74494b56f5da529201352082cbf9b7358f3a402cb",
+      "bytes": 15077
     },
     {
       "path": "src/rizzler/state.py",
       "bytes": 2230,
       "sha256": "ff5872f6413ecfa6a3ec0e438ef529f2d566dfef0c399209ec5b4572296cdb24"
+    },
+    {
+      "path": "src/rizzler/v23_flags.py",
+      "bytes": 1252,
+      "sha256": "52716162d0d4656cc67453791dfc25200e0ed56db5ae0c8e5453f9b5ea6998b4"
     },
     {
       "path": "src/rizzler/work_api.py",
