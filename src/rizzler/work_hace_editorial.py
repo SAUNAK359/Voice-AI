@@ -7,6 +7,8 @@ produce detailed content. The quality gate remains independent and mandatory.
 from __future__ import annotations
 
 import json
+import hashlib
+from pathlib import Path
 import re
 from .work_hace import validate_program, execute_program
 from .work_skill_packages import load_package
@@ -38,6 +40,7 @@ async def synthesize_hierarchy(
     objective: str, blueprint: dict, evidence: str,
     sources: list[str], summary: dict | None, cfg, *,
     on_event=None,
+    checkpoint_dir: Path | None = None,
 ) -> str:
     from .work_editorial import validate as validate_blueprint
     from .work_gemini_gateway import gemini_content
@@ -90,8 +93,15 @@ async def synthesize_hierarchy(
         if re.search(r"(?im)^\s*slide\s*\d*\s*:",content):
             raise ValueError("Presentation production metadata leaked into report")
         return {"index":args["index"],"heading":args["heading"],"body":content}
-    output=await execute_program(tasks,{"section_synthesis":generate},
-                                 max_parallel=3,on_event=on_event)
+    input_digest=hashlib.sha256(json.dumps({
+        "objective":objective,"evidence":evidence,"sources":sources,
+        "summary":summary,"model":getattr(cfg,"gemini_model","unknown"),
+        "blueprint":p,
+    },sort_keys=True,ensure_ascii=False,default=str).encode()).hexdigest()
+    output=await execute_program(
+        tasks,{"section_synthesis":generate},max_parallel=3,
+        on_event=on_event,checkpoint_dir=checkpoint_dir,
+        checkpoint_namespace=input_digest if checkpoint_dir is not None else "")
     sections=[output["section_"+str(i)] for i in range(len(tasks))]
     title=p["core_question"].strip().replace("\n"," ")[:120]
     assembled="# "+title+"\n\n"+ "\n\n".join(
