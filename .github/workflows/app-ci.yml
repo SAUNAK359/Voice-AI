@@ -48,14 +48,14 @@ jobs:
         run: python scripts/qualify_mvp.py --offline --output /tmp/rizzler-mvp-acceptance
       - name: Validate the canonical native Kaggle notebook
         run: python scripts/validate_native_notebook.py
-      - name: Verify wheel bundles all six specialist skill playbooks
+      - name: Verify wheel bundles all eight specialist skills and checked manifests
         run: |
           python -m pip wheel . --no-deps -w /tmp/rizzler-wheels
           python - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile
           wheel = next(Path("/tmp/rizzler-wheels").glob("*.whl"))
-          expected = {"research", "sql_analytics", "powerpoint", "word", "excel", "pdf_visual"}
+          expected = {"research", "sql_analytics", "powerpoint", "word", "excel", "pdf_visual", "quality", "orchestrator"}
           with ZipFile(wheel) as z:
               found = {p.split("/")[-2] for p in z.namelist()
                        if p.startswith("rizzler/agent_skills/") and p.endswith("/SKILL.md")}
