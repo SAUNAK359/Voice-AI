@@ -19,6 +19,16 @@ from pydantic import BaseModel, Field
 _ALLOWED = frozenset(("research","sql_analytics","orchestrator","powerpoint",
                        "word","excel","pdf_visual","quality"))
 _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.,:;/()'-]{19,349}$")
+_PRIVATE = re.compile(
+    r"(?:[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}|"
+    r"https?://\\S+|"
+    r"AIza[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|"
+    r"\\b(?:password|api[_ -]?key|bearer|private[_ -]?token)\\b|"
+    r"\\b\\d{8,}\\b)",re.IGNORECASE)
+
+def _issue_safe(text: str) -> bool:
+    return bool(_SAFE.fullmatch(text) and not _PRIVATE.search(text))
+
 
 
 class OperationalLesson(BaseModel):
@@ -67,7 +77,8 @@ def _safe_lesson(raw: OperationalLesson, defects: list[dict]) -> str | None:
     issues=[str(x.get("problem",""))[:250] for x in defects if isinstance(x,dict)]
     if not any(raw.source_issue.casefold() in issue.casefold() for issue in issues):
         return None
-    if not _SAFE.fullmatch(raw.action) or not _SAFE.fullmatch(raw.why):
+    if (not _issue_safe(raw.action) or not _issue_safe(raw.why) or
+            _PRIVATE.search(raw.source_issue)):
         return None
     text=(f"[verified-work:{raw.specialist}] {raw.action}; "
           f"reason: {raw.why}")
@@ -94,8 +105,12 @@ async def consolidate_completed_job(store, owner: str, jid: str,
     episodes=store.quality_feedback(owner,jid)
     defects=[entry for episode in episodes
              for entry in episode.get("findings",[]) if isinstance(entry,dict)]
+    # QA descriptions can contain untrusted quoted user material. Exclude
+    # possible personal/secret data before calling an external memory model.
+    defects=[item for item in defects
+             if _issue_safe(str(item.get("problem","")))][:8]
     if not defects:
-        return {"status":"no_learning_signal","saved":0}
+        return {"status":"no_safe_learning_signal","saved":0}
     if cfg is None:
         from .work_dynamic import WorkModelConfig
         cfg=WorkModelConfig.from_env()
@@ -121,7 +136,10 @@ async def consolidate_completed_job(store, owner: str, jid: str,
     conversation=[{"role":"user",
                    "content":"Quality-assurance failure observations: "+str(safe_issues)[:3000]}]
     async with asyncio.timeout(min(45,float(cfg.request_timeout))):
-        proposals=await manager.ainvoke(conversation)
+        if hasattr(manager,"ainvoke"):
+            proposals=await manager.ainvoke(conversation)
+        else:
+            proposals=await manager(conversation)
     candidates=[]
     for entry in (proposals or [])[:8]:
         value=getattr(entry,"content",None)
