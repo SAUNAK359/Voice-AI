@@ -1,0 +1,8 @@
+[
+  "Extract all user requirements and explicitly forbidden statements for acceptance.",
+  "Inspect completed artifact receipts, evidence lineage and coverage without trusting producer claims.",
+  "Evaluate completeness, technical specificity, contradictions and unsupported factual assertions.",
+  "Inspect rendered pages, slides, formulas and citations independently of the producer.",
+  "Prioritize high-impact defects, request minimal targeted corrections and preserve validated content.",
+  "Revalidate every repaired unit and refuse publication when evidence or quality remains insufficient."
+]
