@@ -13,6 +13,10 @@ import re
 from .work_hace import validate_program, execute_program
 from .work_skill_packages import load_package
 
+class HACEStageError(ValueError):
+    """Explicit quality rejection of a hierarchical specialist section."""
+
+
 
 def evidence_for(section: dict, material: str, *, limit: int = 4800) -> str:
     """Fast lightweight passage ranking; never claim it verifies source facts."""
@@ -89,9 +93,9 @@ async def synthesize_hierarchy(
         result=await gemini_content(cfg,prompt,max_output_tokens=4600)
         content=(getattr(result,"text","") or "").strip()
         if not 120 <= len(content) <= 13000:
-            raise ValueError("Hierarchical editorial stage returned invalid depth")
+            raise HACEStageError("hace_section_insufficient_depth")
         if re.search(r"(?im)^\s*slide\s*\d*\s*:",content):
-            raise ValueError("Presentation production metadata leaked into report")
+            raise HACEStageError("hace_slide_metadata_leakage")
         return {"index":args["index"],"heading":args["heading"],"body":content}
     input_digest=hashlib.sha256(json.dumps({
         "objective":objective,"evidence":evidence,"sources":sources,
@@ -108,5 +112,5 @@ async def synthesize_hierarchy(
         "## "+section["heading"]+"\n\n"+section["body"]
         for section in sections)
     if not 500<=len(assembled)<=85000:
-        raise ValueError("Hierarchical synthesis final content invalid")
+        raise HACEStageError("hace_bundle_size_invalid")
     return assembled
