@@ -14,7 +14,7 @@ from rizzler.content_engine import develop_content, _valid_plan
 class ContentEngineTests(unittest.TestCase):
     def test_model_json_decoder_handles_fences_and_rejects_extra_prose(self):
         from rizzler.cognitive_json import decode_model_json
-        self.assertEqual(decode_model_json('```json\\n{"sections": []}\\n```'),
+        self.assertEqual(decode_model_json('```json\n{"sections": []}\n```'),
                          {"sections": []})
         with self.assertRaises(ValueError):
             decode_model_json('Explanation: {"sections": []}')
@@ -68,8 +68,6 @@ class ContentEngineTests(unittest.TestCase):
         scores = [0]
         repairs = [0]
         async def generate(prompt, tokens):
-            if "Return only JSON" in prompt:
-                return json.dumps(plan)
             if "independent expert content auditor" in prompt:
                 scores[0] += 1
                 return json.dumps({"sections": [{
@@ -79,6 +77,8 @@ class ContentEngineTests(unittest.TestCase):
                     "repair_guidance": "Add source-bound cross-period comparison"
                     if idx == 1 else ""}
                     for idx, item in enumerate(plan["sections"])]})
+            if "Return only JSON" in prompt:
+                return json.dumps(plan)
             if "Independent review found this specific defect" in prompt:
                 repairs[0] += 1
             return ("A complete, source-aware expert section explains methods, "
