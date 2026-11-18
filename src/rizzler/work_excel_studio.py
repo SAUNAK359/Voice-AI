@@ -144,7 +144,9 @@ def _formula(operation: str, category_col: str, value_col: str,
     if operation == "mean":
         return f"=AVERAGEIF({categories},A{row},{rng})"
     if operation == "count":
-        return f"=COUNTIF({categories},A{row})"
+        # Count only rows with an actual numeric observation, not missing
+        # measure cells that happen to share the same category.
+        return f'=COUNTIFS({categories},A{row},{rng},"<>")'
     raise ValueError("Unknown verified workbook operation")
 
 
