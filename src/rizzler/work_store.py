@@ -4,6 +4,8 @@ Exactly-once *commit* is enforced; external provider calls can be re-executed
 after process crashes. The DB and files MUST live on a persistent host volume.
 """
 from __future__ import annotations
+
+from .v23_flags import enabled as feature_enabled
 import hashlib
 import json
 import re
@@ -135,8 +137,7 @@ class WorkStore:
         # Snapshot runtime policy into the immutable job envelope; a restart
         # or feature flag change must not silently alter the approved DAG.
         from os import environ
-        if environ.get("RIZZLER_V23_UNIFIED_RESEARCH", "0").lower() in (
-                "1", "true", "yes"):
+        if feature_enabled("RIZZLER_V23_UNIFIED_RESEARCH"):
             payload["research_synthesis"] = True
         from .work_agents import plan
         planned = plan(payload)
