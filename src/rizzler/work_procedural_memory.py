@@ -157,6 +157,20 @@ def from_environment() -> ProceduralLedger | None:
     return ProceduralLedger(Path(root)/"procedural_v23",key)
 
 
+def delete_all_for_owner(owner: str) -> None:
+    """Delete historical procedural memory even if future learning was turned off."""
+    root=os.environ.get("RIZZLER_MEMORY_ROOT","").strip()
+    if not root:
+        work=os.environ.get("RIZZLER_WORK_ROOT","").strip()
+        if not work:return
+        root=str(Path(work)/"private_memory")
+    target=Path(root)/"procedural_v23"
+    if not target.exists():
+        return
+    key=os.environ.get("RIZZLER_MEMORY_KEY","")
+    ProceduralLedger(target,key).delete_owner(owner)
+
+
 def record_outcome(owner: str, specialist: str, category: str) -> None:
     ledger=from_environment()
     if ledger is not None:
