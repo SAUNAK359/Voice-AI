@@ -110,10 +110,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                         retries<1
                         and (spec.name!="quality" or category in (
                             "quality_review_failed", "provider_unavailable",
-                            "provider_rate_limited", "local_admission_busy"))
+                            "provider_rate_limited"))
                         and not isinstance(exc,(PermissionError,InterruptedError))
                         and category not in ("provider_budget_exhausted",
-                                             "permission_denied","worker_lease_stale")
+                                             "permission_denied","worker_lease_stale",
+                                             "local_admission_busy")
                         and os.environ.get("RIZZLER_V15_RECOVERY",
                             "1" if (os.environ.get("GEMINI_API_KEY") or
                                      os.environ.get("RIZZLER_WORK_LLM_BACKEND")=="sglang")
