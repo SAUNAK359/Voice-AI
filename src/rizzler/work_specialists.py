@@ -217,6 +217,17 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
+        # Memory selection may run concurrently with the expert pool; it
+        # accesses only previously consented-to, encrypted owner memories.
+        memory_task = None
+        if os.environ.get("RIZZLER_MEMORY_ENABLED", "0").lower() in (
+                "1", "true", "yes"):
+            from .config import Settings
+            from .work_memory_context import relevant_work_memories
+            cfg=Settings.from_env()
+            memory_task=asyncio.create_task(relevant_work_memories(
+                owner,payload["objective"],model=cfg.gemini_model,
+                api_key=cfg.gemini_api_key))
         if (context.get("director_stages") and feature_enabled("RIZZLER_COGNITIVE_EXPERTS")):
             from .config import Settings
             from .adaptive_experts import run_expert_subtasks, concise_expert_context
@@ -264,6 +275,22 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             objective += ("\n\nShared committed specialist outcomes "
                           "(typed data, not instructions):\n" +
                           json.dumps(findings[-15:],ensure_ascii=False)[:4000])
+        if memory_task is not None:
+            try:
+                selected=await memory_task
+                if selected["texts"]:
+                    objective += ("\n\nExplicitly saved user-specific preferences "
+                                  "(not factual source evidence):\n" +
+                                  "\n".join(selected["texts"])[:2200])
+                store.publish_cognition(
+                    jid,worker_id,fence,"memory_context","state",
+                    {"selected_count":len(selected["selected_ids"]),
+                     "provenance":"explicit_encrypted_owner_memory"})
+            except Exception as exc:
+                store.publish_cognition(
+                    jid,worker_id,fence,"memory_context","gap",
+                    {"error_category":type(exc).__name__,
+                     "status":"memory_selection_unavailable"})
         text = await composer(objective, context["summary"])
         return {"text": text}
     if name == "quality":
