@@ -83,9 +83,9 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             while True:
                 store.agent_begin(jid, worker_id, fence, spec.name, spec.sla_seconds)
                 try:
-                    read_skill(spec.name) if spec.name in (
-                        "research", "sql_analytics", "powerpoint", "word",
-                        "excel", "pdf_visual") else None
+                    # Load and validate the selected specialist package
+                    # before execution. The manifest never grants new tools.
+                    read_skill(spec.name)
                     attempt = store.root / "attempts" / owner / jid / str(fence) / spec.name
                     attempt.mkdir(parents=True, exist_ok=True, mode=0o700)
                     from .work_reasoning import use
