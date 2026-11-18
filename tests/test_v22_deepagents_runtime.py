@@ -86,5 +86,52 @@ class DelegationContracts(unittest.IsolatedAsyncioTestCase):
                 model=object(),factory=factory)
 
 
+@unittest.skipUnless(
+    importlib.util.find_spec("langchain_google_genai") is not None and
+    importlib.util.find_spec("langchain_core") is not None,
+    "Gemini LangChain adapter optional in dependency-free core CI")
+class FullDurationAdmissionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recursive_generation_lease_held_until_model_finishes(self):
+        import asyncio
+        import os
+        import tempfile
+        from unittest.mock import patch
+        from langchain_core.messages import HumanMessage
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from rizzler.work_deepagents_model import create_gated_model
+        from rizzler.work_gemini_gateway import GeminiWorkGate
+
+        with tempfile.TemporaryDirectory() as root, patch.dict(os.environ, {
+            "RIZZLER_WORK_ROOT":root,
+            "RIZZLER_WORK_PROVIDER_PARALLEL":"3",
+            "RIZZLER_WORK_PROVIDER_RPM":"100",
+            "RIZZLER_WORK_PROVIDER_TPM":"100000",
+            "RIZZLER_WORK_PROVIDER_GAP_SECONDS":"0",
+            "RIZZLER_WORK_PROVIDER_WAIT_SECONDS":"3"}):
+            cfg=SimpleNamespace(gemini_model="gemini-test",
+                                gemini_api_key="test-only-not-a-real-api-key",
+                                request_timeout=20)
+            model=create_gated_model(cfg)
+            started=asyncio.Event()
+            resume=asyncio.Event()
+            async def fake_generation(_self,*args,**kwargs):
+                started.set()
+                await resume.wait()
+                return {"synthetic":"accepted"}
+            with patch.object(ChatGoogleGenerativeAI,"_agenerate",
+                              new=fake_generation), \
+                 patch("rizzler.production_guard.reserve_provider_call"):
+                task=asyncio.create_task(model._agenerate([
+                    HumanMessage(content="Write one test answer")]))
+                try:
+                    await asyncio.wait_for(started.wait(),4)
+                    self.assertEqual(GeminiWorkGate().metrics()["active"],1)
+                finally:
+                    resume.set()
+                self.assertEqual(await asyncio.wait_for(task,4),
+                                 {"synthetic":"accepted"})
+                self.assertEqual(GeminiWorkGate().metrics()["active"],0)
+
+
 if __name__=="__main__":
     unittest.main()
