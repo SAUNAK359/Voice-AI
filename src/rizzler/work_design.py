@@ -18,12 +18,12 @@ GREY = "506278"
 def _display_text(value: str) -> str:
     """Remove presentation-only Markdown syntax; preserve original evidence bytes elsewhere."""
     output = str(value)
-    output = re.sub(r"(?m)^\\s{0,3}#{1,6}\\s+", "", output)
-    output = re.sub(r"\\*\\*([^*]+)\\*\\*", r"\\1", output)
-    output = re.sub(r"__([^_]+)__", r"\\1", output)
-    output = re.sub(r"`([^`]+)`", r"\\1", output)
-    output = re.sub(r"\\[([^]]+)\\]\\(https?://[^)]+\\)", r"\\1", output)
-    output = re.sub(r"(?m)^\\s*[-*]\\s+", "• ", output)
+    output = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", output)
+    output = re.sub(r"\*\*([^*]+)\*\*", r"\1", output)
+    output = re.sub(r"__([^_]+)__", r"\1", output)
+    output = re.sub(r"`([^`]+)`", r"\1", output)
+    output = re.sub(r"\[([^]]+)\]\(https?://[^)]+\)", r"\1", output)
+    output = re.sub(r"(?m)^\s*[-*]\s+", "• ", output)
     return output.strip()
 
 
