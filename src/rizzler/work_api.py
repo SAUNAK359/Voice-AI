@@ -167,6 +167,18 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
         try:return {"events":store.events(owner(req),jid,after)}
         except Missing:raise HTTPException(status_code=404,detail="Job not found")
 
+    @api.get("/jobs/{jid}/cognition")
+    def cognition(req: Request, jid: str, after: int = 0, limit: int = 100):
+        """Owner-scoped, integrity-checked public findings and specialist gaps."""
+        try:
+            items = store.cognitive_events(owner(req), jid, after=after, limit=limit)
+            return {"job_id": jid, "events": items,
+                    "next_cursor": items[-1]["seq"] if items else after}
+        except Missing:
+            raise HTTPException(status_code=404, detail="Job not found") from None
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid cognitive cursor or event integrity") from None
+
     @api.post("/jobs/{jid}/cancel")
     def cancel(req: Request,jid: str):
         who=owner(req);same_origin(req)
