@@ -195,8 +195,28 @@ async def compose_storyboard(objective: str, ir, table=None, *, client=None):
                         last_error+"). Correct your storyboard." if attempt else ""),
                 STORYBOARD_SCHEMA,cfg,client=client,max_tokens=10000,
                 temperature=0.2)
-            return validate_storyboard(result,list(ir.sources),
-                                       content=ir.content,table=table)
+            storyboard=validate_storyboard(result,list(ir.sources),
+                                          content=ir.content,table=table)
+            # Independent semantic storyboard review: content quality is not
+            # established by JSON validity or the final slide count alone.
+            import os
+            if os.environ.get("RIZZLER_V20_STORYBOARD_QA","1")=="1":
+                from .work_cognition import review_semantics
+                review=await review_semantics(
+                    objective,
+                    "Storyboard proposed for production:\n"+
+                    json.dumps(storyboard,ensure_ascii=False)[:14000]+
+                    "\nUnderlying evidence-aware report:\n"+ir.content[:6000],
+                    list(ir.sources),["pptx"],
+                    {"storyboard":{"checks":["schema_valid",
+                        "approved_source_lineage"],"metrics":{
+                        "slide_count":len(storyboard["slides"])}}},
+                    cfg,client=client)
+                if not review["passed"]:
+                    reasons="; ".join(x["problem"] for x in review["findings"][:3])
+                    raise CognitiveDecisionError(
+                        "Storyboard semantic review rejected: "+reasons[:155])
+            return storyboard
         except (CognitiveDecisionError,ValueError,TypeError) as exc:
             # The reviewer must receive a specific constraint, not just an
             # exception class. This is a bounded internal validation error.
