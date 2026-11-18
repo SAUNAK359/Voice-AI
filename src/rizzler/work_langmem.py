@@ -137,7 +137,7 @@ async def consolidate_completed_job(store, owner: str, jid: str,
                    "content":"Quality-assurance failure observations: "+str(safe_issues)[:3000]}]
     async with asyncio.timeout(min(45,float(cfg.request_timeout))):
         if hasattr(manager,"ainvoke"):
-            proposals=await manager.ainvoke(conversation)
+            proposals=await manager.ainvoke({"messages":conversation})
         else:
             proposals=await manager(conversation)
     candidates=[]
