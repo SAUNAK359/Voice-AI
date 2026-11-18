@@ -10,7 +10,10 @@ import asyncio
 from dataclasses import dataclass
 import hashlib
 import json
+import os
+from pathlib import Path
 import re
+import secrets
 from typing import Any, Awaitable, Callable
 
 from .work_skill_packages import SkillPackage
@@ -75,6 +78,8 @@ async def execute_program(
     handlers: dict[str,Callable[...,Awaitable[Any]]],
     *, max_parallel: int = 3,
     on_event: Callable[[str,str],None] | None = None,
+    checkpoint_dir: Path | None = None,
+    checkpoint_namespace: str = "",
 ) -> dict[str,Any]:
     """Execute independent tasks with structured outputs and bounded fanout.
 
@@ -87,6 +92,38 @@ async def execute_program(
     completed: dict[str,Any]={}
     pending={item.id:item for item in tasks}
     semaphore=asyncio.Semaphore(max_parallel)
+    folder=None
+    if checkpoint_dir is not None:
+        if not isinstance(checkpoint_namespace,str) or not re.fullmatch(
+                r"[0-9a-f]{64}",checkpoint_namespace):
+            raise HACEContractError("Checkpoint source fingerprint missing")
+        base=Path(checkpoint_dir)
+        if base.is_symlink():
+            raise HACEContractError("Checkpoint directory is a symlink")
+        base.mkdir(parents=True,exist_ok=True,mode=0o700)
+        namespace=hashlib.sha256(
+            (fingerprint(tasks)+":"+checkpoint_namespace).encode()).hexdigest()
+        folder=base/namespace
+        if folder.is_symlink():
+            raise HACEContractError("Checkpoint namespace is a symlink")
+        folder.mkdir(parents=True,exist_ok=True,mode=0o700)
+        for item in tasks:
+            path=folder/(item.id+".json")
+            if not path.exists():continue
+            if path.is_symlink() or not path.is_file() or path.stat().st_size>60000:
+                raise HACEContractError("Invalid existing microtask checkpoint")
+            try:
+                payload=json.loads(path.read_text("utf-8"))
+                if set(payload)!={"version","digest","value"} or payload["version"]!=1:
+                    raise ValueError("Malformed checkpoint")
+                canonical=json.dumps(payload["value"],sort_keys=True,
+                    separators=(",",":"),ensure_ascii=False,allow_nan=False)
+                if hashlib.sha256(canonical.encode()).hexdigest()!=payload["digest"]:
+                    raise ValueError("Checkpoint digest mismatch")
+                completed[item.id]=payload["value"]
+                pending.pop(item.id,None)
+            except (ValueError,TypeError,UnicodeDecodeError) as exc:
+                raise HACEContractError("Microtask checkpoint integrity failed") from exc
     while pending:
         ready=[item for item in tasks if item.id in pending and
                all(dep in completed for dep in item.depends_on)]
@@ -107,6 +144,23 @@ async def execute_program(
                 if len(packed.encode())>50000:
                     raise HACEContractError("Microtask result exceeds context budget")
                 if on_event: on_event("microtask_completed",item.id)
+                if folder is not None:
+                    canonical=json.dumps(outcome,sort_keys=True,
+                        separators=(",",":"),ensure_ascii=False,allow_nan=False)
+                    payload={"version":1,"digest":hashlib.sha256(
+                        canonical.encode()).hexdigest(),"value":outcome}
+                    blob=json.dumps(payload,ensure_ascii=False,
+                                    separators=(",",":"),allow_nan=False)
+                    temp=folder/(item.id+".tmp-"+secrets.token_hex(8))
+                    fd=os.open(temp,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+                    try:
+                        with os.fdopen(fd,"w",encoding="utf-8") as stream:
+                            stream.write(blob)
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                        os.replace(temp,folder/(item.id+".json"))
+                    finally:
+                        temp.unlink(missing_ok=True)
                 return outcome
         results=await asyncio.gather(*(invoke(item) for item in ready),
                                      return_exceptions=True)
