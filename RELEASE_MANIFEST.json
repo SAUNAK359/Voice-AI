@@ -1004,8 +1004,8 @@
     },
     {
       "path": "src/rizzler/work_deepagents_synthesis.py",
-      "git_blob_sha1": "29314ac97a520af7eb1ef301a2f17ea2530c6910",
-      "bytes": 7033
+      "git_blob_sha1": "362d84718e81a1c7b1f43342daab068300f48247",
+      "bytes": 7281
     },
     {
       "path": "src/rizzler/work_deepagents.py",
@@ -1129,8 +1129,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "7eec0234982e6eed473500b8bfd8e5d20b50160d",
-      "bytes": 25695
+      "git_blob_sha1": "003441f029997b41ecca33b67801e29f9d505711",
+      "bytes": 25833
     },
     {
       "path": "src/rizzler/work_sql.py",
