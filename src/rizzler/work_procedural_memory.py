@@ -99,6 +99,16 @@ class ProceduralLedger:
         return [row["text"][len(prefix):] for row in store.list(self.tag(owner))
                 if row["text"].startswith(prefix)][:limit]
 
+    def delete_owner(self, owner: str) -> None:
+        """Apply explicit delete-all to procedural signals and encrypted hints."""
+        from .memory import MemoryStore
+        tag=self.tag(owner)
+        with self._tx() as db:
+            db.execute("DELETE FROM signals WHERE owner_tag=?",(tag,))
+            db.execute("DELETE FROM reflections WHERE owner_tag=?",(tag,))
+        store=MemoryStore(self.hints_root,self.secret,limit=40,ttl_days=30)
+        store.delete(tag)
+
     def due(self) -> dict | None:
         """One owner-specific aggregate ready for low-priority LangMem reflection."""
         with self._tx() as db:
