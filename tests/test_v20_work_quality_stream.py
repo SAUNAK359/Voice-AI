@@ -86,12 +86,11 @@ class DraftProgressTests(unittest.TestCase):
             self.assertEqual(response.content, data)
             self.assertEqual(response.headers["x-rizzler-artifact-status"],
                              "draft-unverified")
-        with TestClient(FastAPI()) as _:
-            pass
         with self.assertRaises(Missing):
             self.store.drafts("another_owner", self.jid)
         artifact.write_bytes(b"corrupted")
         self.assertEqual(self.store.drafts(self.owner, self.jid), [])
+        self.assertEqual(self.store.draft_text(self.owner, self.jid)["status"], "pending")
 
     def test_quality_errors_have_distinct_categories(self):
         self.assertEqual(failure_code(QualityReviewFailure("review_failed")),
