@@ -30,6 +30,13 @@ class DraftContractTests(unittest.TestCase):
                 "The reported data was not independently inspected.")
         self.assertEqual(validate_draft(body),body)
 
+    def test_synthesis_failure_reports_actionable_diagnosis(self):
+        from rizzler.work_cognition import failure_code
+        from rizzler.work_decision_plane import diagnosis
+        error = DeepSynthesisError("no_valid_draft: not_submitted")
+        self.assertEqual(failure_code(error), "deep_synthesis_failed")
+        self.assertEqual(diagnosis(error), "deep_synthesis_no_draft")
+
     def test_synthesis_provider_error_is_deferred(self):
         self.assertEqual(transient_code(DeepSynthesisError("provider_unavailable")),
                          "provider_unavailable")
