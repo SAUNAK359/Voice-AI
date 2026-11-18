@@ -119,30 +119,37 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 group.create_task(bounded(spec), name="specialist-" + spec.name)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
-    await stage_group(("research", "sql_analytics"))
-    await stage_group(("orchestrator",))
-    # Include computed evidence in every rendered report, not merely in the
-    # persisted parent job summary after documents have already been saved.
-    if context["summary"]:
-        summary = context["summary"]
-        numeric = list(summary.get("numeric", {}).items())
-        lines = [f"Rows: {summary['rows']}; duplicate rows: {summary['duplicates']}.",
-                 "Numerical field summaries (computed independently):"]
-        for name, stats in numeric[:10]:
-            lines.append(f"{name}: count {stats['count']}, mean {stats['mean']}, "
-                         f"min {stats['min']}, max {stats['max']}.")
-        if len(numeric) > 10:
-            lines.append(f"{len(numeric)-10} additional numeric fields omitted from this briefing.")
-        proof = " ".join(lines)
-        context["text"] = (context["text"] or "# Verified data analysis\n"
-                           "This report contains independently computed dataset statistics.") + (
-                           "\n\n## Verified dataset evidence\n" + proof)
-    context["artifact_ir"] = compile_ir(payload["objective"][:120],
-        context["text"] or "# Dataset analysis\nVerified dataset statistics",
-        context["sources"], context["summary"])
-    await stage_group(("powerpoint", "word", "excel"))
-    await stage_group(("pdf_visual",))
-    await stage_group(("quality",))
+    from .hace_runtime import topological_waves
+    renderers = frozenset(("powerpoint", "word", "excel", "pdf_visual"))
+
+    def prepare_artifact_ir():
+        # Include computed evidence in every rendered report, not merely in the
+        # persisted parent job summary after documents have already been saved.
+        if context["summary"]:
+            summary = context["summary"]
+            numeric = list(summary.get("numeric", {}).items())
+            lines = [f"Rows: {summary['rows']}; duplicate rows: {summary['duplicates']}.",
+                     "Numerical field summaries (computed independently):"]
+            for name, stats in numeric[:10]:
+                lines.append(f"{name}: count {stats['count']}, mean {stats['mean']}, "
+                             f"min {stats['min']}, max {stats['max']}.")
+            if len(numeric) > 10:
+                lines.append(f"{len(numeric)-10} additional numeric fields omitted from this briefing.")
+            proof = " ".join(lines)
+            context["text"] = (context["text"] or "# Verified data analysis\n"
+                               "This report contains independently computed dataset statistics.") + (
+                               "\n\n## Verified dataset evidence\n" + proof)
+        context["artifact_ir"] = compile_ir(payload["objective"][:120],
+            context["text"] or "# Dataset analysis\nVerified dataset statistics",
+            context["sources"], context["summary"])
+
+    # Execute the authoritative persisted DAG rather than assuming an agent
+    # name implies a fixed stage order. Stages in a wave can run concurrently;
+    # only previously committed dependency results unlock the next wave.
+    for wave in topological_waves(graph, frozenset(planned)):
+        if "artifact_ir" not in context and (renderers.intersection(wave) or "quality" in wave):
+            prepare_artifact_ir()
+        await stage_group(wave)
 
     text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
     receipts = list(context["receipts"].values())
