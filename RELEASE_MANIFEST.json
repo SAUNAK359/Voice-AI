@@ -229,8 +229,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "git_blob_sha1": "faaa13af4724357f217b420add5ae72dfdf12693",
-      "bytes": 5629
+      "git_blob_sha1": "315320df29988cd3148b95120b0baba7167e789d",
+      "bytes": 6075
     },
     {
       "path": "deploy/searxng-settings.yml",
@@ -1504,8 +1504,8 @@
     },
     {
       "path": "tests/test_v22_deepagents_runtime.py",
-      "git_blob_sha1": "54fc09be866729ad82548f339ebc7d79d0b46911",
-      "bytes": 4284
+      "git_blob_sha1": "3e451e08dfe4ebcfc70105dac9f20b50c002cde6",
+      "bytes": 6603
     },
     {
       "path": "tests/test_voice_core.cjs",
