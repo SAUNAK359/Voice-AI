@@ -177,6 +177,8 @@ def normalize_source(data: bytes, mime_type: str, *, source_id: str,
                 if body.strip():
                     blocks.append({"type": "text", "text": body[:MAX_BLOCK_CHARS],
                                    "location": {"page": page_num + 1}})
+                    if len(body) > MAX_BLOCK_CHARS:
+                        warnings.append("page_text_truncated:" + str(page_num + 1))
                 else:
                     warnings.append("page_without_extractable_text:" + str(page_num + 1))
                 # Table extraction is bounded and isolated per page; malformed
@@ -252,11 +254,13 @@ def normalize_source(data: bytes, mime_type: str, *, source_id: str,
             if len(workbook.sheetnames) > 30:
                 raise ValueError("Workbook has too many sheets")
             for sheet in workbook:
-                if sheet.max_column > 50 or sheet.max_row > MAX_TABLE_ROWS:
+                row_limit = sheet.max_row or MAX_TABLE_ROWS
+                col_limit = sheet.max_column or 50
+                if row_limit > MAX_TABLE_ROWS or col_limit > 50:
                     warnings.append("sheet_truncated:" + sheet.title[:80])
                 rows = []
-                for row in sheet.iter_rows(min_row=1, max_row=min(sheet.max_row,MAX_TABLE_ROWS),
-                                           max_col=min(sheet.max_column,50), values_only=True):
+                for row in sheet.iter_rows(min_row=1, max_row=min(row_limit, MAX_TABLE_ROWS),
+                                           max_col=min(col_limit, 50), values_only=True):
                     rows.append([_clean(v if v is not None else "", 1000) for v in row])
                 if rows:
                     tables.append({"rows": rows, "location": {"sheet": sheet.title[:80]}})
