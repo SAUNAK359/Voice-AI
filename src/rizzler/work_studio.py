@@ -104,17 +104,15 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
     )
     try:
         for attempt in range(2):
-            from .production_guard import reserve_provider_call
-            reserve_provider_call("work")
-            async with asyncio.timeout(85):
-                response = await client.aio.models.generate_content(
-                    model=model,
-                    contents=prompt + ("\nPrevious JSON failed schema/coverage. "
-                                      "Correct it while preserving source IDs."
-                                      if attempt else ""),
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        max_output_tokens=7500, temperature=0.25))
+            from .cognitive_provider import generate_with_recovery
+            response = await generate_with_recovery(
+                client, model=model, role="work", timeout=85,
+                contents=prompt + ("\nPrevious JSON failed schema/coverage. "
+                                  "Correct it while preserving source IDs."
+                                  if attempt else ""),
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    max_output_tokens=7500, temperature=0.25))
             try:
                 return validate_storyboard(
                     decode_model_json(getattr(response,"text","") or "", max_bytes=55000),
