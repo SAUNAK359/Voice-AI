@@ -22,7 +22,9 @@ MAX_SLIDES = 36
 def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
                         sources: tuple[str, ...]) -> dict:
     """Reject hallucinated citations, omitted sections or empty slide content."""
-    if not isinstance(document, dict) or set(document) != {"schema_version", "slides"}:
+    if not isinstance(document, dict) or not {
+            "schema_version", "slides"}.issubset(document) or (
+            set(document) - {"schema_version", "slides", "sections_covered"}):
         raise ValueError("Invalid presentation blueprint envelope")
     if document["schema_version"] != 1 or not isinstance(document["slides"], list):
         raise ValueError("Unsupported presentation blueprint")
@@ -59,6 +61,8 @@ def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
                        "section_ids":section_ids, "source_urls":list(dict.fromkeys(citations))})
     if used != set(range(len(sections))):
         raise ValueError("Presentation omits required content coverage")
+    if "sections_covered" in document and document["sections_covered"] != sorted(used):
+        raise ValueError("Presentation section coverage checksum disagrees")
     return {"schema_version":1,"slides":output,
             "sections_covered":sorted(used)}
 
