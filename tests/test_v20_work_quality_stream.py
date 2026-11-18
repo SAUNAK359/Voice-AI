@@ -144,5 +144,39 @@ class EditorialBlueprintTests(unittest.IsolatedAsyncioTestCase):
             validate(bad)
 
 
+class StoryboardAcceptanceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_semantic_review_rejects_shallow_storyboard(self):
+        from unittest.mock import AsyncMock
+        from rizzler.work_ir import compile_ir
+        from rizzler.work_presentation import compose_storyboard
+        from rizzler.work_cognition import CognitiveDecisionError
+        def slide(title, layout):
+            return {"title": title, "layout": layout,
+                    "headline": "Meaningful headline for stakeholders",
+                    "points": ["Grounded specific mechanism and implications"],
+                    "secondary": [], "metrics": [], "citations": [],
+                    "notes": "Explain technical details and limitations",
+                    "chart_x": "", "chart_y": ""}
+        story = {"title": "Architecture briefing", "slides": [
+            slide("Situation", "cover"), slide("Mechanisms", "bullets"),
+            slide("Next actions", "closing")]}
+        ir = compile_ir("Architecture briefing",
+                        "# Current situation\nSubstantial technical analysis and concrete evidence.",
+                        [])
+        negative = {"passed": False,
+                    "findings": [{"kind": "depth",
+                                  "problem": "Missing concrete system alternatives and failure modes"}],
+                    "summary": "The proposed briefing lacks requested engineering depth."}
+        with patch.dict(os.environ, {"RIZZLER_V20_STORYBOARD_QA": "1"}), \
+             patch("rizzler.work_presentation.structured_decision",
+                   new=AsyncMock(return_value=story)) as plan, \
+             patch("rizzler.work_cognition.review_semantics",
+                   new=AsyncMock(return_value=negative)) as review:
+            with self.assertRaises(CognitiveDecisionError):
+                await compose_storyboard("Create an engineering architecture review", ir)
+            self.assertEqual(plan.await_count, 3)
+            self.assertEqual(review.await_count, 3)
+
+
 if __name__ == "__main__":
     unittest.main()
