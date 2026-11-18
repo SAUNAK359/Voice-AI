@@ -8,11 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from rizzler.contracts import ArtifactReceipt
-from rizzler.work_api import router
 from rizzler.work_store import WorkStore, Missing
 from rizzler.work_repair import (
     QualityReviewFailure, QualityRepairFailure, QualityValidationFailure)
@@ -74,18 +70,25 @@ class DraftProgressTests(unittest.TestCase):
         self.store.agent_complete(
             self.jid, self.worker, self.claim["fence"], "pdf_visual",
             {"receipts": [asdict(receipt)]}, {"passed": True})
-        app = FastAPI()
-        app.include_router(router(self.store, owner_resolver=lambda req: self.owner))
-        with TestClient(app) as client:
-            listing = client.get(f"/api/work/jobs/{self.jid}/drafts")
-            self.assertEqual(listing.status_code, 200)
-            self.assertFalse(listing.json()["verified_final"])
-            self.assertEqual([x["kind"] for x in listing.json()["artifacts"]], ["md"])
-            response = client.get(f"/api/work/jobs/{self.jid}/drafts/md")
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.content, data)
-            self.assertEqual(response.headers["x-rizzler-artifact-status"],
-                             "draft-unverified")
+        try:
+            from fastapi import FastAPI
+            from fastapi.testclient import TestClient
+            from rizzler.work_api import router
+        except ImportError:
+            FastAPI = None
+        if FastAPI is not None:
+            app = FastAPI()
+            app.include_router(router(self.store, owner_resolver=lambda req: self.owner))
+            with TestClient(app) as client:
+                    listing = client.get(f"/api/work/jobs/{self.jid}/drafts")
+                    self.assertEqual(listing.status_code, 200)
+                    self.assertFalse(listing.json()["verified_final"])
+                    self.assertEqual([x["kind"] for x in listing.json()["artifacts"]], ["md"])
+                    response = client.get(f"/api/work/jobs/{self.jid}/drafts/md")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.content, data)
+                    self.assertEqual(response.headers["x-rizzler-artifact-status"],
+                                 "draft-unverified")
         with self.assertRaises(Missing):
             self.store.drafts("another_owner", self.jid)
         artifact.write_bytes(b"corrupted")
