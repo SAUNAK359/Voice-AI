@@ -11,6 +11,8 @@ import json
 import re
 from typing import Awaitable, Callable
 
+from .cognitive_json import decode_model_json
+
 MAX_SECTIONS = 12
 Generate = Callable[[str, int], Awaitable[str]]
 
@@ -81,7 +83,19 @@ async def develop_content(objective: str, dataset: dict | None,
         "Research that has not been independently checked is unverified. "
         "\nTask:\n" + objective[:5500] +
         "\nVerified dataset measurements:\n" + evidence)
-    plan = _valid_plan(json.loads(await generate(planner_request, 2400)))
+    # One semantic correction is permitted for malformed model planning.
+    # The correction cannot broaden tools or alter the caller's authority.
+    for attempt in range(2):
+        raw_plan = await generate(
+            planner_request + ("\nThe previous answer failed JSON/schema validation. "
+                               "Return only the required object." if attempt else ""),
+            2400)
+        try:
+            plan = _valid_plan(decode_model_json(raw_plan))
+            break
+        except ValueError:
+            if attempt:
+                raise
     if sum(item["target_words"] for item in plan) > max_characters // 5:
         raise ValueError("Section plan exceeds the permitted report size")
     semaphore = asyncio.Semaphore(parallelism)
@@ -146,7 +160,7 @@ async def develop_content(objective: str, dataset: dict | None,
                 "\nApproved plan: " + json.dumps(plan, ensure_ascii=False)[:6000] +
                 "\nDeveloped sections:\n" + article[:30000])
             raw = await generate(request, 2200)
-            findings = json.loads(raw)
+            findings = decode_model_json(raw)
             if not isinstance(findings, dict) or set(findings) != {"sections"} or (
                     not isinstance(findings["sections"], list) or
                     len(findings["sections"]) != len(plan)):
