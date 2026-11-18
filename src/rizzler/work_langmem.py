@@ -20,11 +20,11 @@ _ALLOWED = frozenset(("research","sql_analytics","orchestrator","powerpoint",
                        "word","excel","pdf_visual","quality"))
 _SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.,:;/()'-]{19,349}$")
 _PRIVATE = re.compile(
-    r"(?:[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}|"
-    r"https?://\\S+|"
+    r"(?:[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|"
+    r"https?://\S+|"
     r"AIza[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{16,}|"
-    r"\\b(?:password|api[_ -]?key|bearer|private[_ -]?token)\\b|"
-    r"\\b\\d{8,}\\b)",re.IGNORECASE)
+    r"\b(?:password|api[_ -]?key|bearer|private[_ -]?token)\b|"
+    r"\b\d{8,}\b)", re.IGNORECASE)
 
 def _issue_safe(text: str) -> bool:
     return bool(_SAFE.fullmatch(text) and not _PRIVATE.search(text))
