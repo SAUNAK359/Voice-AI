@@ -38,7 +38,7 @@ def validate_workbook_plan(document: dict, table: tuple[list[str],list[list[str]
             ("title","category","measure","aggregation","rationale"))
         if (not isinstance(title,str) or not 8 <= len(title.strip()) <= 90 or
             not isinstance(rationale,str) or not 20 <= len(rationale.strip()) <= 400 or
-            not isinstance(category,str) or category not in headers or
+            not (category is None or isinstance(category,str) and category in headers) or
             not isinstance(measure,str) or measure not in numeric or
             operation not in AGGREGATES or category == measure):
             raise ValueError("Invalid category, metric or statistical operation")
@@ -46,7 +46,7 @@ def validate_workbook_plan(document: dict, table: tuple[list[str],list[list[str]
         if key in seen:
             raise ValueError("Duplicate workbook analysis")
         seen.add(key)
-        unique={r[headers.index(category)] for r in rows}
+        unique={r[headers.index(category)] for r in rows} if category else {"All observations"}
         if not 1 <= len(unique) <= 50:
             raise ValueError("Category cardinality outside useful chart bounds")
         result.append({"title":title.strip(),"category":category,"measure":measure,
@@ -73,8 +73,9 @@ async def create_workbook_plan(objective: str, table, *, model: str,
         "You are an expert data analyst designing an editable Excel workbook "
         "from actual user-supplied data. Select one to six analytical questions "
         "relevant to the specific objective and original table. For each, "
-        "choose a categorical column, a numeric measure, and sum, mean or "
-        "count. Do not combine incompatible units or fabricate rows or values. "
+        "choose an available category (or null for an overall analysis), "
+        "a numeric measure, and sum, mean or count. Do not combine "
+        "incompatible units or fabricate rows or values. "
         "The backend will independently compute all results and controlled "
         "Excel formulas; never supply formulas or Python code. "
         "Return only JSON: {\\\"schema_version\\\":1,\\\"analyses\\\":["
@@ -120,24 +121,29 @@ def _studies(wb,plan):
         category,measure=a["category"],a["measure"]
         if category not in heads or measure not in heads:
             raise ValueError("Missing source column")
-        ci,mi=heads.index(category)+1,heads.index(measure)+1
+        ci=heads.index(category)+1 if category is not None else None
+        mi=heads.index(measure)+1
         groups={}
         for row in data.iter_rows(min_row=2,max_row=data.max_row,values_only=True):
-            key=str(row[ci-1] if row[ci-1] is not None else "")
+            key=(str(row[ci-1] if row[ci-1] is not None else "")
+                 if ci is not None else "All observations")
             value=row[mi-1]
             if value is None or value=="":
                 continue
             if type(value) not in (float,int) or not isfinite(value):
                 raise ValueError("Source workbook contains unsupported numeric cells")
             groups.setdefault(key,[]).append(float(value))
-        studies.append((index,a,groups,get_column_letter(ci),get_column_letter(mi),
-                        data.max_row))
+        studies.append((index,a,groups,get_column_letter(ci) if ci else None,
+                        get_column_letter(mi),data.max_row))
     return studies
 
 
 def _formula(operation: str, category_col: str, value_col: str,
              end: int, row: int) -> str:
     rng=f"Data!{value_col}$2:{value_col}${end}"
+    if category_col is None:
+        return {"sum": f"=SUM({rng})", "mean": f"=AVERAGE({rng})",
+                "count": f"=COUNT({rng})"}[operation]
     categories=f"Data!{category_col}$2:{category_col}${end}"
     if operation == "sum":
         return f"=SUMIF({categories},A{row},{rng})"
@@ -214,7 +220,7 @@ def inspect_workbook_plan(path: Path, plan: dict) -> dict:
                 raise ValueError("Workbook analysis title does not match contract")
             observed=set()
             for row in range(4,ws.max_row+1):
-                key=ws.cell(row,1).value
+                key=str(ws.cell(row,1).value or "")
                 if key not in groups or key in observed:
                     raise ValueError("Unknown or duplicate workbook category")
                 observed.add(key)
