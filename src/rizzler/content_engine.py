@@ -58,7 +58,7 @@ def _validate_section(section: dict, prose: str) -> str:
 
 async def develop_content(objective: str, dataset: dict | None,
                           generate: Generate, *, max_characters: int = 42000,
-                          parallelism: int = 3) -> dict:
+                          parallelism: int = 3, review: bool = False) -> dict:
     """Use LLM for domain decomposition and expert-grade draft construction.
 
     `generate(prompt, max_output_tokens)` is a provider adapter that must
@@ -82,9 +82,11 @@ async def develop_content(objective: str, dataset: dict | None,
         "\nTask:\n" + objective[:5500] +
         "\nVerified dataset measurements:\n" + evidence)
     plan = _valid_plan(json.loads(await generate(planner_request, 2400)))
+    if sum(item["target_words"] for item in plan) > max_characters // 5:
+        raise ValueError("Section plan exceeds the permitted report size")
     semaphore = asyncio.Semaphore(parallelism)
 
-    async def write(index: int, section: dict) -> tuple[int, str]:
+    async def write(index: int, section: dict, repair_guidance: str = "") -> tuple[int, str]:
         async with semaphore:
             request = (
                 "You are an expert researcher, not a generic summarizer. "
@@ -103,6 +105,9 @@ async def develop_content(objective: str, dataset: dict | None,
                 "\nVerified dataset evidence:\n" + evidence +
                 "\nSection task:\n" + json.dumps(section, ensure_ascii=False) +
                 "\nProduce coherent paragraphs and explicit analytical detail."
+                + ("\nIndependent review found this specific defect; "
+                   "repair it without inventing facts: " + repair_guidance[:900]
+                   if repair_guidance else "")
             )
             answer = await generate(request, min(4200, section["target_words"] * 3))
             return index, _validate_section(section, answer)
@@ -110,14 +115,70 @@ async def develop_content(objective: str, dataset: dict | None,
     # Gathering ordered results preserves the intentional report narrative,
     # while all independent sections share the same verified evidence snapshot.
     written = await asyncio.gather(*(write(i, item) for i, item in enumerate(plan)))
-    written.sort()
-    pieces = ["# Executive report"]
-    for i, answer in written:
-        pieces.append("## " + plan[i]["heading"] + "\n" + answer)
-    article = "\n\n".join(pieces)
+    drafts = dict(written)
+    review_rounds = 0
+    def compile_article():
+        return "\n\n".join(
+            ["# Executive report"] + [
+                "## " + plan[i]["heading"] + "\n" + drafts[i]
+                for i in range(len(plan))])
+
+    if review:
+        for cycle in range(2):
+            review_rounds = cycle + 1
+            article = compile_article()
+            if len(article) > max_characters:
+                raise ValueError("Draft exceeds approved report budget")
+            request = (
+                "You are an independent expert content auditor. Return only "
+                "JSON of form {\\\"sections\\\":[{\\\"heading\\\":...,"
+                "\\\"passed\\\":true/false,\\\"defects\\\":[...],"
+                "\\\"repair_guidance\\\":...}]}. "
+                "Include exactly one entry per requested section. Check task "
+                "coverage, domain-specific technical detail, methodological "
+                "completeness, unsupported assumptions and contradictions, "
+                "repetition and connection to the user's actual objective. "
+                "Flag weak or invented material. Never pretend to verify a "
+                "claim whose source bytes were not supplied. Limit defects "
+                "to four per section and guidance to 500 characters. "
+                "\nTask: " + objective[:3500] +
+                "\nVerified measurements: " + evidence +
+                "\nApproved plan: " + json.dumps(plan, ensure_ascii=False)[:6000] +
+                "\nDeveloped sections:\n" + article[:30000])
+            raw = await generate(request, 2200)
+            findings = json.loads(raw)
+            if not isinstance(findings, dict) or set(findings) != {"sections"} or (
+                    not isinstance(findings["sections"], list) or
+                    len(findings["sections"]) != len(plan)):
+                raise ValueError("Independent review returned invalid coverage")
+            repairs = []
+            for index, verdict in enumerate(findings["sections"]):
+                if not isinstance(verdict, dict) or set(verdict) != {
+                        "heading", "passed", "defects", "repair_guidance"}:
+                    raise ValueError("Unknown independent review fields")
+                if verdict["heading"] != plan[index]["heading"] or type(verdict["passed"]) is not bool:
+                    raise ValueError("Independent review mismatched section contract")
+                defects = verdict["defects"]
+                guidance = verdict["repair_guidance"]
+                if not isinstance(defects, list) or len(defects) > 4 or any(
+                    not isinstance(item, str) or len(item) > 300 for item in defects
+                ) or not isinstance(guidance, str) or len(guidance) > 500:
+                    raise ValueError("Malformed independent review feedback")
+                if not verdict["passed"]:
+                    repairs.append((index, guidance or "; ".join(defects)))
+            if not repairs:
+                break
+            if cycle == 1:
+                raise ValueError("Independent expert review rejected unrepaired sections")
+            corrected = await asyncio.gather(*(
+                write(index, plan[index], note) for index, note in repairs))
+            drafts.update(corrected)
+
+    article = compile_article()
     if len(article) > max_characters:
         raise ValueError("Developed report exceeds authorized size")
     return {"text": article, "plan": plan,
             "section_count": len(plan),
             "word_count": len(article.split()),
-            "limitations": "Content depth checks do not establish factual verification"}
+            "review_rounds": review_rounds,
+            "limitations": "LLM review is not a substitute for external factual verification"}
