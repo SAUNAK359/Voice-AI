@@ -1119,8 +1119,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "dcc9b67876104960d898305e239e59736cf8ec54",
-      "bytes": 24726
+      "git_blob_sha1": "8ff31b7267d4aee279b13f9586436b80edd3aca4",
+      "bytes": 24803
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -1484,8 +1484,8 @@
     },
     {
       "path": "tests/test_v20_work_quality_stream.py",
-      "git_blob_sha1": "ac4bf07d8a8e53964c484cfd6b142eca8471811e",
-      "bytes": 13522
+      "git_blob_sha1": "3a1ace216513650f96c974ffecfe36572da53ed0",
+      "bytes": 13526
     },
     {
       "path": "tests/test_v21_work_admission.py",
