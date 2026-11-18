@@ -72,7 +72,7 @@ async def develop_content(objective: str, dataset: dict | None,
         "Design a substantive, non-redundant expert report based on the user's "
         "task. Return only JSON with a 'sections' array (3–12 entries). Each "
         "section has string heading, question, coverage and integer target_words "
-        "(150–900). Headings must describe distinct analytical subjects, not "
+        "(150–900). Each heading, question and coverage string must be at least 10 characters. Headings must describe distinct analytical subjects, not "
         "generic slides or repetitive summaries. Include methods, important "
         "calculations, alternative interpretations, boundaries and deliverable "
         "usefulness when relevant. Deepen the areas that materially affect the "
