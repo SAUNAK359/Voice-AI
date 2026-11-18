@@ -40,6 +40,10 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                "summary": None, "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
+        # Other specialists' committed findings are visible before this task
+        # starts. Only verified summaries are shared, never raw model traces.
+        latest = store.cognitive_events(owner, jid, limit=100)
+        context["cognitive_cursor"] = latest[-1]["seq"] if latest else 0
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
         if saved is not None:
             result = _valid_cached(spec, saved, checkpoint, formats)
@@ -61,6 +65,24 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     if not verify_checkpoint(checkpoint / receipt.name, receipt):
                         raise ValueError("Specialist artifact disappeared before checkpoint commit")
                 store.agent_complete(jid, worker_id, fence, spec.name, result, qa)
+                # Publish compact *results*, never an agent's private reasoning.
+                # Fenced writes let sibling specialists discover finished work
+                # across process restarts without duplicating full documents.
+                digest = __import__("hashlib").sha256(
+                    json.dumps(result, sort_keys=True, ensure_ascii=False,
+                               default=str).encode("utf-8")).hexdigest()
+                public = {"result_sha256": digest, "quality_passed": True,
+                          "source_refs": result.get("sources", [])[:24],
+                          "artifact_kinds": [v.kind for v in result_receipts(result)]}
+                if spec.name == "sql_analytics":
+                    stats = result.get("summary", {})
+                    public["metrics"] = {"rows": stats.get("rows"),
+                                         "columns": stats.get("columns")}
+                store.publish_cognition(jid, worker_id, fence, spec.name,
+                                       "verification" if spec.name == "quality"
+                                       else "artifact" if spec.name in (
+                                           "powerpoint", "word", "excel", "pdf_visual")
+                                       else "finding", public)
             except (asyncio.CancelledError, Exception):
                 # Preserve the first error category without exposing private model output.
                 try:
