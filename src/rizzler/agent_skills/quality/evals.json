@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "agent": "quality",
+  "checks": [
+    {
+      "id": "independent_review",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "defect_specificity",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "bounded_repair",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "no_unverified_publication",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "claim_grounding",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    },
+    {
+      "id": "audit_trace",
+      "required": true,
+      "verification": "independent_fixture_or_runtime_check"
+    }
+  ],
+  "release_thresholds": {
+    "critical_failure_rate": 0,
+    "regression_suite": "must_pass",
+    "p95_latency": "measure_not_assume"
+  },
+  "limitations": "These are evaluation contracts, not claims that production benchmarks have passed."
+}
