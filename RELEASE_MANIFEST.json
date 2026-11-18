@@ -438,14 +438,44 @@
       "bytes": 5995
     },
     {
+      "path": "tests/test_v23_e2e_cognition.py",
+      "bytes": 5835,
+      "sha256": "4498a906b2c699bd8ce17a5e847b9cb63f59d994a1a8f55c90fb644ff66d57e3"
+    },
+    {
+      "path": "tests/test_v23_editorial_studio.py",
+      "bytes": 3940,
+      "sha256": "99a330522767b274a6d6b1180916e7ec7f3b588eed883cc35d2dfeebdbf66c28"
+    },
+    {
+      "path": "tests/test_v23_excel_studio.py",
+      "bytes": 3411,
+      "sha256": "533dea50db6ad249dd636e7f43ea0a2ffef157defd37831f5a5ddba555ff3610"
+    },
+    {
+      "path": "tests/test_v23_flags.py",
+      "bytes": 1568,
+      "sha256": "453d97b7d8c8e33cacf343ea87db6fdb33feb2e0fa7d2dd4e53d32dbd5a2d6cf"
+    },
+    {
       "path": "tests/test_v23_hace_runtime.py",
       "bytes": 4118,
       "sha256": "f2b8a9cec8e212b2dc1d12526304129e58b88432a2fa21010fbbdde6725b66d2"
     },
     {
+      "path": "tests/test_v23_memory_context.py",
+      "bytes": 1396,
+      "sha256": "7a5d983687c80e6132e638e7d1ef7d13ac95d0dcbe8e24fa00b376e646d27341"
+    },
+    {
       "path": "tests/test_v23_source_gateway.py",
       "bytes": 2016,
       "sha256": "9a7853cd49a2e3a66d2523457f1b83c2503e98ffb89cd19f17a7e88e2d2f8b2f"
+    },
+    {
+      "path": "tests/test_v23_work_studio.py",
+      "bytes": 5744,
+      "sha256": "18b5096244d1fe1435bc09bf3502a74642a03eac503cb1854516335f80412b4a"
     },
     {
       "path": "web/app.js",
