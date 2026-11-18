@@ -370,7 +370,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     payload.get("evidence_scope","auto"),
                     list(payload.get("deliverables",[])),
                     WorkModelConfig.from_env())
-                store.commit_hace_plan(owner,jid,worker_id,fence,_asdict(depth))
+                proposed=json.loads(json.dumps(_asdict(depth),ensure_ascii=False))
+                store.commit_hace_plan(owner,jid,worker_id,fence,proposed)
             instructions += depth.instruction()
             store.record_progress(jid,worker_id,fence,"editorial_progress",
                                   "Domain work contract has "+str(len(depth.stages))+" stages")
