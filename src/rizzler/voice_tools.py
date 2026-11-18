@@ -166,6 +166,15 @@ class VoiceTools:
                     line="No recent memory-deletion request was found. Nothing was deleted."
                     return {"tool":intent,"text":line,"spoken":line,"verified":False}
                 count=self.memory.delete(owner)
+                try:
+                    from .work_procedural_memory import from_environment
+                    ledger=from_environment()
+                    if ledger is not None:
+                        ledger.delete_owner(owner)
+                except Exception:
+                    # Never claim all memories were cleared if the secondary
+                    # opted-in procedural namespace could not be cleared.
+                    raise RuntimeError("Procedural memory deletion unavailable")
                 line=f"Deleted {count} saved memories for this account."
             else:
                 uid=MEMORY_REMOVE.fullmatch(text).group(1)
