@@ -59,16 +59,14 @@ async def propose_frontier(objective: str, *, model: str, client,
         "\nTask: " + objective[:4000]
     )
     for attempt in range(2):
-        from .production_guard import reserve_provider_call
-        reserve_provider_call("research")
-        async with asyncio.timeout(timeout):
-            response=await client.aio.models.generate_content(
-                model=model,
-                contents=prompt + ("\nPrevious JSON violated the schema. Correct it."
-                                   if attempt else ""),
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.15,max_output_tokens=max_tokens))
+        from .cognitive_provider import generate_with_recovery
+        response=await generate_with_recovery(
+            client, model=model, role="research", timeout=min(85.0,timeout),
+            contents=prompt + ("\nPrevious JSON violated the schema. Correct it."
+                               if attempt else ""),
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.15,max_output_tokens=max_tokens))
         try:
             return validate_frontier(
                 decode_model_json(getattr(response,"text","") or ""))
