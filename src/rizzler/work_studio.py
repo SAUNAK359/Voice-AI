@@ -164,7 +164,7 @@ def render_storyboard(path: Path, blueprint: dict, *, title: str,
         box(slide,.75,1.19,11.8,1.02,plan["message"],size=19,ink=teal,bold=True)
         bullets=plan["bullets"];n=len(bullets);kind=plan["kind"]
         chart_added=False
-        if kind == "metrics" and table and table[1]:
+        if kind == "metrics" and n <= 3 and table and table[1]:
             # Native, editable visualization of independently computed source
             # values. Never create a chart from unsupported model numbers.
             from .work_skills import analyze
