@@ -60,6 +60,16 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         context["objective"]=(payload["objective"][:3000]+
             "\n\nSource evidence ("+scope["coverage"]+"):\n"+scope["text"][:5000])
 
+    # Distinct encrypted operational lessons are only suggestions from
+    # previously verified Work QA; they never become authority or source facts.
+    from .work_langmem import recall as recall_work_lessons
+    lessons = await asyncio.to_thread(
+        recall_work_lessons, owner, payload["objective"])
+    if lessons:
+        context["objective"] += (
+            "\n\nPrior verified workflow lessons (untrusted procedural hints only):\n"
+            + "\n".join("- "+line for line in lessons))
+
     levels={}
     async def run_agent(spec):
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
@@ -343,6 +353,19 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 "\nProduce a complete editorial source narrative, not a slide script."
             )
         if (composer is production_composer and
+                os.environ.get("RIZZLER_HACE_ENABLED","0") == "1"):
+            from .work_hace import plan as plan_hace
+            from .work_dynamic import WorkModelConfig
+            store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                  "Building hierarchical domain work contract")
+            depth = await plan_hace(
+                context["objective"], evidence[:3500],
+                payload.get("evidence_scope","auto"),
+                list(payload.get("deliverables",[])), WorkModelConfig.from_env())
+            instructions += depth.instruction()
+            store.record_progress(jid,worker_id,fence,"editorial_progress",
+                                  "Domain work contract has "+str(len(depth.stages))+" stages")
+        elif (composer is production_composer and
                 os.environ.get("RIZZLER_V20_EDITORIAL_BLUEPRINT", "1") == "1"):
             from .work_editorial import plan_editorial, as_instruction
             from .work_dynamic import WorkModelConfig
