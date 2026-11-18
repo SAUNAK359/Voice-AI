@@ -6,6 +6,8 @@ may repeat after crashes; committed artifacts are still fenced and verified.
 """
 from __future__ import annotations
 
+from .v23_flags import enabled as feature_enabled
+
 import asyncio
 from dataclasses import asdict
 import json
@@ -105,7 +107,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     # original approved graph still runs; no fabricated plan is substituted.
     context["director_brief"] = ""
     context["director_stages"] = None
-    if os.environ.get("RIZZLER_COGNITIVE_PLANNER", "0").lower() in ("1", "true", "yes"):
+    if feature_enabled("RIZZLER_COGNITIVE_PLANNER"):
         from .cognitive_director import concise_brief
         stored = store.cognitive_plan(owner, jid)
         if stored is not None:
@@ -215,8 +217,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
-        if (context.get("director_stages") and os.environ.get(
-                "RIZZLER_COGNITIVE_EXPERTS", "0").lower() in ("1","true","yes")):
+        if (context.get("director_stages") and feature_enabled("RIZZLER_COGNITIVE_EXPERTS")):
             from .config import Settings
             from .adaptive_experts import run_expert_subtasks, concise_expert_context
             cfg=Settings.from_env()
@@ -371,8 +372,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         editor_blueprint = None
         excel_blueprint = None
         document_ir = ir
-        if kind == "xlsx" and os.environ.get(
-                "RIZZLER_EXCEL_STUDIO", "0").lower() in ("1","true","yes"):
+        if kind == "xlsx" and feature_enabled("RIZZLER_EXCEL_STUDIO"):
             if table is None:
                 raise ValueError("Advanced Excel analysis requires uploaded source data")
             from .config import Settings
@@ -381,16 +381,14 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             excel_blueprint=await create_workbook_plan(
                 payload["objective"],table,model=cfg.gemini_model,
                 api_key=cfg.gemini_api_key)
-        if kind == "pptx" and os.environ.get(
-                "RIZZLER_COGNITIVE_STUDIO", "0").lower() in ("1", "true", "yes"):
+        if kind == "pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
             from .config import Settings
             from .work_studio import create_storyboard
             cfg = Settings.from_env()
             studio_blueprint = await create_storyboard(
                 payload["objective"], ir, model=cfg.gemini_model,
                 api_key=cfg.gemini_api_key)
-        if kind in ("docx","pdf") and os.environ.get(
-                "RIZZLER_REPORT_STUDIO", "0").lower() in ("1","true","yes"):
+        if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
             from .config import Settings
             from .work_editor import create_report_plan, report_text
             cfg=Settings.from_env()
