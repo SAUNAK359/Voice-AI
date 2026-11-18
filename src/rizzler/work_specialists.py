@@ -118,6 +118,36 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
 
     planned = {spec.name: spec for spec in plan(payload)}
     graph = store.job_plan(owner, jid)
+    # Opt-in cognitive planning enriches execution briefs but never changes
+    # the immutable authorized job DAG. Provider failure is recorded and the
+    # original approved graph still runs; no fabricated plan is substituted.
+    context["director_brief"] = ""
+    if os.environ.get("RIZZLER_COGNITIVE_PLANNER", "0").lower() in ("1", "true", "yes"):
+        prior = [event for event in store.cognitive_events(owner, jid, limit=200)
+                 if event["agent"] == "cognitive_director" and event["kind"] == "state"]
+        if prior:
+            context["director_brief"] = prior[-1]["payload"].get("brief", "")
+        else:
+            try:
+                from .config import Settings
+                from .cognitive_director import plan_specialist_briefs, concise_brief
+                settings = Settings.from_env()
+                planned_briefs = await plan_specialist_briefs(
+                    payload["objective"], graph, model=settings.gemini_model,
+                    api_key=settings.gemini_api_key)
+                context["director_brief"] = concise_brief(planned_briefs)
+                store.publish_cognition(jid, worker_id, fence,
+                                        "cognitive_director", "state",
+                                        {"brief": context["director_brief"],
+                                         "stage_count": len(planned_briefs["stages"]),
+                                         "planner_ms": planned_briefs["planner_ms"],
+                                         "status": "validated"})
+            except Exception as exc:
+                # No prompt, provider response or credentials enter the ledger.
+                store.publish_cognition(jid, worker_id, fence,
+                                        "cognitive_director", "gap",
+                                        {"category": type(exc).__name__,
+                                         "status": "approved_graph_fallback"})
     dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
     finished = set()
 
@@ -199,7 +229,12 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         source = store.upload(owner, uploads[0])
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
-        text = await composer(payload["objective"], context["summary"])
+        objective = payload["objective"]
+        if context.get("director_brief"):
+            objective += ("\n\nValidated specialist research and content "
+                          "objectives (advisory, not verified claims):\n" +
+                          context["director_brief"])
+        text = await composer(objective, context["summary"])
         return {"text": text}
     if name == "quality":
         receipts = context["receipts"]
