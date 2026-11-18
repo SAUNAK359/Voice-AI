@@ -178,5 +178,32 @@ class StoryboardAcceptanceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(review.await_count, 3)
 
 
+class GatewayDeadlineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_transport_timeout_has_independent_fallback(self):
+        from rizzler.work_gemini_gateway import GeminiWorkGate
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
+            "RIZZLER_WORK_ROOT": tmp,
+            "RIZZLER_WORK_PROVIDER_RPM": "6",
+            "RIZZLER_WORK_PROVIDER_TPM": "60000",
+            "RIZZLER_WORK_PROVIDER_GAP_SECONDS": "0",
+            "RIZZLER_WORK_PROVIDER_WAIT_SECONDS": "3"
+        }):
+            gate = GeminiWorkGate()
+            attempted = []
+            async def call(model):
+                attempted.append(model)
+                if model == "primary":
+                    raise TimeoutError("local request deadline")
+                return {"chosen": model}
+            with patch("rizzler.production_guard.reserve_provider_call"):
+                outcome = await gate.run(("primary", "independent_backup"),
+                                         call, prompt_characters=90,
+                                         max_output_tokens=250)
+            self.assertEqual(outcome["chosen"], "independent_backup")
+            self.assertEqual(attempted, ["primary", "independent_backup"])
+            metrics = {m["model"]: m for m in gate.metrics()["model_outcomes"]}
+            self.assertEqual(metrics["primary"]["transient_errors"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
