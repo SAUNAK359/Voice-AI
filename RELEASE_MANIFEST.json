@@ -229,8 +229,8 @@
     },
     {
       "path": "deploy/production.env.example",
-      "git_blob_sha1": "91d0ca04d54d95ba880d5afc50317489441628f2",
-      "bytes": 4955
+      "git_blob_sha1": "faaa13af4724357f217b420add5ae72dfdf12693",
+      "bytes": 5629
     },
     {
       "path": "deploy/searxng-settings.yml",
@@ -984,8 +984,8 @@
     },
     {
       "path": "src/rizzler/work_cognition.py",
-      "git_blob_sha1": "11e8ec07f4155c774f0b2b562ea7aff57a3ca0df",
-      "bytes": 14617
+      "git_blob_sha1": "e1c76264117d402e2a2f7a5ba15b89d69a2ac972",
+      "bytes": 14674
     },
     {
       "path": "src/rizzler/work_corpus.py",
@@ -1029,8 +1029,8 @@
     },
     {
       "path": "src/rizzler/work_gemini_gateway.py",
-      "git_blob_sha1": "a610751641a46f940cc5bdb3ec81df3cf2022162",
-      "bytes": 15682
+      "git_blob_sha1": "0234562d36ce8a7db08b7258e706d80e97a25d41",
+      "bytes": 19277
     },
     {
       "path": "src/rizzler/work_graph_exec.py",
@@ -1069,8 +1069,8 @@
     },
     {
       "path": "src/rizzler/work_provider_retry.py",
-      "git_blob_sha1": "a607a2260550a9afcfdd725efcb22d63b003d930",
-      "bytes": 2638
+      "git_blob_sha1": "e91f8c6b24e24aebbe08a39ba36f5a02ab1df073",
+      "bytes": 2716
     },
     {
       "path": "src/rizzler/work_quality.py",
@@ -1119,8 +1119,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "git_blob_sha1": "5b2e4af60ddf92b10094a527fcf2a9e6766165ee",
-      "bytes": 24480
+      "git_blob_sha1": "dcc9b67876104960d898305e239e59736cf8ec54",
+      "bytes": 24726
     },
     {
       "path": "src/rizzler/work_sql.py",
@@ -1144,8 +1144,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "git_blob_sha1": "75d2b3702b3e409f545f2337463a4c4f9b336546",
-      "bytes": 19121
+      "git_blob_sha1": "3c62a999828e6cbc3a40c2098c832c896554e88b",
+      "bytes": 19172
     },
     {
       "path": "stack_site.html",
@@ -1486,6 +1486,11 @@
       "path": "tests/test_v20_work_quality_stream.py",
       "git_blob_sha1": "ac4bf07d8a8e53964c484cfd6b142eca8471811e",
       "bytes": 13522
+    },
+    {
+      "path": "tests/test_v21_work_admission.py",
+      "git_blob_sha1": "e9e2c4d9c7771484777365840325c4a5ac7872d3",
+      "bytes": 5322
     },
     {
       "path": "tests/test_voice_core.cjs",
