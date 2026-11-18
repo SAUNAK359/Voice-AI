@@ -43,7 +43,7 @@ class HierarchyTests(unittest.TestCase):
     def test_model_plan_is_topological_and_scope_fenced(self):
         d=validate(hierarchy(),policy="uploaded_only")
         self.assertEqual(len(d.stages),4)
-        self.assertIn("Domain",d.instruction())
+        self.assertIn("domain_a",d.instruction())
         with self.assertRaises(CognitiveDecisionError):
             validate(hierarchy(),policy="external_allowed")
 
