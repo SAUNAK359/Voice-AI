@@ -15,7 +15,7 @@
 | Source ingestion | `source_normalizer.py` | HTML, Markdown, PDF text and tables, CSV, XLSX, JSON; source hashes, section/page/sheet provenance, warnings |
 | Safe evidence gateway | `source_gateway.py` | HTTPS only, public-IP DNS resolution, checked redirects, bounded streamed bodies, no credentials/proxies |
 | Provider research | `work_worker.py` | Optional actual page retrieval, source extraction, domain-specific synthesis, explicit retrieval errors |
-| Deep content authoring | `content_engine.py`, `work_worker.py` | Model-chosen section plan, bounded parallel development with verified dataset context |
+| Deep content authoring | `content_engine.py`, `work_worker.py` | Model-chosen section plan, bounded parallel development, independent optional coverage review and targeted repair with verified dataset context |
 | Rendering cleanup | `work_design.py` | Eliminate raw Markdown control tokens from displayed outputs, increase cover title fit |
 
 **Important:** The existing WorkStore DAG remains executable authority. The director's hierarchy is advisory, not a fully dynamic subagent execution graph. A truly extensible agent registry, claim-level verification, evaluation-trained memory, dependency-aware artifact repair, and autonomous format-specific storyboards are not yet implemented.
@@ -27,6 +27,7 @@ These switches are disabled by default until live qualification. To try cognitiv
 ```bash
 export RIZZLER_COGNITIVE_PLANNER=1
 export RIZZLER_COGNITIVE_CONTENT=1
+export RIZZLER_COGNITIVE_REVIEW=1
 export RIZZLER_EVIDENCE_FETCH=1
 ```
 
@@ -34,7 +35,7 @@ Use an existing paid Gemini API key via `GEMINI_API_KEY`. Keep API credentials i
 
 - `RIZZLER_COGNITIVE_PLANNER=1`: one optional model call validates task-specific expert briefs against the approved graph. Failure records a gap and retains existing execution.
 - `RIZZLER_COGNITIVE_CONTENT=1`: section plan plus up to three concurrent draft requests per running Work job. It raises on inadequate content; it does not silently issue a short generic report.
-- `RIZZLER_EVIDENCE_FETCH=1`: fetch up to eight provider-grounded HTTPS URLs with three simultaneous requests, source-byte limits and error categories; optional secondary synthesis uses extracted text and tables.
+- `RIZZLER_COGNITIVE_REVIEW=1`: an additional model evaluation of each drafted section, with one targeted repair pass and a second review. Review is not objective proof of accuracy and adds paid model calls.\n- `RIZZLER_EVIDENCE_FETCH=1`: fetch up to eight provider-grounded HTTPS URLs with three simultaneous requests, source-byte limits and error categories; optional secondary synthesis uses extracted text and tables.
 - `RIZZLER_ARTIFACT_QA=strict`: renders and inspects output pages where PyMuPDF/LibreOffice are installed; otherwise structural QA remains the default and does NOT certify visual quality.
 
 Use the existing V11 native Kaggle runtime as the launcher, replacing its `REF` with this feature branch; do **not** enable new features in production until passing the full matrix.
