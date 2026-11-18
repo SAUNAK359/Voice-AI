@@ -28,6 +28,9 @@ class QualityRepairFailure(RuntimeError):
 class QualityValidationFailure(RuntimeError):
     """Unexpected local validation error; never publish unchecked artifacts."""
 
+class QualityRejected(ValueError):
+    """The artifact is genuinely below acceptance criteria, not a provider outage."""
+
 
 async def _revision(ir, objective, defects, dataset_summary, attempt_number):
     from .work_dynamic import WorkModelConfig
@@ -249,8 +252,8 @@ async def validate_repair(store,claim,worker_id,checkpoint,context,payload):
                                 "sql_reconciled":bool(context["summary"])},
                     "limits":"Model visual quality review is not independent factual validation"}
         if iteration>=max_revisions:
-            progress("quality_result", "Quality repair budget exhausted")
-            raise ValueError("Artifact failed QA after repair budget; no final deliverables published")
+            progress("quality_result", "Quality rejected "+str(len(defects))+" defect findings")
+            raise QualityRejected("Artifact failed QA after repair budget; no final deliverables published")
         progress("quality_repair", "Revising artifact bundle version "+str(iteration+1))
         try:
             revision=await _revision(context["artifact_ir"],payload["objective"],defects,
