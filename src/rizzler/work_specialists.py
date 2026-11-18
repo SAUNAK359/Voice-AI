@@ -62,9 +62,13 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                          payload, store, owner, composer, researcher,
                          jid, worker_id, fence, attempt),
                          timeout=spec.sla_seconds * (
-                             4 if spec.name == "orchestrator" and
-                             feature_enabled("RIZZLER_COGNITIVE_EXPERTS")
-                             else 2))
+                             4 if (
+                                 spec.name == "orchestrator" and
+                                 feature_enabled("RIZZLER_COGNITIVE_EXPERTS")
+                             ) or (
+                                 spec.name == "research" and
+                                 feature_enabled("RIZZLER_RESEARCH_FRONTIER")
+                             ) else 2))
                 qa = gate_agent(spec.name, result, formats)
                 for receipt in result_receipts(result):
                     if not verify_checkpoint(checkpoint / receipt.name, receipt):
