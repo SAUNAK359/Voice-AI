@@ -26,7 +26,9 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
     from .work_sglang import enabled as use_sglang, complete as sglang_complete
     if not cfg.gemini_api_key and not use_sglang():
         raise RuntimeError("No Work model is configured")
-    prompt = ("Write a decisive, readable, evidence-aware report for real business use. "
+    from .work_skill_packages import skill_context
+    prompt = (skill_context("orchestrator",depth=5) +
+              "\nWrite a decisive, readable, evidence-aware report for real business use. "
               "Open with an executive summary, explain methods and limits, separate "
               "observations from recommendations, and provide clear next actions. "
               "Use concise headings and avoid filler, invented sources, fabricated "
@@ -117,7 +119,8 @@ async def grounded_research(objective: str) -> dict:
     from google.genai import types
     from .work_gemini_gateway import GeminiWorkGate, model_sequence, provider_status, WorkProviderUnavailable
     gate=GeminiWorkGate()
-    skill = read_skill("research")[:4500]
+    from .work_skill_packages import skill_context
+    skill = skill_context("research",depth=5)[:6000]
     observations, evidence, sections = [], {}, []
     MAX_ROUNDS = 3
     MAX_QUERIES = 6
