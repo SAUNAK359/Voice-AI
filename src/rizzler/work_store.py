@@ -510,6 +510,14 @@ class WorkStore:
             if isinstance(result.get("sources"), list):
                 public["source_refs"] = [
                     u[:350] for u in result["sources"][:8] if isinstance(u,str)]
+            # A bounded, owner-scoped public finding summary enables sibling
+            # specialists to adapt without rereading whole model transcripts.
+            if isinstance(result.get("text"), str):
+                public["summary"] = result["text"][:1800]
+            if isinstance(result.get("verified_quotes"), list):
+                public["claim_refs"] = [
+                    item.get("id") for item in result["verified_quotes"][:20]
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)]
             if isinstance(result.get("receipts"), list):
                 public["artifact_kinds"] = [
                     item.get("kind") for item in result["receipts"][:12]
