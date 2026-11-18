@@ -247,6 +247,18 @@ class LangMemWorkTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(recall("owner_1234","slide typography quantitative"))
             self.assertEqual(recall("owner_9999","slide typography quantitative"),[])
 
+    async def test_untrusted_private_qa_content_is_excluded_before_langmem(self):
+        from rizzler.work_langmem import _issue_safe
+        self.assertTrue(_issue_safe(
+            "Slide typography obscures supported quantitative explanations."))
+        for secret in (
+            "Contact example@example.com to repair slide typography.",
+            "Private API key must not appear in generated files.",
+            "The report exposed customer account number 123456789.",
+            "Request https://private.example.com for personal records."
+        ):
+            self.assertFalse(_issue_safe(secret),secret)
+
     async def test_unverified_jobs_cannot_write_operational_memory(self):
         from rizzler.work_langmem import consolidate_completed_job
         class Store:
