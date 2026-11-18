@@ -160,6 +160,24 @@ class AdaptiveMicroprogram(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("SLIDE 1:",result)
 
 
+class PublicSourceAuditContracts(unittest.IsolatedAsyncioTestCase):
+    async def test_public_source_passages_are_attributed_but_not_claim_verified(self):
+        from rizzler.work_source_audit import audit_source_records
+        def reader(url):
+            return url,"Real public source content with concrete data, dates, "
+                   "definitions, and relevant limitations recorded here. "*3
+        result=await audit_source_records(
+            [{"url":"https://example.com/primary"},
+             {"url":"https://example.com/primary"},
+             {"url":"http://localhost/private"}],
+            limit=3,reader=reader)
+        self.assertEqual(result["attempted"],1)
+        self.assertEqual(result["fetched"],1)
+        self.assertFalse(result["evidence_passages"][0]["claim_verified"])
+        self.assertTrue(result["evidence_passages"][0]["content_fetched"])
+        self.assertEqual(len(result["evidence_passages"][0]["content_sha256"]),64)
+
+
 class ProceduralMemoryContracts(unittest.TestCase):
     def test_not_enabled_never_creates_store(self):
         with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{
