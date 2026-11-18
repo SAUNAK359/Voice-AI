@@ -266,6 +266,10 @@ def failure_code(exc: BaseException) -> str:
         "TimeoutError":"provider_or_agent_timeout",
         "PermissionError":"permission_denied",
         "StaleLease":"worker_lease_stale",
+        "QualityRejected":"quality_rejected",
+        "QualityReviewFailure":"quality_review_failed",
+        "QualityRepairFailure":"quality_repair_failed",
+        "QualityValidationFailure":"quality_validation_failed",
         "StorageUnavailable":"artifact_storage_unavailable",
         "BudgetExceeded":"provider_budget_exhausted",
     }.get(cls,"agent_execution_failed")

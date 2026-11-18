@@ -1,7 +1,7 @@
 /* Rizzler V13: owner-scoped project canvas. Status is read from persisted Work events, not estimated. */
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-const state={auth:null,selected:null,artifact:null,jobs:[],busy:false,lastCompleted:new Set(),sources:[],visualFiles:[],link:null,navigateSlide:null};
+const state={auth:null,selected:null,artifact:null,jobs:[],busy:false,lastCompleted:new Set(),sources:[],visualFiles:[],link:null,navigateSlide:null,liveController:null,liveJob:null};
 const headers=()=>!state.auth?{}:state.auth.production?{'x-csrf-token':decodeURIComponent((document.cookie.split('; ').find(x=>x.startsWith('rizzler_csrf='))||'').split('=').slice(1).join('=')||'')}:{'x-rizzler-key':state.auth.key,'x-session-id':state.auth.sessionId};
 function report(msg){$('studio-feedback').textContent=msg;}
 async function api(path,options={}){
@@ -10,6 +10,100 @@ async function api(path,options={}){
  return r;
 }
 const LABELS={research:'Gathering information',sql_analytics:'Exploring your data',orchestrator:'Understanding findings',powerpoint:'Creating slides',word:'Writing the document',excel:'Building the workbook',pdf_visual:'Designing your output',quality:'Checking the result',planning:'Preparing the project',rendering:'Building your artifact',analysis:'Analyzing sources',validating:'Checking quality'};
+function reportLive(line){
+ const panel=$('studio-live-feed');if(!panel)return;
+ const el=document.createElement('p');el.textContent=String(line).slice(0,210);
+ el.style.margin='.3rem 0';panel.append(el);
+ while(panel.children.length>30)panel.firstChild.remove();
+ panel.scrollTop=panel.scrollHeight;
+}
+function watchProgress(jid){
+ if(state.liveJob===jid)return;
+ if(state.liveController)state.liveController.abort();
+ const ctrl=new AbortController();state.liveController=ctrl;state.liveJob=jid;
+ (async()=>{
+  try{
+   const res=await fetch('/api/work/jobs/'+encodeURIComponent(jid)+'/stream',
+      {headers:headers(),signal:ctrl.signal});
+   if(!res.ok||!res.body)throw Error('Streaming unavailable');
+   const reader=res.body.getReader(),dec=new TextDecoder();
+   let buf='',last=0,seen=0;
+   for(;;){
+    const {done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const chunks=buf.split('\n\n');buf=chunks.pop();
+    for(const chunk of chunks){
+     const type=(chunk.match(/^event: (.*)$/m)||[])[1];
+     const raw=chunk.split('\n').filter(x=>x.startsWith('data: ')).map(x=>x.slice(6)).join('\n');
+     if(!raw)continue;
+     if(type==='progress'){
+      let evt;try{evt=JSON.parse(raw)}catch(_){continue}
+      if(evt.seq<=seen)continue;seen=evt.seq;
+      reportLive(evt.stage+' · '+evt.message);
+      if(Date.now()-last>3500){last=Date.now();refresh().catch(()=>{});}
+     }else if(type==='terminal'){reportLive('Final status available');await refresh();return;}
+    }
+   }
+  }catch(e){if(!ctrl.signal.aborted)reportLive('Live stream disconnected; polling continues.');}
+  finally{if(state.liveController===ctrl){state.liveController=null;state.liveJob=null;}}
+ })();
+}
+async function showDrafts(jid){
+ const panel=$('studio-draft-feed');if(!panel)return;panel.replaceChildren();
+ let items=[];
+ try{items=(await api('/api/work/jobs/'+encodeURIComponent(jid)+'/drafts').then(r=>r.json())).artifacts||[]}
+ catch(_){return}
+ let draft=null;
+ try{draft=await api('/api/work/jobs/'+encodeURIComponent(jid)+'/draft-text').then(r=>r.json())}
+ catch(_){}
+ let feedback=[];
+ try{feedback=(await api('/api/work/jobs/'+encodeURIComponent(jid)+'/quality-feedback')
+     .then(r=>r.json())).iterations||[]}
+ catch(_){}
+ if(!items.length&&!draft?.text&&!feedback.length)return;
+ const label=document.createElement('p');label.textContent='Intermediate drafts and Quality findings — UNVERIFIED';
+ label.style.fontWeight='600';panel.append(label);
+ if(draft?.text){
+  const detail=document.createElement('details');
+  const title=document.createElement('summary');title.textContent='Live writer draft — view text';
+  const pre=document.createElement('pre');
+  pre.style.cssText='max-height:320px;overflow:auto;white-space:pre-wrap';
+  pre.textContent=draft.text;detail.append(title,pre);panel.append(detail);
+ }
+ for(const pass of feedback){
+  if(!pass.findings?.length)continue;
+  const details=document.createElement('details');
+  const title=document.createElement('summary');
+  title.textContent='Quality iteration '+(pass.iteration+1)+
+                    ' — '+pass.findings.length+' identified defects';
+  const list=document.createElement('ul');
+  for(const issue of pass.findings.slice(0,20)){
+   const li=document.createElement('li');
+   li.textContent=(issue.kind||'quality')+': '+(issue.problem||'Missing detail');
+   list.append(li);
+  }
+  details.append(title,list);panel.append(details);
+ }
+ for(const item of items){
+  const btn=document.createElement('button');btn.type='button';
+  btn.textContent=item.kind.toUpperCase()+' draft';
+  btn.addEventListener('click',async()=>{
+   try{
+    const res=await api('/api/work/jobs/'+encodeURIComponent(jid)+'/drafts/'+encodeURIComponent(item.kind));
+    const blob=await res.blob();
+    if(['txt','md'].includes(item.kind)){
+     panel.querySelector('pre')?.remove();
+     const pre=document.createElement('pre');pre.style.cssText='max-height:300px;overflow:auto;white-space:pre-wrap';
+     pre.textContent='UNVERIFIED DRAFT\n\n'+(await blob.text()).slice(0,25000);panel.append(pre);
+    }else{
+     const url=URL.createObjectURL(blob),a=document.createElement('a');
+     a.href=url;a.download='UNVERIFIED_'+item.name;a.click();
+     setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }
+   }catch(e){report('Draft unavailable: '+e.message)}
+  });panel.append(btn);
+ }
+}
 function progress(job,steps=[]){
  const target=$('studio-progress');target.replaceChildren();
  const stage=job.stage,done=job.status==='completed';
@@ -50,6 +144,12 @@ async function inspect(id){
    job.status==='failed'?'This project needs attention. Its existing work remains recorded.':
    'Project '+job.status;
  progress(job,j.agents||[]);
+  if(job.status==='running'||job.status==='queued')watchProgress(id);
+  else if(state.liveJob===id&&state.liveController){
+    state.liveController.abort();state.liveController=null;state.liveJob=null;
+  }
+  if(job.status!=='completed')await showDrafts(id);
+  else $('studio-draft-feed')?.replaceChildren();
  if(job.status==='completed'&&j.artifacts?.length){
   const bar=$('studio-artifact-toolbar'),list=$('studio-artifact-list');bar.hidden=false;list.replaceChildren();
   for(const f of j.artifacts){

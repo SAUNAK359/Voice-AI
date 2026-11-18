@@ -23,6 +23,7 @@ KNOWN_RULES={
         "spreadsheet_recalculation_mismatch",
     "XLSX input IR contract mismatch":"spreadsheet_ir_provenance_mismatch",
     "Strict artifact QA requires LibreOffice":"office_renderer_unavailable",
+    "Artifact failed QA after repair budget":"quality_repair_budget_exhausted",
     "Office page rendering failed":"office_render_failed",
     "Office page rendering exceeded time budget":"office_render_deadline",
     "Rendered page is blank or not text-readable":"rendered_page_unreadable",

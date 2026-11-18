@@ -81,6 +81,11 @@ class WorkStore:
               PRIMARY KEY(job_id,agent),
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS agent_steps_status ON agent_steps(status,updated);
+            CREATE TABLE IF NOT EXISTS quality_feedback(
+              job_id TEXT NOT NULL, iteration INTEGER NOT NULL,
+              report_json TEXT NOT NULL, at REAL NOT NULL,
+              PRIMARY KEY(job_id,iteration),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
@@ -124,6 +129,19 @@ class WorkStore:
     def _event(c, jid, stage, message):
         c.execute("INSERT INTO events(job_id,stage,message,at) VALUES(?,?,?,?)",
                   (jid, stage, message[:180], time.time()))
+
+    def record_progress(self, jid: str, worker: str, fence: int,
+                        stage: str, message: str) -> None:
+        """Owner-fenced, bounded public progress; never persist prompts or errors."""
+        allowed = {"quality_check", "quality_review", "quality_repair",
+                   "quality_result", "editorial_progress", "draft_ready"}
+        if stage not in allowed or not isinstance(message, str) or not (
+                1 <= len(message) <= 160) or not re.fullmatch(
+                    r"[A-Za-z0-9 _.:/(),-]+", message):
+            raise ValueError("Invalid safe Work progress event")
+        with self._tx() as c:
+            self._active(c, jid, worker, fence)
+            self._event(c, jid, stage, message)
 
     def submit(self, owner: str, objective: str, formats: list[str],
                idem: str, uploads: list[str] | None = None,
@@ -823,6 +841,125 @@ class WorkStore:
                 (state,state,error_code if state=="failed" else "",time.time(),jid,fence))
             self._settle_agents(c, jid, state)
             self._event(c,jid,state,"Execution "+state)
+
+    def record_quality_feedback(self, jid: str, worker: str, fence: int,
+                                iteration: int, defects: list[dict]) -> None:
+        """Persist owner-scoped sanitized Quality findings under the worker lease."""
+        if not isinstance(iteration, int) or not 0 <= iteration <= 5:
+            raise ValueError("Invalid Quality iteration")
+        if not isinstance(defects, list) or len(defects) > 40:
+            raise ValueError("Invalid Quality findings")
+        safe = []
+        for item in defects:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid Quality finding")
+            kind, problem = item.get("kind"), item.get("problem")
+            if not isinstance(kind, str) or not 1 <= len(kind) <= 60:
+                raise ValueError("Invalid Quality finding kind")
+            if not isinstance(problem, str) or not 1 <= len(problem) <= 450:
+                raise ValueError("Invalid Quality finding description")
+            safe.append({"kind": kind[:60], "problem": problem[:450]})
+        record = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+        if len(record.encode("utf-8")) > 16000:
+            raise ValueError("Quality feedback storage limit exceeded")
+        with self._tx() as c:
+            self._active(c, jid, worker, fence)
+            c.execute(
+                "INSERT INTO quality_feedback(job_id,iteration,report_json,at) "
+                "VALUES(?,?,?,?) ON CONFLICT(job_id,iteration) DO UPDATE SET "
+                "report_json=excluded.report_json,at=excluded.at",
+                (jid, iteration, record, time.time()))
+            self._event(c,jid,"quality_result",
+                        "Iteration "+str(iteration+1)+" found "+str(len(safe))+" defects")
+
+    def quality_feedback(self, owner: str, jid: str) -> list[dict]:
+        """Expose exact stored QA reasons only to the authenticated job owner."""
+        self.get(owner, jid)
+        with self._tx() as c:
+            return [{"iteration": row["iteration"],
+                     "findings": json.loads(row["report_json"])}
+                    for row in c.execute(
+                        "SELECT iteration,report_json FROM quality_feedback "
+                        "WHERE job_id=? ORDER BY iteration", (jid,))]
+
+    def draft_text(self, owner: str, jid: str) -> dict:
+        """Read only a committed writer checkpoint for the authenticated owner.
+
+        Text is not final or source-verified until the Quality Agent passes.
+        """
+        self.get(owner, jid)
+        with self._tx() as c:
+            row = c.execute(
+                "SELECT result_json,result_sha256 FROM agent_steps "
+                "WHERE job_id=? AND agent='orchestrator' AND status='completed'",
+                (jid,)).fetchone()
+        if row is None:
+            return {"status": "pending", "text": ""}
+        raw = row["result_json"]
+        if hashlib.sha256(raw.encode("utf-8")).hexdigest() != row["result_sha256"]:
+            return {"status": "integrity_failed", "text": ""}
+        try:
+            result = json.loads(raw)
+            content = result.get("text", "")
+        except (ValueError, AttributeError):
+            return {"status": "integrity_failed", "text": ""}
+        if not isinstance(content, str):
+            return {"status": "integrity_failed", "text": ""}
+        return {"status": "draft_unverified", "text": content[:20000],
+                "truncated": len(content) > 20000}
+
+    def drafts(self, owner: str, jid: str) -> list[dict]:
+        """Expose only checksum-verified committed specialist files, never attempts.
+
+        These are explicitly UNVERIFIED drafts until the final Quality step and
+        atomic job publication succeed. Access is restricted to the same owner.
+        """
+        from .contracts import ArtifactReceipt, FILE_FORMATS
+        self.get(owner, jid)
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT agent,result_json,result_sha256 FROM agent_steps "
+                "WHERE job_id=? AND status='completed' AND result_json!=''",
+                (jid,)).fetchall()
+        files = {}
+        for row in rows:
+            raw = row["result_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest() != row["result_sha256"]:
+                continue
+            try:
+                result = json.loads(raw)
+                receipts = result.get("receipts", [])
+            except (ValueError, AttributeError):
+                continue
+            for entry in receipts:
+                try:
+                    receipt = ArtifactReceipt(**entry).validate()
+                except (TypeError, ValueError):
+                    continue
+                if (receipt.kind not in FILE_FORMATS or
+                        receipt.name != receipt.kind + "." + receipt.kind):
+                    continue
+                path = self.root / "checkpoints" / owner / jid / receipt.name
+                if not path.is_file() or path.is_symlink():
+                    continue
+                if (path.stat().st_size == receipt.byte_size and
+                        hashlib.sha256(path.read_bytes()).hexdigest() == receipt.sha256):
+                    files[receipt.kind] = {
+                        "kind": receipt.kind, "name": receipt.name,
+                        "size": receipt.byte_size, "sha256": receipt.sha256,
+                        "status": "draft_unverified"}
+        return sorted(files.values(), key=lambda item: item["kind"])
+
+    def draft_artifact(self, owner: str, jid: str, kind: str):
+        """Return a verified read-only draft path for authenticated retrieval."""
+        from .contracts import FILE_FORMATS
+        if kind not in FILE_FORMATS:
+            raise Missing("Draft unavailable")
+        record = next((x for x in self.drafts(owner,jid)
+                       if x["kind"] == kind), None)
+        if record is None:
+            raise Missing("Draft unavailable")
+        return self.root / "checkpoints" / owner / jid / record["name"], record
 
     def artifacts(self,owner,jid):
         self.get(owner,jid)

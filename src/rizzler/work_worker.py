@@ -19,7 +19,7 @@ from .work_skills import SKILLS, FORMATS, read_dataset, analyze, render_one
 logger=logging.getLogger("rizzler.work.worker")
 
 
-async def compose_work(objective: str, data_summary: dict | None, *, max_chars=30000) -> str:
+async def compose_work(objective: str, data_summary: dict | None, *, max_chars=40000) -> str:
     """Dedicated model request, bounded and without access to filesystem/tools."""
     from .work_dynamic import WorkModelConfig
     cfg=WorkModelConfig.from_env()
@@ -49,7 +49,28 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
               "Provider-grounding URLs alone do not prove page contents were fetched. "
               "For missing evidence, explicitly state what cannot be concluded. "
               "Match the depth, specificity, audience and output requirements expressed "
-              "in the objective. For presentations, build a substantial story with " 
+              "in the objective. Before drafting, internally map every explicit "
+              "requirement to an explanation, evidence, concrete example or admitted "
+              "limitation, and a suitable section. For a comprehensive report, "
+              "develop a rigorous long-form narrative with meaningful subsections, "
+              "worked examples, system and component interactions, alternatives, "
+              "failure modes, trade-offs, and actionable implementation details "
+              "where relevant. Short requests should remain concise; never pad "
+              "length to hit an artificial page or word target. "
+              "Make each heading serve a distinct purpose, with useful supporting "
+              "facts, reasoning and assumptions, rather than generic bullet summaries. "
+              "Clearly distinguish observed results, proposed design, and unverified "
+              "hypotheses. Tables must compare genuinely distinct facts or decisions. "
+              "When no external research is available, do not feign citation-backed "
+              "analysis. Include an explicit evidence-gaps and validation section "
+              "for material uncertainty. "
+              "The intermediate narrative will be rendered into PDF, Markdown, "
+              "Word or slides: do not include slide-specific planning text, "
+              "presentation production instructions, literal SLIDE N: labels, "
+              "ASCII art posing as a finished diagram, or meta instructions "
+              "in the final document. Express diagrams as concrete prose or tables "
+              "unless a renderer can produce a genuine graphical figure. "
+              "For presentations, build a substantial story with " 
               "clear executive messages, quantitative context, source qualifications " 
               "and specific conclusions, not generic bullets. " 
               "Do not invent source-backed statistics. "
@@ -61,13 +82,13 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=3
     if use_sglang():
         from .production_guard import reserve_provider_call
         reserve_provider_call("work")
-        result=await sglang_complete(prompt,max_tokens=7000,temperature=0.25,
+        result=await sglang_complete(prompt,max_tokens=9000,temperature=0.25,
                                      role="Rizzler evidence-aware synthesis specialist")
         if not 15<=len(result.strip())<=max_chars:
             raise ValueError("SGLang report missing or too long")
         return result
     from .work_gemini_gateway import gemini_content
-    response=await gemini_content(cfg,prompt,max_output_tokens=7000)
+    response=await gemini_content(cfg,prompt,max_output_tokens=9000)
     result=getattr(response,"text","") or ""
     if not 15<=len(result.strip())<=max_chars:
         raise ValueError("Model report missing or too long")
