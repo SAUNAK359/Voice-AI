@@ -26,7 +26,7 @@ class DraftProgressTests(unittest.TestCase):
         self.owner = "owner_v20"
         self.job = self.store.submit(
             self.owner, "Write a structured analysis with a Markdown report",
-            ["md"], "v20-" + "x" * 20)
+            ["md"], "v20-" + "x" * 20, [])
         self.worker = "worker_v20"
         self.claim = self.store.claim(self.worker, lease_seconds=45)
         self.jid = self.job["id"]
