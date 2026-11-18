@@ -203,6 +203,12 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         found = await researcher(payload["objective"])
         if isinstance(found, dict):
             if set(found).issuperset({"text","sources"}):
+                if feature_enabled("RIZZLER_CLAIM_VERIFY") and not found.get(
+                        "verified_quotes"):
+                    # Provider grounding alone does not establish original
+                    # source-byte evidence. Never publish unsourced research
+                    # as a fully verified deliverable under strict mode.
+                    raise ValueError("Research has no independently checked quotations")
                 return found
             raise ValueError("Research provider returned malformed evidence")
         text, sources = found
