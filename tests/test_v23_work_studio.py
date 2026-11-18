@@ -40,6 +40,28 @@ class VerifiedEvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_claims(document, spans)
 
+    def test_structured_numeric_rows_have_source_provenance(self):
+        source={"source_id":"official_1","sha256":hashlib.sha256(
+                b"official table").hexdigest(),
+                "source_url":"https://example.org/report",
+                "blocks":[],"tables":[
+                    {"location":{"page":7,"table":2},
+                     "rows":[["Year","Merchandise exports in units"],
+                             ["2024","125.5"],["2025","141.2"]]}]}
+        spans=evidence_index([source])
+        self.assertEqual(len(spans),2)
+        selected=next((k for k,v in spans.items() if "2025" in v["text"]),None)
+        self.assertIsNotNone(selected)
+        claim={"schema_version":1,"claims":[{
+            "claim":"The 2025 value shown in the source table is 141.2 units",
+            "evidence_id":selected,
+            "quote":"Merchandise exports in units: 141.2",
+            "interpretation":False,
+            "limitations":"The statistical definition is not independently verified"}]}
+        accepted=validate_claims(claim,spans)
+        self.assertEqual(accepted[0]["location"]["page"],7)
+        self.assertEqual(accepted[0]["location"]["row"],3)
+
     def test_untrusted_source_metadata_fails_closed(self):
         with self.assertRaises(ValueError):
             evidence_index([{"source_id": "../../file", "sha256": "0" * 64,
