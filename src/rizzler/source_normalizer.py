@@ -12,6 +12,7 @@ from html.parser import HTMLParser
 import io
 import json
 import re
+import zipfile
 from typing import Any
 
 MAX_SOURCE_BYTES = 8_000_000
@@ -178,6 +179,20 @@ def normalize_source(data: bytes, mime_type: str, *, source_id: str,
                                    "location": {"page": page_num + 1}})
                 else:
                     warnings.append("page_without_extractable_text:" + str(page_num + 1))
+                # Table extraction is bounded and isolated per page; malformed
+                # ruled tables must not discard otherwise readable page text.
+                try:
+                    discovered = page.find_tables()
+                    for table in list(discovered.tables)[:15]:
+                        rows = table.extract()[:MAX_TABLE_ROWS]
+                        rows = [[_clean(v or "", 1000) for v in row[:50]]
+                                for row in rows]
+                        if rows:
+                            tables.append({"rows": rows,
+                                           "location": {"page": page_num + 1,
+                                                        "table": len(tables) + 1}})
+                except (AttributeError, RuntimeError, ValueError):
+                    warnings.append("pdf_table_detection_unavailable:" + str(page_num + 1))
         if not blocks:
             warnings.append("ocr_or_vlm_required")
     elif media in ("text/html", "application/xhtml+xml"):
@@ -217,6 +232,36 @@ def normalize_source(data: bytes, mime_type: str, *, source_id: str,
         if not rows or len(rows) > MAX_TABLE_ROWS or max(map(len, rows)) > 50:
             raise ValueError("CSV table outside extraction bounds")
         tables = [{"rows": rows, "location": {"table": 1}}]
+    elif media == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        from openpyxl import load_workbook
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                entries = archive.infolist()
+                if len(entries) > 500 or sum(v.file_size for v in entries) > 30_000_000:
+                    raise ValueError("Spreadsheet expansion exceeds source budget")
+                if any(v.filename.startswith("/") or ".." in v.filename.split("/")
+                       or v.filename.lower().endswith(("vbaproject.bin", ".exe", ".dll"))
+                       or v.filename.startswith("xl/externalLinks/")
+                       for v in entries):
+                    raise ValueError("Unsafe spreadsheet package")
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Invalid spreadsheet archive") from exc
+        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True,
+                                 keep_links=False)
+        try:
+            if len(workbook.sheetnames) > 30:
+                raise ValueError("Workbook has too many sheets")
+            for sheet in workbook:
+                if sheet.max_column > 50 or sheet.max_row > MAX_TABLE_ROWS:
+                    warnings.append("sheet_truncated:" + sheet.title[:80])
+                rows = []
+                for row in sheet.iter_rows(min_row=1, max_row=min(sheet.max_row,MAX_TABLE_ROWS),
+                                           max_col=min(sheet.max_column,50), values_only=True):
+                    rows.append([_clean(v if v is not None else "", 1000) for v in row])
+                if rows:
+                    tables.append({"rows": rows, "location": {"sheet": sheet.title[:80]}})
+        finally:
+            workbook.close()
     elif media in ("application/json", "application/ld+json"):
         obj = json.loads(data.decode("utf-8-sig"))
         if isinstance(obj, dict):
