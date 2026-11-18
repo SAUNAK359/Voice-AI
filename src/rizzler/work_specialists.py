@@ -245,12 +245,23 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         for receipt in receipts.values():
             if not verify_checkpoint(checkpoint / receipt.name, receipt):
                 raise ValueError("Final quality gate failed artifact checksum")
+            preflight = context["preflight"].get(receipt.kind)
+            studio = (preflight or {}).get("studio_blueprint") if receipt.kind == "pptx" else None
+            if studio is not None:
+                from .work_studio import validate_storyboard, inspect_storyboard
+                valid_storyboard = validate_storyboard(
+                    studio, context["artifact_ir"].sections,
+                    context["artifact_ir"].sources)
+                studio_qa = await asyncio.to_thread(
+                    inspect_storyboard, checkpoint / receipt.name, valid_storyboard)
+                if not studio_qa["passed"]:
+                    raise ValueError("Studio slide coverage and evidence check failed")
             structural_qa = await asyncio.to_thread(
                 inspect_artifact, checkpoint / receipt.name, receipt.kind,
                 dataset_rows=context["summary"]["rows"] if context["summary"] else None,
-                bundle_receipts=bundle, artifact_ir=context["artifact_ir"],
+                bundle_receipts=bundle,
+                artifact_ir=None if studio is not None else context["artifact_ir"],
                 dataset_summary=context["summary"])
-            preflight = context["preflight"].get(receipt.kind)
             if receipt.kind in ("pptx", "docx", "pdf", "xlsx") and strict:
                 if not preflight or preflight["sha256"] != receipt.sha256:
                     raise ValueError("Strict QA inspection checkpoint missing or mismatched")
@@ -294,17 +305,36 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         working = attempt / (kind + "." + kind)
         ir = context["artifact_ir"]
         dataset_rows = context["summary"]["rows"] if context["summary"] else None
-        # Exactly one deterministic regeneration on a recoverable output
-        # validation error; no additional model calls, user writes or tools.
+        studio_blueprint = None
+        if kind == "pptx" and os.environ.get(
+                "RIZZLER_COGNITIVE_STUDIO", "0").lower() in ("1", "true", "yes"):
+            from .config import Settings
+            from .work_studio import create_storyboard
+            cfg = Settings.from_env()
+            studio_blueprint = await create_storyboard(
+                payload["objective"], ir, model=cfg.gemini_model,
+                api_key=cfg.gemini_api_key)
+        # Model calls run once. Recoverable renderer failures regenerate
+        # only the file from the validated, immutable content blueprint.
         repairs = 0
         for attempt_no in range(2):
-            await asyncio.to_thread(render_one, kind, working, ir.title,
-                                    ir.content, table, list(ir.sources))
+            if studio_blueprint is not None:
+                from .work_studio import render_storyboard
+                await asyncio.to_thread(
+                    render_storyboard, working, studio_blueprint,
+                    title=ir.title, sources=ir.sources)
+            else:
+                await asyncio.to_thread(render_one, kind, working, ir.title,
+                                        ir.content, table, list(ir.sources))
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
-                    artifact_ir=ir, dataset_summary=context["summary"],
-                    visual_required=strict)
+                    artifact_ir=None if studio_blueprint is not None else ir,
+                    dataset_summary=context["summary"], visual_required=strict)
+                if studio_blueprint is not None:
+                    from .work_studio import inspect_storyboard
+                    report["storyboard"] = await asyncio.to_thread(
+                        inspect_storyboard, working, studio_blueprint)
                 break
             except ValueError:
                 if attempt_no:
@@ -314,6 +344,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         receipt = verify_artifact(working, kind)
         inspections[kind] = {"sha256":receipt.sha256,
                               "quality":report, "repair_attempts":repairs}
+        if studio_blueprint is not None:
+            inspections[kind]["studio_blueprint"] = studio_blueprint
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published specialist artifact failed checksum")
