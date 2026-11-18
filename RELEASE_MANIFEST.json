@@ -4,8 +4,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 2069,
-      "sha256": "74500595b2a04b7dd95bb73d0f2111ed82f28f8516503c5a8cd4ed8e1d4f9152"
+      "bytes": 2164,
+      "sha256": "78b437fc688b52be865bb2bad62832a51300d6d2b026a0da0f917b1c545a9073"
     },
     {
       "path": ".github/dependabot.yml",
@@ -283,6 +283,11 @@
       "sha256": "d71450d58966a05ca5a7721b5d02b3bcd682bc1b00fe1797fa747b95fcc7265d"
     },
     {
+      "path": "src/rizzler/config.py",
+      "bytes": 4377,
+      "sha256": "8d924645e17449152ef2c21c489e5a918e59baa0c87454154657682996ce4ad4"
+    },
+    {
       "path": "src/rizzler/content_engine.py",
       "sha256": "2c30ec40fcc4ab72071db54b5f9aae1f97bc9e6bf801ebe4d6452b3cceb3f98b",
       "bytes": 10856
@@ -294,8 +299,8 @@
     },
     {
       "path": "src/rizzler/evidence_graph.py",
-      "bytes": 5662,
-      "sha256": "7eeb2c920dc17c5515c9aa4ffb9613576c13157c1302d42f0951fdd72939483d"
+      "bytes": 7248,
+      "sha256": "34569527b5e77fd3e74db0dcf33fef470a5ad1d11afe33504bb0aed35492588c"
     },
     {
       "path": "src/rizzler/hace_runtime.py",
@@ -369,8 +374,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "5a4819064265121682512ff7f66acfff8a31a9876180e58022774972d8b8602a",
-      "bytes": 27991
+      "sha256": "a373c7e142d45d8de08866239caa9c607ef0d4033f9ea0dda0a3447f45c2d131",
+      "bytes": 28604
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -439,8 +444,8 @@
     },
     {
       "path": "tests/test_v23_e2e_cognition.py",
-      "bytes": 5835,
-      "sha256": "4498a906b2c699bd8ce17a5e847b9cb63f59d994a1a8f55c90fb644ff66d57e3"
+      "bytes": 7080,
+      "sha256": "e3f8c1f04f2652b95733af43763e20f70ea64ee5bf32388c6871c4adfe646139"
     },
     {
       "path": "tests/test_v23_editorial_studio.py",
@@ -474,8 +479,8 @@
     },
     {
       "path": "tests/test_v23_work_studio.py",
-      "bytes": 5744,
-      "sha256": "18b5096244d1fe1435bc09bf3502a74642a03eac503cb1854516335f80412b4a"
+      "bytes": 6921,
+      "sha256": "1a8591d18ea783803981650357f3dd88cdae29e280f2ae4b17c5b54084091507"
     },
     {
       "path": "web/app.js",
