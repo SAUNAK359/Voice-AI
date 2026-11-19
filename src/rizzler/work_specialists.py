@@ -49,6 +49,18 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         latest = store.cognitive_events(owner, jid, limit=100)
         context["cognitive_cursor"] = latest[-1]["seq"] if latest else 0
         saved = store.agent_checkpoint(jid, worker_id, fence, spec.name)
+        # An upstream revision invalidates otherwise-valid output bytes.
+        # Resume must never deliver a file built from older evidence.
+        if (saved is not None and spec.name in (
+                "powerpoint", "word", "excel", "pdf_visual", "quality")
+                and context.get("context_package") is not None
+                and (saved.get("context_revision") !=
+                     context["context_package"]["revision"]
+                     or (spec.name != "quality" and
+                         saved.get("artifact_ir_sha256") !=
+                         context["artifact_ir"].sha256))):
+            store.reopen_agents(jid,worker_id,fence,[spec.name])
+            saved = None
         if saved is not None:
             result = _valid_cached(spec, saved, checkpoint, formats)
         else:
@@ -253,7 +265,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     # The authorized DAG is immutable: backdelegation can only revisit the
     # already-approved source specialists, never gain new tool permissions.
     context_reviewed = False
+    context_restored = False
     for wave in topological_waves(graph, frozenset(planned)):
+        if not context_restored and not ({"research","sql_analytics"} & set(wave)):
+            from .work_context_intelligence import restore_context
+            restore_context(context,payload=payload,store=store,owner=owner,jid=jid)
+            context_restored = True
         if "artifact_ir" not in context and (renderers.intersection(wave) or "quality" in wave):
             prepare_artifact_ir()
         if (not context_reviewed and feature_enabled("RIZZLER_CONTEXT_CONVERGENCE")
@@ -547,6 +564,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         if not context["text"] and not context["summary"]:
             raise ValueError("No substantive evidence to publish")
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
+                "context_revision": (context.get("context_package") or {}).get("revision"),
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
                 "artifact_qa_mode": quality_mode(),
@@ -690,4 +708,6 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             raise ValueError("Published archive failed checksum")
         receipts.append(receipt)
     return {"receipts": [asdict(r) for r in receipts],
-            "inspections": inspections, "agent": name, "requested": requested}
+            "inspections": inspections, "agent": name, "requested": requested,
+            "context_revision": (context.get("context_package") or {}).get("revision"),
+            "artifact_ir_sha256": context["artifact_ir"].sha256}
