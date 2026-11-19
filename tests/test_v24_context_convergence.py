@@ -216,7 +216,10 @@ class ActualBackdelegationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("New evidence requested",query)
             return {"text":"An official report lists 125 units for 2025, "
                            "subject to methodological limitations.",
-                    "sources":["https://example.org/new"]}
+                    "sources":["https://example.org/new"],
+                    "verified_quotes":[{"id":"verified_source_line_1",
+                        "quote":"125 units in 2025",
+                        "url":"https://example.org/new"}]}
         with patch("rizzler.config.Settings.from_env",
                    return_value=SimpleNamespace(
                        gemini_api_key="fake",gemini_model="fake")), \
