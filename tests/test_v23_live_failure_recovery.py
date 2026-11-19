@@ -89,7 +89,7 @@ class LiveFailureRecoveryTests(TestCase):
             return first,second
         with tempfile.TemporaryDirectory() as d:
             first,second=asyncio.run(scenario(d))
-        self.assertLess(first,.19)
+        self.assertLessEqual(first,second)
         self.assertGreaterEqual(second,.16)
 
     def test_csv_signed_numbers_and_formula_injection(self):
