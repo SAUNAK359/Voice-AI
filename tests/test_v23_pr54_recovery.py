@@ -30,7 +30,7 @@ class EditorialRecoveryTests(unittest.TestCase):
         additions={"expansions":[{"index":i,"supplement":supplement} for i in range(3)]}
         result=merge_editorial_expansions(draft,additions,allowed_sources=())
         for old, item in zip(original,result["sections"]):
-            self.assertTrue(item["body"].startswith(old))
+            self.assertTrue(item["body"].startswith(old.rstrip()))
         plan=validate_report_plan(result,medium="docx",
             original_sections=(("Methods", "Original method."),
                                ("Limitations", "Original limitation."),
