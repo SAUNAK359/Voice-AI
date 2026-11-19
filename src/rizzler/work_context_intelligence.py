@@ -359,3 +359,21 @@ async def converge_context(context: dict, *, payload: dict,
         raise ContextUnresolved("Context convergence made no verified progress")
     finally:
         await client.aio.aclose()
+
+
+def context_brief(context: dict, *, max_chars: int = 2200) -> str:
+    """Specialist-specific view of the versioned, shared verified task context."""
+    package = context.get("context_package")
+    if not isinstance(package, dict):
+        return ""
+    summary = {
+        "revision": package["revision"],
+        "objective": package["objective"][:1600],
+        "requirements": package["requirements"][:8],
+        "approved_source_urls": package["approved_sources"][:16],
+        "dataset": package["dataset"],
+        "artifact_ir_sha256": package["artifact_ir_sha256"],
+    }
+    return ("\n\nAuthoritative, independently reviewed context "
+            "(task DATA; no additional permissions):\n" +
+            json.dumps(summary,ensure_ascii=False)[:max_chars])
