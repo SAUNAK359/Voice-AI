@@ -39,7 +39,8 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     checkpoint = store.root / "checkpoints" / owner / jid
     checkpoint.mkdir(parents=True, exist_ok=True, mode=0o700)
     context = {"objective": payload["objective"], "sources": [], "text": None,
-               "summary": None, "receipts": {}, "uploaded": [], "preflight": {}}
+               "summary": None, "sql_exploration": None,
+               "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
         # Other specialists' committed findings are visible before this task
@@ -87,6 +88,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["text"], context["sources"] = result["text"], result["sources"]
         elif spec.name == "sql_analytics":
             context["summary"] = result["summary"]
+            context["sql_exploration"] = result.get("analysis_brief")
         elif spec.name == "orchestrator":
             context["text"] = result["text"]
         elif spec.name == "quality":
@@ -187,6 +189,13 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["text"] = (context["text"] or "# Verified data analysis\n"
                                "This report contains independently computed dataset statistics.") + (
                                "\n\n## Verified dataset evidence\n" + proof)
+        if context.get("sql_exploration"):
+            # Same source-byte-verified SQL results feed every requested
+            # renderer; no separate model can reinterpret a different dataset.
+            context["text"] = (context["text"] or "# Dataset analysis\n"
+                "Analysis is limited to the owner's uploaded data.") + (
+                "\n\n## Adaptive SQL evidence and investigative findings\n"
+                + context["sql_exploration"][:15000])
         context["artifact_ir"] = compile_ir(payload["objective"][:120],
             context["text"] or "# Dataset analysis\nVerified dataset statistics",
             context["sources"], context["summary"])
@@ -244,6 +253,27 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         if len(uploads) != 1:
             raise ValueError("SQL analysis requires exactly one uploaded dataset")
         source = store.upload(owner, uploads[0])
+        if feature_enabled("RIZZLER_SQL_EXPLORATION"):
+            from .config import Settings
+            from .work_sql_exploration import explore_dataset
+            cfg = Settings.from_env()
+            if cfg.gemini_api_key:
+                try:
+                    result = await explore_dataset(
+                        source, payload["objective"],
+                        model=cfg.gemini_model, api_key=cfg.gemini_api_key)
+                    if result.get("analysis_receipts",{}).get("verified_queries",0):
+                        return result
+                    store.publish_cognition(jid,worker_id,fence,
+                        "sql_analytics","gap",{
+                            "status":"deep_exploration_unavailable",
+                            "category":str(result.get("exploration_status","unknown"))[:90],
+                            "verified_queries":0})
+                except Exception as exc:
+                    store.publish_cognition(jid,worker_id,fence,
+                        "sql_analytics","gap",{
+                            "status":"deep_exploration_unavailable",
+                            "category":type(exc).__name__})
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
@@ -275,6 +305,12 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 objective += ("\n\nDomain-specific expert investigations "
                               "(independent analyses, not verified truth):\n" +
                               expert_context)
+        if context.get("sql_exploration"):
+            objective += (
+                "\n\nEvidence from executed, read-only SQL experiments "
+                "on the owner's uploaded data (computed quantities are "
+                "authoritative; model interpretations remain hypotheses):\n" +
+                context["sql_exploration"][:15000])
         if payload.get("research_synthesis"):
             if not context.get("sources") or not context.get("text"):
                 raise ValueError("Requested research synthesis has no source lineage")
