@@ -383,6 +383,11 @@
       "sha256": "b0145722c1c26bc193724b467a13e6c976373ef78faa2a8e65367bd90ecfa207"
     },
     {
+      "path": "src/rizzler/work_skills.py",
+      "sha256": "3a106e32fd8088a5063764ee69efd50314222dca94e34efa7162a95c9ac1132e",
+      "bytes": 8125
+    },
+    {
       "path": "src/rizzler/work_specialists.py",
       "sha256": "7ed24b21bb38dc19e8d6da40b78ac96dd95a4404617afe42866c5118d8585e0a",
       "bytes": 28949
@@ -484,8 +489,8 @@
     },
     {
       "path": "tests/test_v23_live_failure_recovery.py",
-      "sha256": "ad78aa50a0b01e8c46d35f89a6970b4b111cc119c9350f1e08421018bf35aa73",
-      "bytes": 4787
+      "sha256": "cb330e7360203e012c712048b9c02af22c902b34b51314c934b965007da82a43",
+      "bytes": 5218
     },
     {
       "path": "tests/test_v23_memory_context.py",
