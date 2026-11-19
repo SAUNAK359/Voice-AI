@@ -154,8 +154,8 @@
     },
     {
       "path": "docs/V24_CONTEXT_CONVERGENCE_IMPLEMENTATION.md",
-      "bytes": 13159,
-      "sha256": "ff9dece180de312d4a4e98cdd03df81027b7a687412fc9fecba149bb8c74c07c"
+      "bytes": 15286,
+      "sha256": "0280b1bacf5e45640a6441d166b50c9b0fca7cf8a81268cba48ecbef4c8fa3f7"
     },
     {
       "path": "docs/voice-pipeline.md",
@@ -334,8 +334,8 @@
     },
     {
       "path": "src/rizzler/config.py",
-      "bytes": 4377,
-      "sha256": "8d924645e17449152ef2c21c489e5a918e59baa0c87454154657682996ce4ad4"
+      "bytes": 4380,
+      "sha256": "0827df5ea188873d7c9b27da0eadb9b9eb1e3bc45b5a05984d46d741e429082d"
     },
     {
       "path": "src/rizzler/content_engine.py",
@@ -354,8 +354,8 @@
     },
     {
       "path": "src/rizzler/gemini_native.py",
-      "bytes": 4595,
-      "sha256": "c85d8b594e7a19dee84e8c7a47b7f69a03c2205857e0b3bd2bfb1f62046fc7e5"
+      "bytes": 7639,
+      "sha256": "9e4e4904574e9324cc558a5685664180d622f78c6a11a33a297061963ca2d4b2"
     },
     {
       "path": "src/rizzler/hace_runtime.py",
@@ -366,6 +366,11 @@
       "path": "src/rizzler/metrics.py",
       "bytes": 1647,
       "sha256": "7433eaba3ddc9abc20ca5d6e723e14b6f6c1c39c20c008514e65f3a36fcce507"
+    },
+    {
+      "path": "src/rizzler/providers.py",
+      "bytes": 15233,
+      "sha256": "3dd16d189871f5cf9fc510056a12d01e6f7a7a8266252474249f85495a3c6f75"
     },
     {
       "path": "src/rizzler/research_frontier.py",
@@ -403,9 +408,19 @@
       "sha256": "ff5872f6413ecfa6a3ec0e438ef529f2d566dfef0c399209ec5b4572296cdb24"
     },
     {
+      "path": "src/rizzler/task_planning.py",
+      "bytes": 13488,
+      "sha256": "4eff382892eb9f5b09871ba69a58522634840cd8e2a2922a28f1acccf7d2a51e"
+    },
+    {
       "path": "src/rizzler/v23_flags.py",
       "bytes": 1505,
       "sha256": "d8946bb906c602839ccbb49a26101aafd61287a777353b5c6863364420816673"
+    },
+    {
+      "path": "src/rizzler/web/work.js",
+      "bytes": 6984,
+      "sha256": "13f81ef65e0b76a473e22a7b7b1ac153e1a72263f98fd2e1c91cfe02dcecb24a"
     },
     {
       "path": "src/rizzler/work_agents.py",
@@ -414,13 +429,13 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "sha256": "519975663d190de01e49c234b857727c224b122a468b78d7f492ba2ab65be6de",
-      "bytes": 12231
+      "bytes": 14934,
+      "sha256": "709c22f34ccc501d273e849142c018376015731fde3ca24451d28365c75bbc08"
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 26563,
-      "sha256": "f58b52227b9a541a864d7c2068e05bbeaec594ebad3520bbd320628b3505573a"
+      "bytes": 27715,
+      "sha256": "1e18323072f662bd858f628c53dc95803ff1d96a98a3c75284a1661ec957feb5"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -479,8 +494,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 44582,
-      "sha256": "11e62a65fca93cbd0a8a65c65661c81c54292439af330616c88b508cfc1c693d"
+      "bytes": 45554,
+      "sha256": "4ac0db2af086ce6fd26963c3037ba7d3387999d7a5ad568e434bf93a2d7495be"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -489,8 +504,8 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "bytes": 53254,
-      "sha256": "9cc4e8d99934097c0c06eebf3bcef8890ef875b8e75f275603d873a6ac70e497"
+      "bytes": 60436,
+      "sha256": "4be5a61d6f019be558ca0d2d97dea9b630c0370a42b8dc6ba63083d7c5e1a09c"
     },
     {
       "path": "src/rizzler/work_studio.py",
@@ -499,8 +514,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 28477,
-      "sha256": "fddb5025a11e580a2f5e80bed47b0687288f9d6709dda16b1d85b4cc067b3d41"
+      "bytes": 28303,
+      "sha256": "5b220b000674fc2e0ad5b0bc3e59c57d119638355af21627a5f446d740b4db8e"
     },
     {
       "path": "tests/test_contracts.py",
@@ -634,8 +649,13 @@
     },
     {
       "path": "tests/test_v24_context_convergence.py",
-      "bytes": 17622,
-      "sha256": "03c0b64ccc40f0fe8eb9e34c184431a713e00002a4c8123a5a6965084c4b3422"
+      "bytes": 17805,
+      "sha256": "82c6092ef8038c8cc43fe75cfe59c6e59bbbec88ccafa443773d3ca39ec1aea6"
+    },
+    {
+      "path": "tests/test_v24_intent_and_recovery.py",
+      "bytes": 7904,
+      "sha256": "0d948dab46c7b048aec18af6ce03bceaa76d325346375e34bf07a97b026ea361"
     },
     {
       "path": "web/app.js",
