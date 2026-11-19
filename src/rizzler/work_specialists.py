@@ -377,7 +377,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                             "candidate_passages":audit.get("candidate_passages",0),
                             "claim_verification":audit.get("claim_verification","none"),
                             "retrieval_failure_categories":categories})
-                    raise ValueError("Research has no independently checked quotations")
+                    from .work_research_errors import ResearchQualificationError
+                    raise ResearchQualificationError("missing_verified_quotes")
                 return found
             raise ValueError("Research provider returned malformed evidence")
         text, sources = found
