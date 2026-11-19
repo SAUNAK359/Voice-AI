@@ -231,21 +231,22 @@ async def _fulfill_request(request: dict, *, objective: str, payload: dict,
 
 def _merge_validated(context: dict, *, recipient: str, result: dict,
                      request: dict) -> bool:
-    """Monotonic addition: previous material is never overwritten or discarded."""
+    """Monotonic source addition; never truncate, overwrite or drop evidence."""
     if recipient == "research":
         addition = result["text"].strip()
-        if not addition:
-            return False
-        # A new approved source may be added; existing references are unchanged.
         original = context.get("text") or ""
-        if addition not in original:
-            context["text"] = original + (
-                "\n\n## Additional evidence requested by specialist\n" +
-                addition[:17000])
         original_sources = context.get("sources") or []
-        context["sources"] = list(dict.fromkeys(
-            [*original_sources, *result["sources"]]))[:24]
-        return addition not in original or context["sources"] != original_sources
+        sources = list(dict.fromkeys([*original_sources,*result["sources"]]))
+        if len(sources)>24:
+            raise ValueError("Research evidence cannot be merged without losing source IDs")
+        amended = (original+"\n\n## Additional evidence requested by specialist\n"+addition
+                   if addition and addition not in original else original)
+        if len(amended.encode("utf-8"))>180_000:
+            raise ValueError("Research evidence exceeds source-preserving task budget")
+        if amended==original and sources==original_sources:
+            return False
+        context["text"],context["sources"] = amended,sources
+        return True
     if recipient == "sql_analytics":
         brief = (result.get("analysis_brief") or "").strip()
         if not brief:
@@ -253,15 +254,20 @@ def _merge_validated(context: dict, *, recipient: str, result: dict,
         old = context.get("sql_exploration") or ""
         if brief in old:
             return False
-        context["sql_exploration"] = (old + "\n\n" + brief)[:26000]
-        context["sql_queries"] = (
-            list(context.get("sql_queries") or []) +
-            list(result.get("sql_investigations") or []))[:24]
-        context["text"] = (context.get("text") or "") + (
-            "\n\n## Additional verified SQL investigation\n" + brief[:14000])
+        merged=old+"\n\n"+brief
+        current_text = context.get("text") or ""
+        amended_text=(current_text+
+             "\n\n## Additional verified SQL investigation\n"+brief)
+        queries=list(context.get("sql_queries") or []) + list(
+            result.get("sql_investigations") or [])
+        if (len(merged.encode("utf-8"))>100_000 or
+                len(amended_text.encode("utf-8"))>180_000 or len(queries)>24):
+            raise ValueError("SQL evidence cannot be merged without losing content")
+        context["sql_exploration"]=merged
+        context["sql_queries"]=queries
+        context["text"]=amended_text
         return True
     return False
-
 
 
 def _baseline_digest(payload: dict, context: dict) -> str:
@@ -336,12 +342,11 @@ def _delta_from_verified_result(recipient: str, result: dict) -> dict:
     """Persist useful typed results, not API traces or private model prompts."""
     if recipient == "research":
         return {"recipient":"research","result":{
-            "text":result["text"][:17500],
-            "sources":result["sources"][:24]}}
+            "text":result["text"],"sources":result["sources"]}}
     if recipient == "sql_analytics":
         return {"recipient":"sql_analytics","result":{
-            "analysis_brief":result["analysis_brief"][:20000],
-            "sql_investigations":(result.get("sql_investigations") or [])[:16]}}
+            "analysis_brief":result["analysis_brief"],
+            "sql_investigations":result.get("sql_investigations") or []}}
     raise ValueError("No evidence-producing specialist for context delta")
 
 
