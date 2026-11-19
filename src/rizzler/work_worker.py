@@ -309,45 +309,49 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                         valid, rejected=salvage_verified_claims(proposed,spans)
                         known={c["id"] for c in claims}
                         claims.extend(c for c in valid if c["id"] not in known)
-                        # Fail closed on quote mismatches, but retain other
-                        # quotes that already passed the original validator.
                         if claims:
                             audit["claim_verification"]="verbatim_quote_checked"
-                            break
-                        audit["claim_verification"]="no_accepted_source_quotes"
+                            # A successful quote match does not necessarily
+                            # answer the user's original research question.
+                            # Feed the model-led alignment verdict back into
+                            # the next *bounded* source-claim selection pass.
+                            try:
+                                focused_claims,focus_audit=await focus_claims(
+                                    objective,claims,client=client,
+                                    model=cfg.gemini_model)
+                            except Exception as exc:
+                                focus_audit={
+                                    "status":"unavailable_"+type(exc).__name__,
+                                    "missing_aspects":[]}
+                            if focused_claims:
+                                break
+                        else:
+                            audit["claim_verification"]="no_accepted_source_quotes"
                     except ValueError:
                         audit["claim_verification"]="invalid_model_claim_contract"
                     except Exception as exc:
                         audit["claim_verification"]="unavailable_"+type(exc).__name__
                         break
+                    missing=focus_audit.get("missing_aspects") or []
                     correction=(
-                        "\nThe previous claims failed source-bound validation. "
-                        "Produce a NEW short set of directly relevant claims. "
-                        "Use only the exact IDs and literal 10–240 character "
-                        "quotes from the supplied evidence. No new sources "
-                        "or unsupported statements. If actual user-requested "
-                        "numbers are absent, do not fabricate them.")
+                        "\nPrevious claims were either invalid or did not "
+                        "directly answer the user's ORIGINAL question. "
+                        "Return new, specific, directly relevant observations "
+                        "supported by an EXACT passage ID and a verbatim "
+                        "10–240 character quotation from the supplied "
+                        "evidence; prioritize requested data, units, periods "
+                        "and comparisons. Never fabricate missing evidence. "
+                        "\nStill missing from original request: " +
+                        json.dumps(missing,ensure_ascii=False)[:900])
                 audit["claim_verification_attempts"]=verification_attempt+1
                 audit["claim_rejection_categories"]=rejected
                 audit["quote_verified_claims"]=len(claims)
-                if claims:
-                    try:
-                        focused_claims,focus_audit=await focus_claims(
-                            objective,claims,client=client,model=cfg.gemini_model)
-                    except Exception as exc:
-                        focus_audit={
-                            "status":"unavailable_"+type(exc).__name__,
-                            "missing_aspects":[]}
-                    # Only publish claims judged to answer the task, never
-                    # substitute tangential (even perfectly quoted) content.
-                    if focused_claims:
-                        # A provider-attributed general synthesis cannot
-                        # override the independently accepted, task-aligned
-                        # observations. Preserve auxiliary research only as
-                        # explicitly labeled background when verified mode
-                        # is not enabled.
-                        sections=["## Directly relevant verified observations",
-                                  claim_summary(focused_claims)]
+                if focused_claims:
+                    # Do not publish the general provider-attributed answer as
+                    # verified. Only the independently retrieved, exact-quote
+                    # supported, objective-aligned subset is authoritative.
+                    sections=["## Directly relevant verified observations",
+                              claim_summary(focused_claims)]
             else:
                 audit["claim_verification"]="no_independently_retrieved_evidence"
         audit["objective_alignment"]=focus_audit
