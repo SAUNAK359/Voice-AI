@@ -87,5 +87,69 @@ class BoundedReplanningTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(work.await_count,3)
 
 
+
+
+class UserClarificationTests(unittest.TestCase):
+    def test_owner_can_resume_same_job_after_answering(self):
+        from rizzler.work_store import Conflict, Missing
+        with tempfile.TemporaryDirectory() as root:
+            store=WorkStore(root)
+            job=store.submit("owner1","Explain the trade balance and its period",
+                ["md"],"clarification001",[])
+            claim=store.claim("worker",lease_seconds=100)
+            missing=[{"recipient":"user",
+                "question":"Which reporting year should the results cover?",
+                "reason":"The report cannot compare trends without a period",
+                "blocking":True}]
+            store.pause_for_input(claim["id"],"worker",claim["fence"],missing)
+            self.assertEqual(store.get("owner1",job["id"])["status"],"awaiting_input")
+            questions=store.questions("owner1",job["id"])
+            self.assertEqual(len(questions),1)
+            with self.assertRaises(Missing):
+                store.questions("other_owner",job["id"])
+            with self.assertRaises((Missing,Conflict)):
+                store.answer_questions("other_owner",job["id"],[
+                    {"id":questions[0]["id"],"answer":"2025"}])
+            updated=store.answer_questions("owner1",job["id"],[
+                {"id":questions[0]["id"],"answer":"Calendar year 2025"}])
+            self.assertEqual(updated["status"],"queued")
+            self.assertEqual(store.questions(
+                "owner1",job["id"])[0]["status"],"answered")
+            again=store.claim("worker2",lease_seconds=100)
+            self.assertEqual(again["id"],job["id"])
+
+    def test_cancel_awaiting_input_is_terminal(self):
+        with tempfile.TemporaryDirectory() as root:
+            store=WorkStore(root)
+            job=store.submit("owner1","Create a sourced Word report",
+                ["docx"],"clarification002",[])
+            claim=store.claim("worker",lease_seconds=100)
+            store.pause_for_input(claim["id"],"worker",claim["fence"],[
+                {"recipient":"user",
+                 "question":"What date range should the analysis use?",
+                 "reason":"The request has no specified reporting window",
+                 "blocking":True}])
+            self.assertEqual(store.cancel(
+                "owner1",job["id"])["status"],"cancelled")
+
+class WorkerClarificationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_worker_does_not_fail_when_user_input_is_needed(self):
+        from rizzler.work_worker import WorkWorker
+        from rizzler.work_context_intelligence import UserInputRequired
+        question={"recipient":"user",
+                  "question":"Which currency should the financial results use?",
+                  "reason":"The underlying data has no defined display currency",
+                  "blocking":True}
+        with tempfile.TemporaryDirectory() as root:
+            store=WorkStore(root)
+            job=store.submit("owner","Create a financial report",
+                             ["md"],"clarification003",[])
+            with patch("rizzler.work_specialists.execute_specialists",
+                 new=AsyncMock(side_effect=UserInputRequired([question]))):
+                self.assertTrue(await WorkWorker(store).once())
+            self.assertEqual(store.get("owner",job["id"])["status"],
+                             "awaiting_input")
+            self.assertEqual(len(store.questions("owner",job["id"])),1)
+
 if __name__=="__main__":
     unittest.main()
