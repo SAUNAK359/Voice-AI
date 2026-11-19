@@ -74,10 +74,12 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                     if not verify_checkpoint(checkpoint / receipt.name, receipt):
                         raise ValueError("Specialist artifact disappeared before checkpoint commit")
                 store.agent_complete(jid, worker_id, fence, spec.name, result, qa)
-            except (asyncio.CancelledError, Exception):
-                # Preserve the first error category without exposing private model output.
+            except (asyncio.CancelledError, Exception) as exc:
+                from .work_diagnostics import failure_code, failure_record
                 try:
-                    store.agent_error(jid, worker_id, fence, spec.name)
+                    store.agent_error(jid,worker_id,fence,spec.name,
+                                      code=failure_code(exc),
+                                      diagnosis=failure_record(exc,spec.name))
                 except Exception:
                     pass
                 raise
