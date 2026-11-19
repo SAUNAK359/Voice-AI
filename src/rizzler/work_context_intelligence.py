@@ -347,7 +347,8 @@ async def converge_context(context: dict, *, payload: dict,
                            fence: int, researcher: Callable,
                            focus: tuple[str, ...],
                            max_waves: int = MAX_WAVES,
-                           client=None) -> dict:
+                           client=None,
+                           forced_requests: list[dict] | None = None) -> dict:
     """Bounded reconsideration and backdelegation before each output wave.
 
     Model: what is missing / who needs it / when ready.
@@ -356,6 +357,19 @@ async def converge_context(context: dict, *, payload: dict,
     """
     if not 1 <= max_waves <= MAX_WAVES:
         raise ValueError("Invalid convergence budget")
+    from .work_feedback import validate_specialist_feedback
+    if forced_requests:
+        # The original downstream agent owns the request, but the same
+        # permission and schema policy applies to feedback and re-delegation.
+        validate_specialist_feedback(
+            {"specialist":focus[0] if focus else "powerpoint",
+             "readiness":"needs_evidence",
+             "requests":forced_requests[:2],
+             "assessment":"Rendered artifact requires more independently verified source evidence."},
+            specialist=focus[0] if focus else "powerpoint",
+            permitted=frozenset(s.name for s in __import__(
+                "rizzler.work_agents",fromlist=["plan"]).plan(payload)))
+    forced_requests = forced_requests or []
     from .config import Settings
     from .work_agents import plan as approved_plan
     cfg = Settings.from_env()
@@ -393,7 +407,7 @@ async def converge_context(context: dict, *, payload: dict,
             # outstanding blocking requirement with a premature 'ready'.
             # Preserve the specialist's specific questions for backdelegation.
             all_requests = list(verdict["requests"])
-            for request in downstream:
+            for request in [*downstream, *forced_requests]:
                 if not any(r["recipient"] == request["recipient"] and
                            r["question"].casefold().strip() ==
                            request["question"].casefold().strip()
@@ -423,6 +437,7 @@ async def converge_context(context: dict, *, payload: dict,
             if verdict["decision"] == "ready":
                 context["context_package"] = package
                 context["context_status"] = "ready"
+                forced_requests = []
                 context["_context_requests_done"] = seen
                 _checkpoint_context(context,store=store,jid=jid,worker_id=worker_id,
                                     fence=fence,revision=package["revision"],
@@ -467,6 +482,8 @@ async def converge_context(context: dict, *, payload: dict,
                          "recipient": request["recipient"],
                          "request": marker[1][:16],
                          "error_type": type(exc).__name__})
+            if progress:
+                forced_requests = []
             if not progress:
                 break
         context["context_status"] = "blocked"
