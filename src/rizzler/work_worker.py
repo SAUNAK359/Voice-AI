@@ -15,6 +15,7 @@ from pathlib import Path
 from .artifacts import verify_artifact
 from .contracts import FILE_FORMATS
 from .work_store import WorkStore, StaleLease
+from .work_context_intelligence import UserInputRequired
 from .work_skills import SKILLS, FORMATS, read_dataset, analyze, render_one
 
 
@@ -465,9 +466,7 @@ class WorkWorker:
                 self.store, claim, self.identity, self.composer, self.researcher)
         except (StaleLease, InterruptedError):
             self.store.fail(jid, self.identity, fence, "cancelled_or_stale")
-        except __import__(
-                "rizzler.work_context_intelligence",
-                fromlist=["UserInputRequired"]).UserInputRequired as exc:
+        except UserInputRequired as exc:
             # Persistent clarification is a nonterminal state. The next
             # worker resumes the same authorized job after the owner answers.
             self.store.pause_for_input(jid,self.identity,fence,exc.requests)
