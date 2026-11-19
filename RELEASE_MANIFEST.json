@@ -363,6 +363,11 @@
       "bytes": 14484
     },
     {
+      "path": "src/rizzler/research_recovery.py",
+      "sha256": "a301f732b01c11ce69f8f185b2322f1f464d595f466597eabc40674113cc9e4c",
+      "bytes": 8036
+    },
+    {
       "path": "src/rizzler/security.py",
       "bytes": 1776,
       "sha256": "555ef82e9047c9a8c57c3bc22b89386b1a2684275bdc5c1a0ac5764f9ef164ba"
@@ -449,8 +454,8 @@
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
-      "sha256": "e9178f7e729dc250d883542492976786d07f04a62cacac07875d67caef24eabb",
-      "bytes": 20496
+      "sha256": "15254fef65f379e7d1e3728bf222f82a3f67ac2ce225188155c07956c97cc060",
+      "bytes": 20609
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -464,8 +469,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "ad1773b270d9265ea75092ebb8588757dda76e117d1831049f07080c19ce16d2",
-      "bytes": 25224
+      "sha256": "04ca3b4674c4ffbe8a11f51b12db253f9c86a84a606baf26306d6b6e67aae447",
+      "bytes": 27366
     },
     {
       "path": "tests/test_contracts.py",
@@ -576,6 +581,11 @@
       "path": "tests/test_v23_research_intelligence.py",
       "sha256": "924f367070fac0eb0acb41b77524cd8f9621530b5eb0507fec8f73d4a5f0d322",
       "bytes": 4950
+    },
+    {
+      "path": "tests/test_v23_research_recovery.py",
+      "sha256": "41d150bcd8242c4c18f9b8870cfef090581cfd830babb2474a982766a6d5fd26",
+      "bytes": 1697
     },
     {
       "path": "tests/test_v23_source_gateway.py",
