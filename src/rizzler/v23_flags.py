@@ -22,12 +22,14 @@ FEATURES=frozenset({
     "RIZZLER_EXCEL_STUDIO",
     "RIZZLER_SQL_EXPLORATION",
     "RIZZLER_GOAL_CONTRACT",
-    "RIZZLER_CONTEXT_CONVERGENCE",
 })
 
 
+EXPERIMENTAL_FEATURES = frozenset({"RIZZLER_CONTEXT_CONVERGENCE"})
+
+
 def enabled(key: str) -> bool:
-    if key not in FEATURES:
+    if key not in (FEATURES | EXPERIMENTAL_FEATURES):
         raise ValueError("Unknown V23 capability")
     profile=environ.get("RIZZLER_V23_MODE","off").lower()
     if profile not in ("off","full"):
@@ -36,7 +38,7 @@ def enabled(key: str) -> bool:
     if override is None:
         # V24 convergence changes source-acquisition behavior and must be
         # explicitly qualified before rollout even under the V23 full profile.
-        if key == "RIZZLER_CONTEXT_CONVERGENCE":
+        if key in EXPERIMENTAL_FEATURES:
             return False
         return profile=="full"
     flag=override.strip().lower()
