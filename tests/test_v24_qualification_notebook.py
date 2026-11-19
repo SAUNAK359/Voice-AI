@@ -46,8 +46,9 @@ class V24LiveQualificationNotebookTests(unittest.TestCase):
         ):
             with self.subTest(filename=filename):
                 obj=json.loads((ROOT/"notebooks"/filename).read_text(encoding="utf-8"))
-                text="\\n".join("".join(cell["source"]) for cell in obj["cells"])
-                if cell["cell_type"]=="code")
+                text="\n".join(
+                    "".join(cell["source"]) for cell in obj["cells"]
+                    if cell["cell_type"]=="code")
                 self.assertIn("await WorkWorker(store).once()",text)
                 self.assertNotIn("asyncio.run(",text)
                 self.assertIn("diagnostics",text)
