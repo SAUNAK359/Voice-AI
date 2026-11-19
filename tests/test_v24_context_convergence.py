@@ -5,6 +5,7 @@ import asyncio
 from copy import deepcopy
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -12,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from rizzler.work_context_intelligence import (
     validate_context_review, snapshot_context, context_brief,
-    converge_context, _merge_validated)
+    converge_context, _merge_validated, restore_context, _baseline_digest)
 from rizzler.work_ir import compile_ir
 from rizzler.work_repair import (
     storyboard_diagnostics, apply_storyboard_patch)
@@ -197,11 +198,20 @@ class ActualBackdelegationTests(unittest.IsolatedAsyncioTestCase):
              "assessment":"The original and newly retrieved sources support the result."},
         ]
         class FakeStore:
-            def __init__(self): self.events=[]
+            def __init__(self):
+                self.events=[]
+                self.snapshot=None
             def publish_cognition(self, *args):
                 self.events.append(args)
                 return len(self.events)
+            def context_checkpoint(self, owner, jid, base):
+                return self.snapshot if self.snapshot and self.base==base else None
+            def save_context_checkpoint(self, jid, worker, fence, base, snapshot):
+                self.base=base
+                self.snapshot=snapshot
+                return snapshot["revision"]
         store=FakeStore()
+        restore_context(context,payload=payload,store=store,owner="owner",jid="job")
         async def researcher(query):
             self.assertIn("New evidence requested",query)
             return {"text":"An official report lists 125 units for 2025, "
@@ -232,6 +242,60 @@ class ActualBackdelegationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(store.events),2)
         self.assertNotEqual(store.events[0][-1]["revision"],
                             store.events[1][-1]["revision"])
+
+
+
+class DurableContextStoreTests(unittest.TestCase):
+    def test_recover_only_against_same_authorized_source_baseline(self):
+        from rizzler.work_store import WorkStore
+        with tempfile.TemporaryDirectory() as root:
+            store=WorkStore(root)
+            task={"objective":"Summarize observations",
+                  "deliverables":["md"],"uploads":[]}
+            job=store.submit("owner1",task["objective"],
+                             task["deliverables"],"durabletest001",[])
+            claim=store.claim("worker",lease_seconds=100)
+            self.assertEqual(job["id"],claim["id"])
+            original={"text":"Research summary about 2025 results.",
+                      "sources":["https://example.org/a"],
+                      "summary":None,"sql_exploration":None}
+            base=_baseline_digest(task,original)
+            delta={"recipient":"research","result":{
+                "text":"Subsequent source shows 125 units in 2025.",
+                "sources":["https://example.org/b"]}}
+            revision="a"*64
+            saved={"schema_version":1,"revision":revision,"status":"ready",
+                   "deltas":[delta],"seen":[["research","b"*64]]}
+            store.save_context_checkpoint(
+                claim["id"],"worker",claim["fence"],base,saved)
+            self.assertIsNone(store.context_checkpoint(
+                "owner1",claim["id"],"f"*64))
+            self.assertEqual(store.context_checkpoint(
+                "owner1",claim["id"],base),saved)
+            with self.assertRaises(Exception):
+                store.context_checkpoint("other_owner",claim["id"],base)
+            recovered=dict(original)
+            self.assertTrue(restore_context(
+                recovered,payload=task,store=store,
+                owner="owner1",jid=claim["id"]))
+            self.assertIn("125 units",recovered["text"])
+            self.assertEqual(recovered["sources"],[
+                "https://example.org/a","https://example.org/b"])
+            self.assertEqual(recovered["_context_requests_done"],
+                             {("research","b"*64)})
+
+    def test_reopen_only_authorized_specialists(self):
+        from rizzler.work_store import WorkStore
+        with tempfile.TemporaryDirectory() as root:
+            store=WorkStore(root)
+            job=store.submit("owner2","Create a concise markdown report",
+                             ["md"],"reopen-test001",[])
+            claim=store.claim("worker",lease_seconds=100)
+            self.assertEqual(store.reopen_agents(
+                claim["id"],"worker",claim["fence"],["orchestrator"]),[])
+            with self.assertRaises(ValueError):
+                store.reopen_agents(claim["id"],"worker",claim["fence"],
+                                    ["sql_analytics"])
 
 
 class NativeGeminiCapabilityTests(unittest.TestCase):
