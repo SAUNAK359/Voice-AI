@@ -267,7 +267,8 @@ async def converge_context(context: dict, *, payload: dict,
                            store, owner: str, jid: str, worker_id: str,
                            fence: int, researcher: Callable,
                            focus: tuple[str, ...],
-                           max_waves: int = MAX_WAVES) -> dict:
+                           max_waves: int = MAX_WAVES,
+                           client=None) -> dict:
     """Bounded reconsideration and backdelegation before each output wave.
 
     Model: what is missing / who needs it / when ready.
@@ -276,7 +277,6 @@ async def converge_context(context: dict, *, payload: dict,
     """
     if not 1 <= max_waves <= MAX_WAVES:
         raise ValueError("Invalid convergence budget")
-    from google import genai
     from .config import Settings
     from .work_agents import plan as approved_plan
     cfg = Settings.from_env()
@@ -286,7 +286,10 @@ async def converge_context(context: dict, *, payload: dict,
     # Does not allow an artifact model to grant itself a new source capability.
     permitted = allowed.intersection(RECIPIENTS)
     seen = set(context.get("_context_requests_done", set()))
-    client = genai.Client(api_key=cfg.gemini_api_key)
+    owned_client = client is None
+    if owned_client:
+        from google import genai
+        client = genai.Client(api_key=cfg.gemini_api_key)
     history = []
     try:
         for wave in range(max_waves + 1):
@@ -358,7 +361,8 @@ async def converge_context(context: dict, *, payload: dict,
                 "Required information remains unavailable; consult context gap events")
         raise ContextUnresolved("Context convergence made no verified progress")
     finally:
-        await client.aio.aclose()
+        if owned_client:
+            await client.aio.aclose()
 
 
 def context_brief(context: dict, *, max_chars: int = 2200) -> str:
