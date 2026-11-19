@@ -263,7 +263,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 context, payload=payload, store=store, owner=owner,
                 jid=jid, worker_id=worker_id, fence=fence,
                 researcher=researcher,
-                focus=tuple(sorted(renderers.intersection(planned)))
+                focus=tuple(sorted(renderers.intersection(planned))))
             context_reviewed = True
         await stage_group(wave)
 
