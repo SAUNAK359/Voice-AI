@@ -273,6 +273,36 @@
       "sha256": "116f567c38419d92dbe3899ecfab08c23c693c579c6498d1a3db34f5493a0b4f"
     },
     {
+      "path": "src/rizzler/agent_skills/excel/SKILL.md",
+      "sha256": "4ae6d2ed1e3290746f625b96d5fa26bc6418e6d698c7eb2ab4696caedb4b71ad",
+      "bytes": 1754
+    },
+    {
+      "path": "src/rizzler/agent_skills/pdf_visual/SKILL.md",
+      "sha256": "893b28cdff52631adcf6dca2f272bf8d5f976b1c808db0b37405b328fd371ca6",
+      "bytes": 1224
+    },
+    {
+      "path": "src/rizzler/agent_skills/powerpoint/SKILL.md",
+      "sha256": "1dfc5e4f588b47627f7786fbf94e5978568839fb13ba63aa54887de6ccaab373",
+      "bytes": 1434
+    },
+    {
+      "path": "src/rizzler/agent_skills/research/SKILL.md",
+      "sha256": "f0d3c0ae80ecb3be16fde60b0a2b7055c68c4b5dbf770fab08b04577d44a5839",
+      "bytes": 1967
+    },
+    {
+      "path": "src/rizzler/agent_skills/sql_analytics/SKILL.md",
+      "sha256": "5383131cb7b83df8c3a7c0ddc0885cd567fdb5619b85f59938b65aabcc341c2e",
+      "bytes": 3355
+    },
+    {
+      "path": "src/rizzler/agent_skills/word/SKILL.md",
+      "sha256": "636cf4ab777705c18ebd71eb9b0bb48423fda2a3972c291d4d532c49119c8066",
+      "bytes": 1944
+    },
+    {
       "path": "src/rizzler/artifacts.py",
       "bytes": 2417,
       "sha256": "dae3350a0cc47beb3fce019de5ce22d9f776834628f014ab8955651dfbd129b9"
@@ -354,8 +384,8 @@
     },
     {
       "path": "src/rizzler/v23_flags.py",
-      "bytes": 1252,
-      "sha256": "52716162d0d4656cc67453791dfc25200e0ed56db5ae0c8e5453f9b5ea6998b4"
+      "bytes": 1312,
+      "sha256": "a676da53a779c87968af725dea7e156ec815f18fec78b221b9d08fa7bb528db2"
     },
     {
       "path": "src/rizzler/work_agents.py",
@@ -384,8 +414,8 @@
     },
     {
       "path": "src/rizzler/work_excel_studio.py",
-      "bytes": 11649,
-      "sha256": "e96c85db85eda3365b2001993b24e6a30aef67a0bc7b75800abac95471a8b86e"
+      "bytes": 14179,
+      "sha256": "8bc7fa57163d614bc57463c84c66a8711bd0e426d8f7313958b5bcb6847c9f9e"
     },
     {
       "path": "src/rizzler/work_formula.py",
@@ -396,6 +426,11 @@
       "path": "src/rizzler/work_memory_context.py",
       "bytes": 3373,
       "sha256": "b0145722c1c26bc193724b467a13e6c976373ef78faa2a8e65367bd90ecfa207"
+    },
+    {
+      "path": "src/rizzler/work_outcome.py",
+      "sha256": "0f264f7d4e82873639faa3bfd01da2bc8b44f6c60cb518231d565b89a396690b",
+      "bytes": 10015
     },
     {
       "path": "src/rizzler/work_quality.py",
@@ -409,8 +444,13 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "345c4978d9eb7de8a0a44805cf5dc27b5ee37bcb62a2967b012bca14b8eecdce",
-      "bytes": 30079
+      "sha256": "09ec24713b7d58fe967082e387fd62b49d2469696427f37270e6dd84dacb78e5",
+      "bytes": 34671
+    },
+    {
+      "path": "src/rizzler/work_sql_exploration.py",
+      "sha256": "8191d7a8ec1ff338791a12cb329b425b1401a3af2c320c480f27b2009e0c059b",
+      "bytes": 20311
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -523,6 +563,11 @@
       "sha256": "7a5d983687c80e6132e638e7d1ef7d13ac95d0dcbe8e24fa00b376e646d27341"
     },
     {
+      "path": "tests/test_v23_outcome_contract.py",
+      "sha256": "7374c442834b63d5da18c85fb72238008a2917da2705e5790d834c1b7c9b56d1",
+      "bytes": 3502
+    },
+    {
       "path": "tests/test_v23_pr54_recovery.py",
       "sha256": "55212d569f468b35df7a803864d0d910cc2541cbc0ecf9b9514efea65b07cc2b",
       "bytes": 3768
@@ -536,6 +581,11 @@
       "path": "tests/test_v23_source_gateway.py",
       "bytes": 2016,
       "sha256": "9a7853cd49a2e3a66d2523457f1b83c2503e98ffb89cd19f17a7e88e2d2f8b2f"
+    },
+    {
+      "path": "tests/test_v23_sql_exploration.py",
+      "sha256": "6c35bac09c0b28ee201b57133763c955caf6c5f7cf5d8cd63004072f8e949835",
+      "bytes": 5817
     },
     {
       "path": "tests/test_v23_work_studio.py",
