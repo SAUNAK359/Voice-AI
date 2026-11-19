@@ -119,7 +119,7 @@ def _studies(wb,plan):
     studies=[]
     for index,a in enumerate(plan["analyses"],1):
         category,measure=a["category"],a["measure"]
-        if category not in heads or measure not in heads:
+        if (category is not None and category not in heads) or measure not in heads:
             raise ValueError("Missing source column")
         ci=heads.index(category)+1 if category is not None else None
         mi=heads.index(measure)+1
