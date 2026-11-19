@@ -358,17 +358,20 @@ async def converge_context(context: dict, *, payload: dict,
     if not 1 <= max_waves <= MAX_WAVES:
         raise ValueError("Invalid convergence budget")
     from .work_feedback import validate_specialist_feedback
+    from .work_agents import plan as approved_plan
     if forced_requests:
-        # The original downstream agent owns the request, but the same
-        # permission and schema policy applies to feedback and re-delegation.
-        validate_specialist_feedback(
-            {"specialist":focus[0] if focus else "powerpoint",
-             "readiness":"needs_evidence",
-             "requests":forced_requests[:2],
-             "assessment":"Rendered artifact requires more independently verified source evidence."},
-            specialist=focus[0] if focus else "powerpoint",
-            permitted=frozenset(s.name for s in __import__(
-                "rizzler.work_agents",fromlist=["plan"]).plan(payload)))
+        if (not isinstance(forced_requests,list) or len(forced_requests)>6):
+            raise ValueError("Too many downstream evidence requests")
+        specialist=focus[0] if focus else "powerpoint"
+        allowed=frozenset(s.name for s in approved_plan(payload))
+        for request in forced_requests:
+            # Revalidate the entire request list, including later siblings.
+            validate_specialist_feedback(
+                {"specialist":specialist,
+                 "readiness":"needs_evidence",
+                 "requests":[request],
+                 "assessment":"Rendered artifact requires further independent source evidence."},
+                specialist=specialist,permitted=allowed)
     forced_requests = forced_requests or []
     from .config import Settings
     from .work_agents import plan as approved_plan
