@@ -2,7 +2,7 @@
 
 A full research/artifact profile enables experimental features coherently,
 but all model/tool permissions remain governed by the WorkStore and registry.
-Default mode is the previously validated baseline.
+Default mode is the complete supervised Work profile; explicit overrides can disable individual features.
 """
 from __future__ import annotations
 
@@ -34,15 +34,11 @@ EXPERIMENTAL_FEATURES = frozenset({
 def enabled(key: str) -> bool:
     if key not in (FEATURES | EXPERIMENTAL_FEATURES):
         raise ValueError("Unknown V23 capability")
-    profile=environ.get("RIZZLER_V23_MODE","off").lower()
+    profile=environ.get("RIZZLER_V23_MODE","full").lower()
     if profile not in ("off","full"):
         raise ValueError("RIZZLER_V23_MODE must be off or full")
     override=environ.get(key)
     if override is None:
-        # V24 convergence changes source-acquisition behavior and must be
-        # explicitly qualified before rollout even under the V23 full profile.
-        if key in EXPERIMENTAL_FEATURES:
-            return False
         return profile=="full"
     flag=override.strip().lower()
     if flag not in ("1","true","yes","0","false","no"):
