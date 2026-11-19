@@ -212,6 +212,19 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
             audit["resolved_publishers"]=len({
                 urlsplit(doc["source_url"]).hostname for doc in extracted})
             audit["publisher_validation"]="resolved_https_source_bytes"
+            # The source gateway, not Gemini, establishes the final URL after
+            # redirects. Keep original grounding URLs separately and publish
+            # true resolved publisher hosts for every acquired document.
+            verified_by_id={doc["source_id"]:doc["source_url"] for doc in extracted}
+            for rec in records:
+                resolved=verified_by_id.get(rec["id"])
+                if resolved:
+                    rec["provider_url"]=rec["url"]
+                    rec["url"]=resolved
+                    rec["publisher"]=urlsplit(resolved).hostname
+                    rec["destination_verified"]=True
+            urls=[rec["url"] for rec in records]
+            audit["publishers"]=len({rec["publisher"] for rec in records})
             # The final synthesis is grounded in actual structured page text,
             # not a made-up page citation or a vague provider search snippet.
             if extracted:
