@@ -294,6 +294,19 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         if not context_restored and not ({"research","sql_analytics"} & set(wave)):
             from .work_context_intelligence import restore_context
             restore_context(context,payload=payload,store=store,owner=owner,jid=jid)
+            answers = [item for item in store.questions(owner,jid)
+                       if item["status"] == "answered"]
+            context["user_answers"] = [
+                {"question":item["question"],"answer":item["answer"]}
+                for item in answers]
+            if answers:
+                formatted = "\n".join(
+                    "Q: "+item["question"]+"\nA: "+item["answer"]
+                    for item in answers)
+                context["text"] = (
+                    context.get("text") or "# User-provided task clarifications") + (
+                    "\n\n## Clarifications supplied by the task owner\n" +
+                    formatted)
             context_restored = True
         if "artifact_ir" not in context and (renderers.intersection(wave) or "quality" in wave):
             prepare_artifact_ir()
@@ -401,6 +414,11 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
+        if context.get("user_answers"):
+            objective += (
+                "\n\nExplicit task-owner clarifications (not independently "
+                "verified external evidence; preserve the original scope):\n" +
+                json.dumps(context["user_answers"],ensure_ascii=False)[:12000])
         if context.get("goal_brief"):
             objective += "\n\n" + context["goal_brief"]
         # Memory selection may run concurrently with the expert pool; it
