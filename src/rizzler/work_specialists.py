@@ -39,7 +39,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     checkpoint = store.root / "checkpoints" / owner / jid
     checkpoint.mkdir(parents=True, exist_ok=True, mode=0o700)
     context = {"objective": payload["objective"], "sources": [], "text": None,
-               "summary": None, "sql_exploration": None,
+               "summary": None, "sql_exploration": None, "sql_queries": [],
                "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
@@ -89,6 +89,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
         elif spec.name == "sql_analytics":
             context["summary"] = result["summary"]
             context["sql_exploration"] = result.get("analysis_brief")
+            context["sql_queries"] = result.get("sql_investigations") or []
         elif spec.name == "orchestrator":
             context["text"] = result["text"]
         elif spec.name == "quality":
@@ -507,7 +508,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 if excel_blueprint is not None:
                     from .work_excel_studio import apply_workbook_plan
                     await asyncio.to_thread(
-                        apply_workbook_plan,working,excel_blueprint)
+                        apply_workbook_plan,working,excel_blueprint,
+                        sql_investigations=context.get("sql_queries") or None)
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
