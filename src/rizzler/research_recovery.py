@@ -39,18 +39,19 @@ async def recover_missing_research(objective: str, missing: list[str], *,
     Output is a bounded, independent evidence bundle. The caller must
     reconcile this result with its original task contract before delivery.
     """
-    from google.genai import types
-    from .cognitive_provider import generate_with_recovery
-    from .research_evidence import source_records
-    from .research_intelligence import (
-        rank_sources, prioritize_evidence, salvage_verified_claims, focus_claims)
-    from .evidence_graph import evidence_index, claim_summary
-    from .source_gateway import fetch_source
     gaps=bounded_gaps(missing,limit=max_searches)
     if not gaps:
         return {"status":"no_specific_missing_requirements",
                 "claims":[],"documents":[],"records":[],"fetch_failures":[],
                 "attempts":0,"focus":None}
+    # No live provider SDK dependency is needed for a zero-action fallback.
+    from google.genai import types
+    from .cognitive_provider import generate_with_recovery
+    from .research_evidence import source_records
+    from .research_intelligence import (
+        rank_sources, prioritize_evidence, salvage_verified_claims, focus_claims)
+    from .evidence_graph import evidence_index
+    from .source_gateway import fetch_source
     records=[]
     seen=set(previously_seen)
     failures=[]
