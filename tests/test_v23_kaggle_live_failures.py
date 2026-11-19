@@ -37,6 +37,37 @@ class KaggleLiveFailureTests(unittest.TestCase):
         assert not _usable_source_document({"blocks": [], "tables": "bad"})
 
 
+    def test_excel_preserves_blank_executive_heading_without_accepting_missing_body(self):
+        try:
+            import openpyxl
+        except ImportError:
+            self.skipTest("openpyxl unavailable in minimal CI")
+        from openpyxl import load_workbook
+        from rizzler.work_skills import render_one
+        from rizzler.work_ir import compile_ir
+        from rizzler.work_quality import inspect_artifact
+        with tempfile.TemporaryDirectory(prefix="rizzler-ir-") as root:
+            original=("# Executive report\\n\\n## Methodology and limitations\\n"
+                      "The user-supplied data is the sole basis of these calculations.\\n"
+                      "## Independent analysis\\n"
+                      "Numbers are derived from the checked source rows.")
+            # Include a deliberately empty Executive report body followed by
+            # actual analytical sections, the format in a real Gemini output.
+            ir=compile_ir("Synthetic INR data analysis",original,[])
+            file=Path(root)/"report.xlsx"
+            render_one("xlsx",file,ir.title,ir.content,
+                       (["region","revenue_inr"],[["East","12"],["West","18"]]),[])
+            report=inspect_artifact(file,"xlsx",dataset_rows=2,
+                                    artifact_ir=ir)
+            self.assertTrue(report["passed"])
+            wb=load_workbook(file)
+            # Missing substantive prose must still fail closed.
+            wb["Summary"]["B4"]=None
+            wb.save(file);wb.close()
+            with self.assertRaisesRegex(ValueError,"Artifact IR"):
+                inspect_artifact(file,"xlsx",dataset_rows=2,
+                                 artifact_ir=ir)
+
     def test_analytical_excel_formulas_are_allowed_only_with_validated_studio_plan(self):
         tmp_path=Path(tempfile.mkdtemp(prefix="rizzler-test-"))
         self.addCleanup(shutil.rmtree,tmp_path)
