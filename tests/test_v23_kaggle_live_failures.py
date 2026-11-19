@@ -130,12 +130,17 @@ class KaggleLiveFailureTests(unittest.TestCase):
         calls=[]
         async def generated(client,**kwargs):
             calls.append(kwargs["contents"])
-            paragraphs=weak if len(calls)==1 else strong
+            if len(calls) == 2:
+                # The modern editor requests targeted supplements, not a
+                # second replacement report. Preserve valid original text.
+                return SimpleNamespace(text=json.dumps({
+                    "expansions":[{"index":i,"supplement":strong}
+                                  for i in range(len(headings))]}))
             return SimpleNamespace(text=json.dumps({
                 "schema_version":1,"medium":"docx",
                 "sections":[
                     {"heading":f"Technical section {i+1}",
-                     "body":paragraphs,
+                     "body":weak,
                      "section_ids":[i],
                      "source_urls":[]} for i in range(len(headings))]
             }))
@@ -145,6 +150,7 @@ class KaggleLiveFailureTests(unittest.TestCase):
                 "Prepare a careful technical report",ir,medium="docx",
                 model="test-model",api_key="fake",client=client))
         assert len(calls)==2
-        assert "previous draft" in calls[-1].lower()
+        assert "editorial expansion" in calls[-1].lower()
+        assert all(weak.strip() in item["body"] for item in result["sections"])
         assert result["word_count"]>=450
         assert result["original_sections_covered"]==list(range(len(headings)))
