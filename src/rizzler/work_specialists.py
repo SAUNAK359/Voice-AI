@@ -40,6 +40,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     checkpoint.mkdir(parents=True, exist_ok=True, mode=0o700)
     context = {"objective": payload["objective"], "sources": [], "text": None,
                "summary": None, "sql_exploration": None, "sql_queries": [],
+               "goal_contract": None, "goal_brief": "", "goal_review": None,
                "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
@@ -147,6 +148,44 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                                         "cognitive_director", "gap",
                                         {"category": type(exc).__name__,
                                          "status": "approved_graph_fallback"})
+    # Generate or restore user-goal obligations once per job. This is an
+    # observable requirement contract, never a private thought transcript,
+    # and cannot grant tool access or alter the authorized persisted DAG.
+    if feature_enabled("RIZZLER_GOAL_CONTRACT"):
+        from .work_outcome import (
+            create_goal_contract, validate_goal_contract, fallback_goal, goal_brief)
+        try:
+            events=store.cognitive_events(owner,jid,limit=200)
+            prior=next((x["payload"]["contract"] for x in reversed(events)
+                        if x["agent"]=="goal_director" and x["kind"]=="state"
+                        and isinstance(x["payload"].get("contract"),dict)),None)
+            if prior is not None:
+                contract=validate_goal_contract(prior,payload["deliverables"])
+            else:
+                from .config import Settings
+                settings=Settings.from_env()
+                if not settings.gemini_api_key:
+                    raise RuntimeError("Goal planner requires configured model")
+                from google import genai
+                client=genai.Client(api_key=settings.gemini_api_key)
+                try:
+                    contract=await create_goal_contract(
+                        payload["objective"],payload["deliverables"],
+                        model=settings.gemini_model,client=client)
+                finally:
+                    await client.aio.aclose()
+                store.publish_cognition(jid,worker_id,fence,"goal_director",
+                    "state",{"contract":contract})
+            context["goal_contract"]=contract
+            context["goal_brief"]=goal_brief(contract)
+        except Exception as exc:
+            context["goal_contract"]=fallback_goal(
+                payload["objective"],payload["deliverables"])
+            context["goal_brief"]=goal_brief(context["goal_contract"])
+            store.publish_cognition(jid,worker_id,fence,"goal_director",
+                "gap",{"status":"goal_contract_fallback",
+                       "category":type(exc).__name__})
+
     dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
     finished = set()
 
@@ -261,7 +300,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             if cfg.gemini_api_key:
                 try:
                     result = await explore_dataset(
-                        source, payload["objective"],
+                        source, payload["objective"] +
+                        ("\n" + context.get("goal_brief",""))[:2500],
                         model=cfg.gemini_model, api_key=cfg.gemini_api_key)
                     if result.get("analysis_receipts",{}).get("verified_queries",0):
                         return result
@@ -278,6 +318,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
+        if context.get("goal_brief"):
+            objective += "\n\n" + context["goal_brief"]
         # Memory selection may run concurrently with the expert pool; it
         # accesses only previously consented-to, encrypted owner memories.
         memory_task = None
