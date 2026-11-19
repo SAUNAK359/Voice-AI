@@ -16,7 +16,7 @@ class Settings:
     gemini_tpm: int = 24000
     gemini_max_attempts: int = 3
     gemini_quota_wait_seconds: float = 1.5
-    gemini_enable_thinking: bool = False
+    gemini_enable_thinking: bool = True
     gemini_input_usd_per_million: float | None = None
     gemini_output_usd_per_million: float | None = None
     asr_model: str = "large-v3-turbo"
@@ -70,7 +70,7 @@ class Settings:
             gemini_tpm=int(environ.get('RIZZLER_GEMINI_TPM', '24000')),
             gemini_max_attempts=int(environ.get('RIZZLER_GEMINI_MAX_ATTEMPTS', '3')),
             gemini_quota_wait_seconds=float(environ.get('RIZZLER_GEMINI_QUOTA_WAIT', '1.5')),
-            gemini_enable_thinking=environ.get('RIZZLER_GEMINI_ENABLE_THINKING', '').lower() in ('1','true','yes'),
+            gemini_enable_thinking=environ.get('RIZZLER_GEMINI_ENABLE_THINKING', 'true').lower() in ('1','true','yes'),
             request_timeout=float(environ.get('RIZZLER_REQUEST_TIMEOUT', '45')),
             gemini_input_usd_per_million=optional_price('RIZZLER_GEMINI_INPUT_USD_PER_MILLION'),
             gemini_output_usd_per_million=optional_price('RIZZLER_GEMINI_OUTPUT_USD_PER_MILLION'),
