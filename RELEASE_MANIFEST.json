@@ -139,8 +139,8 @@
     },
     {
       "path": "docs/V23_KAGGLE_REMEDIATION_AND_GATES.md",
-      "sha256": "fd8df257a585b48743a3751e12c38c68481169a1501e83cf24ccb30059beeac5",
-      "bytes": 2947
+      "sha256": "4e028c195123f496430fe0e60a80f660de367c1d246a53caf47dbc5f1d411c21",
+      "bytes": 3292
     },
     {
       "path": "docs/voice-pipeline.md",
@@ -284,8 +284,8 @@
     },
     {
       "path": "src/rizzler/cognitive_provider.py",
-      "bytes": 6654,
-      "sha256": "d71450d58966a05ca5a7721b5d02b3bcd682bc1b00fe1797fa747b95fcc7265d"
+      "bytes": 9256,
+      "sha256": "ef457ea120d39414a75f09cf4622b1df82f7318b66eebcb931d0b117d7266711"
     },
     {
       "path": "src/rizzler/config.py",
@@ -489,8 +489,8 @@
     },
     {
       "path": "tests/test_v23_live_failure_recovery.py",
-      "sha256": "cb330e7360203e012c712048b9c02af22c902b34b51314c934b965007da82a43",
-      "bytes": 5218
+      "sha256": "b30a73fcb892f3603b287c18b31e563a23fc462c7b1227ebb18e21f5f837e989",
+      "bytes": 6334
     },
     {
       "path": "tests/test_v23_memory_context.py",
