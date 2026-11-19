@@ -87,7 +87,7 @@ def dataset_intelligence(header: list[str], rows: list[list[str]]) -> dict:
     return {"row_count":len(rows),"column_count":len(header),
             "duplicates":len(rows)-len(set(tuple(r) for r in rows)),
             "fields":fields,
-            "privacy_note":"Only field metadata and bounded SQL aggregates are sent to the model."}
+            "privacy_note":"The configured model receives field names, bounded low-cardinality labels and limited SQL results; full raw data stays in isolated SQLite."}
 
 
 def validate_investigation_plan(document: dict, seen: set[str] | None = None) -> dict:
@@ -278,12 +278,14 @@ async def explore_dataset(source, objective: str, *, model: str,
     sandbox=SQLResearchSandbox(header,rows)
     skill=read_skill("sql_analytics")[:6500]
     queries=[]
+    waves_run=0
     status="completed"
     gaps=[]
     try:
         for wave in range(rounds):
             if len(queries)>=MAX_QUERIES:
                 break
+            waves_run+=1
             context=({
                 "task":objective[:3500],
                 "schema":profile,
@@ -392,7 +394,7 @@ async def explore_dataset(source, objective: str, *, model: str,
                 "query_count":len(queries),
                 "verified_queries":len(successful),
                 "rejected_queries":len(queries)-len(successful),
-                "model_rounds":rounds,
+                "model_rounds":waves_run,
                 "source":"owner_uploaded_dataset_only"}}
         return result
     finally:
