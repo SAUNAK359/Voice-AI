@@ -203,6 +203,11 @@
       "sha256": "0a46cd73ffce82f50a229b3a4bee6c794b7800c5d07816fab30909ea62eec71f"
     },
     {
+      "path": "notebooks/Rizzler_V24_Real_Gemini_Qualification_Kaggle.ipynb",
+      "bytes": 12429,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
       "path": "notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb",
       "bytes": 312269,
       "sha256": "87b9541c3125108228d69aff3f8680cf2255db0da9ec3b40665bae08ac8e85d4"
