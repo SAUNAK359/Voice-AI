@@ -140,7 +140,8 @@ class WorkStore:
                   (jid, stage, message[:180], time.time()))
 
     def submit(self, owner: str, objective: str, formats: list[str],
-               idem: str, uploads: list[str] | None = None) -> dict:
+               idem: str, uploads: list[str] | None = None, *,
+               requested_formats: list[str] | None = None) -> dict:
         if not isinstance(idem, str) or not KEY_RE.fullmatch(idem):
             raise ValueError("Idempotency-Key must be 8-96 safe characters")
         if not isinstance(formats, list) or not all(isinstance(f, str) for f in formats):
@@ -149,6 +150,12 @@ class WorkStore:
                 deliverables=tuple(formats)).validate()
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
+        if requested_formats is not None:
+            if (not isinstance(requested_formats,list) or
+                    not set(requested_formats) <= set(formats) or
+                    not set(formats)-set(requested_formats) <= {
+                        "research","data_analysis"}):
+                raise ValueError("Semantic plan expanded requested output permissions")
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
         # Snapshot runtime policy into the immutable job envelope; a restart
         # or feature flag change must not silently alter the approved DAG.
@@ -163,7 +170,14 @@ class WorkStore:
         graph = execution_graph(payload)
         plan_json = json.dumps(graph, sort_keys=True, separators=(",", ":"))
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        # Idempotency belongs to the USER'S request. LLM scope may differ
+        # across repeated calls without making an otherwise identical task
+        # conflict or silently replacing a previously accepted plan.
+        declared = {"objective":objective,
+                    "deliverables":requested_formats,
+                    "uploads":uploads} if requested_formats is not None else payload
+        fingerprint = hashlib.sha256(json.dumps(
+            declared,sort_keys=True,separators=(",", ":")).encode()).hexdigest()
         jid, t = secrets.token_hex(16), time.time()
         with self._tx() as c:
             existing = c.execute("SELECT * FROM jobs WHERE owner=? AND idem=?",
