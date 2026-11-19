@@ -23,9 +23,14 @@
       "sha256": "03443f2a3a64bb088f03b05ef9a5522bea84d13344d405082bc7d9569f037d68"
     },
     {
+      "path": ".github/workflows/app-ci.yml",
+      "bytes": 3541,
+      "sha256": "41ef6ba8df974594e3ed4bd2eb84b2055f89dccc4e6c1b3fc11ddc1cf13922f5"
+    },
+    {
       "path": ".github/workflows/ci.yml",
-      "bytes": 2253,
-      "sha256": "965e4c71da0f916890775ddda5815d7a19eb7f5bd97d9a1faa781301a5075567"
+      "bytes": 2575,
+      "sha256": "7ff5fca782bbad049a724098758fb87999e66bfcbf4699e3e5a85e45bbd095ae"
     },
     {
       "path": ".github/workflows/codeql.yml",
