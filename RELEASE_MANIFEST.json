@@ -504,8 +504,8 @@
     },
     {
       "path": "tests/test_v23_kaggle_live_failures.py",
-      "sha256": "254f85142a22e6a21f8c04650fd20ca6dd046453cf142eb82194062c9623fa0c",
-      "bytes": 4929
+      "sha256": "7194263f113a4effd1dd08cf491ec598b883a6592c46eb7ed0fe9861ef4b8813",
+      "bytes": 5663
     },
     {
       "path": "tests/test_v23_live_failure_recovery.py",
