@@ -467,9 +467,16 @@ class WorkWorker:
         except (StaleLease, InterruptedError):
             self.store.fail(jid, self.identity, fence, "cancelled_or_stale")
         except UserInputRequired as exc:
-            # Persistent clarification is a nonterminal state. The next
-            # worker resumes the same authorized job after the owner answers.
-            self.store.pause_for_input(jid,self.identity,fence,exc.requests)
+            # The same owned job resumes after clarification. If persistence
+            # itself fails, record an explicit diagnostic instead of leaving
+            # an orphaned running lease.
+            try:
+                self.store.pause_for_input(jid,self.identity,fence,exc.requests)
+            except Exception as storage_exc:
+                from .work_diagnostics import failure_code, failure_record
+                self.store.fail(jid,self.identity,fence,
+                    failure_code(storage_exc),
+                    diagnosis=failure_record(storage_exc,"user_clarification"))
         except asyncio.CancelledError:
             # Never silently mark a interrupted worker's job as successful.
             self.store.fail(jid, self.identity, fence, "worker_interrupted")
