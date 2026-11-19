@@ -212,7 +212,11 @@ class ActualBackdelegationTests(unittest.IsolatedAsyncioTestCase):
                        gemini_api_key="fake",gemini_model="fake")), \
              patch("rizzler.work_context_intelligence.review_context",
                    new=AsyncMock(side_effect=reviews)) as reviewer, \
-             patch("rizzler.work_feedback.consult_specialists", new=AsyncMock(return_value=[{"specialist":"powerpoint","readiness":"ready","requests":[],"assessment":"Review complete with current available evidence."}])):
+             patch("rizzler.work_feedback.consult_specialists", new=AsyncMock(side_effect=[
+                 [{"specialist":"powerpoint","readiness":"needs_evidence",
+                   "requests":[request],"assessment":"Official annual figure missing from source evidence."}],
+                 [{"specialist":"powerpoint","readiness":"ready",
+                   "requests":[],"assessment":"New official evidence supports the slide."}]])) as specialist_review:
             result=await converge_context(
                 context,payload=payload,store=store,owner="owner",
                 jid="job",worker_id="worker",fence=1,
@@ -220,6 +224,7 @@ class ActualBackdelegationTests(unittest.IsolatedAsyncioTestCase):
                 max_waves=2,client=object())
         self.assertTrue(result["ready"])
         self.assertEqual(reviewer.await_count,2)
+        self.assertEqual(specialist_review.await_count,2)
         self.assertIn("Original researched narrative",context["text"])
         self.assertIn("official report lists 125",context["text"])
         self.assertIn("https://example.org/new",context["sources"])
