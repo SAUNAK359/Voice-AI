@@ -356,6 +356,14 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 audit["claim_verification"]="no_independently_retrieved_evidence"
         audit["objective_alignment"]=focus_audit
         audit["question_answered_with_evidence"]=bool(focused_claims)
+        if feature_enabled("RIZZLER_CLAIM_VERIFY") and focused_claims:
+            # Publish only citations that actually substantiate accepted,
+            # task-relevant findings. Discovery inventory remains in audit;
+            # background results must not dilute the final bibliography.
+            cited={c["source_url"] for c in focused_claims}
+            records=[rec for rec in records if rec["url"] in cited]
+            urls=list(dict.fromkeys(rec["url"] for rec in records))
+            audit["selected_citable_sources"]=len(urls)
         limitations=(
             "\n\n## Provenance and limitations\n"
             "Sources are attributed by the search provider; some pages may "
