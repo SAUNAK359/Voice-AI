@@ -165,5 +165,44 @@ class ContextSupervisorContractTests(unittest.TestCase):
             ctx,recipient="research",result=result,request={}))
 
 
+
+class NativeGeminiCapabilityTests(unittest.TestCase):
+    def test_model_can_select_only_approved_native_tools(self):
+        from rizzler.gemini_native import validate_native_choice
+        decision={"tools":["google_search","url_context"],
+                  "thinking_level":"high",
+                  "reason":"Recent facts and public URL source context are both needed."}
+        self.assertEqual(validate_native_choice(
+            decision, permitted=frozenset({"google_search","url_context"})),
+            decision)
+        with self.assertRaises(ValueError):
+            validate_native_choice(decision,
+                permitted=frozenset({"google_search"}))
+        with self.assertRaises(ValueError):
+            validate_native_choice(
+                {**decision,"tools":["google_search","private_filesystem"]},
+                permitted=frozenset({"google_search","url_context"}))
+        with self.assertRaises(ValueError):
+            validate_native_choice(
+                {**decision,"tools":["google_search","google_search"]},
+                permitted=frozenset({"google_search","url_context"}))
+
+    def test_sdk_feature_detection_does_not_invent_capabilities(self):
+        from rizzler.gemini_native import native_tools
+        class Stub:
+            class Tool:
+                def __init__(self, **kwargs): self.props = kwargs
+            class GoogleSearch: pass
+        choice={"tools":["google_search"],
+                "thinking_level":"low",
+                "reason":"Search for current, public evidence."}
+        self.assertEqual(len(native_tools(
+            choice,types=Stub,
+            permitted=frozenset({"google_search"}))),1)
+        with self.assertRaises(RuntimeError):
+            native_tools({**choice,"tools":["url_context"]},types=Stub,
+                         permitted=frozenset({"url_context"}))
+
+
 if __name__=="__main__":
     unittest.main()
