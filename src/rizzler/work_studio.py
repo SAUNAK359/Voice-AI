@@ -116,13 +116,36 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
                     response_mime_type="application/json",
                     system_instruction=skill,
                     max_output_tokens=7500, temperature=0.25))
+            candidate = None
             try:
+                candidate = decode_model_json(
+                    getattr(response,"text","") or "", max_bytes=55000)
                 return validate_storyboard(
-                    decode_model_json(getattr(response,"text","") or "", max_bytes=55000),
-                    ir.sections,ir.sources)
-            except ValueError:
+                    candidate, ir.sections,ir.sources)
+            except ValueError as exc:
+                # Repair only identified malformed slide fields, leaving
+                # the entire remaining storyboard and source lineage intact.
+                # Never promote a model patch without full revalidation.
+                if isinstance(candidate, dict) and isinstance(
+                        candidate.get("slides"), list):
+                    from .work_repair import repair_storyboard
+                    try:
+                        return await repair_storyboard(
+                            candidate, sections=ir.sections, sources=ir.sources,
+                            model=model, client=client, failure=str(exc))
+                    except ValueError as repair_exc:
+                        if attempt:
+                            raise ValueError(
+                                "Presentation failed strict validation and "
+                                "safe targeted recovery") from repair_exc
                 if attempt:
                     raise
+                # If the JSON envelope is unusable, regenerate from immutable
+                # approved IR, not from another model's undocumented memory.
+                prompt += (
+                    "\nPrevious draft rejected: " + str(exc)[:240] +
+                    ". Preserve every section, source URL, numeric claim "
+                    "and the complete intended analytical coverage.")
     finally:
         if owned:
             await client.aio.aclose()
