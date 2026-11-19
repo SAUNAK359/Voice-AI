@@ -38,6 +38,11 @@
       "sha256": "4aef6495b763188aa1ac56a81cdace830a2156a8fdd402a82170016928496312"
     },
     {
+      "path": ".github/workflows/live-v24-qualification.yml",
+      "bytes": 3305,
+      "sha256": "4aa641e3a9c81b97a5ea07ef852480319b6b85078a01c0e861b5b1881ab9d0c2"
+    },
+    {
       "path": ".gitignore",
       "bytes": 334,
       "sha256": "6eefc6023f91d30c764a40647b81c06dc18a8d883cd88a5e1fdc808b2a4ed44a"
@@ -209,8 +214,8 @@
     },
     {
       "path": "notebooks/Rizzler_V24_Real_Gemini_Qualification_Kaggle.ipynb",
-      "bytes": 12429,
-      "sha256": "c41d935d8e7a8ed6e7ad7f9f6f40f2b0cd7c3c1da4d214c8b53a5e4577716342"
+      "bytes": 18579,
+      "sha256": "8b64272b25f979296c128874afa2207c7e16cd2e299b120f170632db2e95a9b9"
     },
     {
       "path": "notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb",
@@ -454,8 +459,8 @@
     },
     {
       "path": "src/rizzler/work_diagnostics.py",
-      "sha256": "2e53dcf70dda95d61608091b78c76c7a2e25e3f5faa83a4a836ab11dc8a6444c",
-      "bytes": 2707
+      "bytes": 3143,
+      "sha256": "a2c411b2ab24347f9d1002842a010ed08ce041a9d2337b3962461588af36906a"
     },
     {
       "path": "src/rizzler/work_editor.py",
@@ -498,14 +503,19 @@
       "sha256": "c2a093513d3c7107796c2a8f2778b24b168f8981863ef167a37fbd8e058c0484"
     },
     {
+      "path": "src/rizzler/work_research_errors.py",
+      "bytes": 1959,
+      "sha256": "f5f9c6b1146423dd81899238306e4651c4faa016b57cbadf5e3d93596088a838"
+    },
+    {
       "path": "src/rizzler/work_skills.py",
       "sha256": "3a106e32fd8088a5063764ee69efd50314222dca94e34efa7162a95c9ac1132e",
       "bytes": 8125
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 45554,
-      "sha256": "4ac0db2af086ce6fd26963c3037ba7d3387999d7a5ad568e434bf93a2d7495be"
+      "bytes": 45626,
+      "sha256": "2324c86bef3ef88f357d6f8e887d42d02f20bbc4b8bc14c990dd7104693ff105"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -524,8 +534,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 28673,
-      "sha256": "1a7ed2d14a9fc8aed8b2defad427774ece84ddaaf01980b7b3080cf06c211203"
+      "bytes": 28937,
+      "sha256": "fac96f44fd4fb966920d032913fc42f171895c0e9d35b0203d7db728d937e550"
     },
     {
       "path": "tests/test_contracts.py",
@@ -676,6 +686,11 @@
       "path": "tests/test_v24_qualification_notebook.py",
       "bytes": 1672,
       "sha256": "d66d5aa94080d01dd09afaa88f829eaf2b36764a17418bbbb83b0e4ebbf4325f"
+    },
+    {
+      "path": "tests/test_v24_research_diagnostics.py",
+      "bytes": 2561,
+      "sha256": "a3e68d997050fe9a2b080045cc24c43a43876f0ea87455001af9edbefca7ab67"
     },
     {
       "path": "web/app.js",
