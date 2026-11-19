@@ -21,7 +21,8 @@ def inspect_artifact(path: Path, kind: str, *,
                      bundle_receipts: dict | None = None,
                      artifact_ir: ArtifactIR | None = None,
                      dataset_summary: dict | None = None,
-                     visual_required: bool = False) -> dict:
+                     visual_required: bool = False,
+                     excel_plan: dict | None = None) -> dict:
     receipt = verify_artifact(path, kind)
     checks = ["sha256_receipt_valid", "format_structure_valid"]
     details: dict = {}
@@ -74,7 +75,8 @@ def inspect_artifact(path: Path, kind: str, *,
         from .work_formula import verify_workbook
         details["formula_validation"] = verify_workbook(
             path, dataset_summary=dataset_summary,
-            require_recalculation=visual_required and dataset_rows is not None)
+            require_recalculation=visual_required and dataset_rows is not None,
+            analytical_plan=excel_plan)
         checks.append("independently_evaluated_formula_contract")
         if visual_required and dataset_rows is not None:
             checks.append("spreadsheet_recalculated_by_independent_engine")
