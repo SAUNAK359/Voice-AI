@@ -111,6 +111,9 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
         try:
             tasks=await propose_frontier(
                 objective,model=cfg.gemini_model,client=client)
+        except ValueError as exc:
+            await client.aio.aclose()
+            raise ResearchQualificationError("invalid_frontier") from exc
         except BaseException:
             await client.aio.aclose()
             raise
