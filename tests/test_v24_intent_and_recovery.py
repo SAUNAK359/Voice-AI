@@ -52,6 +52,50 @@ class ModelOwnedScopeTests(unittest.TestCase):
                              "scope-idem-002",[],requested_formats=["pptx"])
 
 
+
+class NativeIntentDecisionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_model_infers_required_public_research_for_implicit_task(self):
+        from types import SimpleNamespace
+        from rizzler.task_planning import propose_semantic_scope
+        from rizzler.config import Settings
+        try:
+            from google.genai import types
+        except ImportError:
+            self.skipTest("Google GenAI SDK not installed in minimal CI")
+        config=Settings(access_key="agent-contract-test-key-12345",
+                        gemini_api_key="injected-test-only",
+                        gemini_model="fake-model")
+        reply=SimpleNamespace(text='{"research":true,"analysis":false}')
+        with patch("rizzler.cognitive_provider.generate_with_recovery",
+                   new=AsyncMock(return_value=reply)) as model:
+            result=await propose_semantic_scope(
+                "Prepare a recent global commodity outlook presentation",
+                ["pptx"],[],config,client=object())
+        self.assertEqual(result["source"],"model_validated")
+        self.assertTrue(result["research"])
+        self.assertEqual(model.await_count,1)
+
+    async def test_explicit_no_browse_is_not_overrideable_by_model(self):
+        from types import SimpleNamespace
+        from rizzler.task_planning import propose_semantic_scope
+        from rizzler.config import Settings
+        try:
+            from google.genai import types
+        except ImportError:
+            self.skipTest("Google GenAI SDK not installed in minimal CI")
+        config=Settings(access_key="agent-contract-test-key-12345",
+                        gemini_api_key="injected-test-only",
+                        gemini_model="fake-model")
+        reply=SimpleNamespace(text='{"research":true,"analysis":false}')
+        with patch("rizzler.cognitive_provider.generate_with_recovery",
+                   new=AsyncMock(return_value=reply)):
+            result=await propose_semantic_scope(
+                "Create a presentation without research from my supplied notes",
+                ["pptx"],[],config,client=object())
+        self.assertFalse(result["research"])
+        self.assertEqual(result["source"],"explicit_contract_fallback")
+
+
 class FeedbackRecoveryTests(unittest.TestCase):
     def test_recoverable_gap_never_grants_unplanned_tools(self):
         request={"recipient":"research",
