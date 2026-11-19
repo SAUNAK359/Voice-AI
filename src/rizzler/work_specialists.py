@@ -93,6 +93,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["sql_queries"] = result.get("sql_investigations") or []
         elif spec.name == "orchestrator":
             context["text"] = result["text"]
+            context["goal_review"] = result.get("goal_review")
         elif spec.name == "quality":
             context["quality"] = result
         else:
@@ -401,7 +402,55 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     {"error_category":type(exc).__name__,
                      "status":"memory_selection_unavailable"})
         text = await composer(objective, context["summary"])
-        return {"text": text}
+        review = None
+        if context.get("goal_contract") and feature_enabled("RIZZLER_GOAL_CONTRACT"):
+            from .work_outcome import review_outcome
+            from .config import Settings
+            from google import genai
+            cfg = Settings.from_env()
+            if cfg.gemini_api_key:
+                client = genai.Client(api_key=cfg.gemini_api_key)
+                try:
+                    review = await review_outcome(
+                        payload["objective"],context["goal_contract"],text,
+                        client=client,model=cfg.gemini_model)
+                    if not review["passed"]:
+                        gaps = [item["missing"] for item in review["assessments"]
+                                if not item["satisfied"] and item["missing"]]
+                        # Only one targeted synthesis correction from existing
+                        # approved sources and SQL results. When the needed
+                        # evidence is absent, record the gap; do not invent it.
+                        if gaps:
+                            repaired = await composer(
+                                objective + "\n\nAn independent outcome auditor "
+                                "found uncovered user requirements. Repair "
+                                "these specific omissions using ONLY the "
+                                "already provided verified evidence; if data "
+                                "is unavailable, state the gap honestly.\n"
+                                + json.dumps(gaps,ensure_ascii=False)[:1700],
+                                context["summary"])
+                            revised = await review_outcome(
+                                payload["objective"],context["goal_contract"],
+                                repaired,client=client,model=cfg.gemini_model)
+                            if revised["passed"] or sum(
+                                    x["satisfied"] for x in revised["assessments"]) > sum(
+                                    x["satisfied"] for x in review["assessments"]):
+                                text,review = repaired,revised
+                except Exception as exc:
+                    store.publish_cognition(jid,worker_id,fence,
+                        "goal_director","gap",{
+                            "status":"outcome_review_unavailable",
+                            "category":type(exc).__name__})
+                finally:
+                    await client.aio.aclose()
+                if review:
+                    store.publish_cognition(jid,worker_id,fence,
+                        "goal_director","verification",{
+                            "passed":review["passed"],
+                            "evaluated":len(review["assessments"]),
+                            "unmet":sum(not item["satisfied"] for item in review["assessments"]),
+                            "gaps":review["overall_gaps"][:5]})
+        return {"text": text, "goal_review": review}
     if name == "quality":
         receipts = context["receipts"]
         expected = formats.intersection(FILE_FORMATS)
@@ -483,7 +532,14 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
                 "artifact_qa_mode": quality_mode(),
-                "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
+                "artifact_quality": detailed_qa,
+                "goal_coverage": {
+                    "status": ("reviewed_pass" if context.get("goal_review")
+                               and context["goal_review"]["passed"]
+                               else "reviewed_gaps" if context.get("goal_review")
+                               else "not_independently_assessed"),
+                    "limits":"Model assessment is advisory, not factual proof"},
+                "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
                 "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
     if name not in ("powerpoint", "word", "excel", "pdf_visual"):
