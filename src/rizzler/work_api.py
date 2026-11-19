@@ -102,6 +102,34 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
         try:return store.get(owner(req),jid)
         except Missing:raise HTTPException(status_code=404,detail="Job not found")
 
+    @api.get("/jobs/{jid}/questions")
+    def missing_information(req: Request, jid: str):
+        who=owner(req)
+        try:
+            return {"job_id":jid,"questions":store.questions(who,jid)}
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+
+    @api.post("/jobs/{jid}/answers")
+    async def provide_information(req: Request, jid: str):
+        who=owner(req)
+        same_origin(req)
+        try:
+            raw=await req.body()
+            if len(raw)>32000:
+                raise ValueError("Clarification payload exceeds limit")
+            data=json.loads(raw)
+            if not isinstance(data,dict) or set(data)!={"answers"}:
+                raise ValueError("Expected answers array")
+            updated=store.answer_questions(who,jid,data["answers"])
+            return {"job":updated,"questions":store.questions(who,jid)}
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+        except Conflict:
+            raise HTTPException(status_code=409,detail="Job not awaiting input") from None
+        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError):
+            raise HTTPException(status_code=400,detail="Invalid clarification answer") from None
+
     @api.get("/jobs/{jid}/plan")
     def job_plan(req: Request, jid: str):
         try:
