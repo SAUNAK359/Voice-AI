@@ -97,6 +97,7 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
     """
     from .config import Settings
     from .research_evidence import source_records, evidence_summary
+    from .work_research_errors import ResearchQualificationError, failure_categories
     from .work_agents import read_skill
     cfg=Settings.from_env()
     if not cfg.gemini_api_key:
@@ -150,8 +151,10 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                         temperature=0.15,max_output_tokens=1600))
         records=source_records(response)
         answer=(getattr(response,"text","") or "").strip()
-        if len(answer)<40 or not records:
-            raise ValueError("Insufficient provider-grounded research evidence")
+        if not records:
+            raise ResearchQualificationError("empty_grounding_metadata")
+        if len(answer)<40:
+            raise ResearchQualificationError("short_search_answer")
         return label,answer,records
 
     try:
@@ -160,7 +163,9 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
             return_exceptions=True)
         successful=[r for r in results if not isinstance(r,BaseException)]
         if not successful:
-            raise ValueError("Independent research calls produced no grounded evidence")
+            failed=[x for x in results if isinstance(x,BaseException)]
+            raise ResearchQualificationError(
+                "no_grounded_search_response", counts=failure_categories(failed))
         unique={}
         sections=[]
         for label,answer,records in successful:
