@@ -409,13 +409,13 @@
     },
     {
       "path": "src/rizzler/work_editor.py",
-      "bytes": 17980,
-      "sha256": "8cc1c156e4a870832d84b413e2f1b5896805fb99d15346f49a72abb05a129fe6"
+      "bytes": 18138,
+      "sha256": "e8c325ffa679835b4186af60617bc90c39f7ad6f36d7cc6df1883823ecf099fc"
     },
     {
       "path": "src/rizzler/work_excel_studio.py",
-      "bytes": 14179,
-      "sha256": "8bc7fa57163d614bc57463c84c66a8711bd0e426d8f7313958b5bcb6847c9f9e"
+      "bytes": 14302,
+      "sha256": "21a41f728b7be1ed2767cd2ce2dab99a4f35131b227a0a5f70d7dd7102fdc981"
     },
     {
       "path": "src/rizzler/work_formula.py",
@@ -429,8 +429,8 @@
     },
     {
       "path": "src/rizzler/work_outcome.py",
-      "sha256": "0f264f7d4e82873639faa3bfd01da2bc8b44f6c60cb518231d565b89a396690b",
-      "bytes": 10015
+      "sha256": "9b04aa4ee1c14a65cba0ed1d6853032c207eb887b8d79be30d4bd301ea6f0416",
+      "bytes": 10012
     },
     {
       "path": "src/rizzler/work_quality.py",
@@ -444,13 +444,13 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "ee4ecd16a00f449a5dc75407c1fad305e870a1caeffa4e62592e93e10d26fbda",
-      "bytes": 38117
+      "sha256": "6ef09d8d9d4c34f0e391ed555af49edefaa9e9b8d56786c4b4cc5bee98fc525a",
+      "bytes": 38322
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
-      "sha256": "8191d7a8ec1ff338791a12cb329b425b1401a3af2c320c480f27b2009e0c059b",
-      "bytes": 20311
+      "sha256": "e9178f7e729dc250d883542492976786d07f04a62cacac07875d67caef24eabb",
+      "bytes": 20496
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -459,8 +459,8 @@
     },
     {
       "path": "src/rizzler/work_studio.py",
-      "bytes": 13397,
-      "sha256": "0cf15e3643a2f789fbc9f10206a10591efef2a11cbe9b31810bc297e8bf5ed37"
+      "bytes": 13525,
+      "sha256": "ab920d09109769eaebca01aeed88c1fd728005804f82a29dfaeba56b6aff6334"
     },
     {
       "path": "src/rizzler/work_worker.py",
