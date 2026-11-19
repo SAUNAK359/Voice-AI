@@ -24,8 +24,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3541,
-      "sha256": "41ef6ba8df974594e3ed4bd2eb84b2055f89dccc4e6c1b3fc11ddc1cf13922f5"
+      "bytes": 3579,
+      "sha256": "b290ce38544397e4546761d5a57ced4c07fecaf6ea41c22910ad805aef63b350"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -514,8 +514,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 28303,
-      "sha256": "5b220b000674fc2e0ad5b0bc3e59c57d119638355af21627a5f446d740b4db8e"
+      "bytes": 28673,
+      "sha256": "1a7ed2d14a9fc8aed8b2defad427774ece84ddaaf01980b7b3080cf06c211203"
     },
     {
       "path": "tests/test_contracts.py",
@@ -556,6 +556,11 @@
       "path": "tests/test_state.py",
       "bytes": 1016,
       "sha256": "8e05d8b2b718f64d92951fc16daa3238d6a494d6d7146964589660ef25c3208c"
+    },
+    {
+      "path": "tests/test_v10_phase3.py",
+      "bytes": 9624,
+      "sha256": "ba67374d034edbaf03e0cdbe00498a1fa684b19e55f33b4b2953c474a0c6ef29"
     },
     {
       "path": "tests/test_v23_adaptive_experts.py",
@@ -654,8 +659,8 @@
     },
     {
       "path": "tests/test_v24_intent_and_recovery.py",
-      "bytes": 7904,
-      "sha256": "0d948dab46c7b048aec18af6ce03bceaa76d325346375e34bf07a97b026ea361"
+      "bytes": 10143,
+      "sha256": "bfdf371ecbc98b2e0be12bf573488029e8ad42dc8b670d5f6b66c962cfd27588"
     },
     {
       "path": "web/app.js",
