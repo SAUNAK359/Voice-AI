@@ -299,9 +299,12 @@ def restore_context(context: dict, *, payload: dict, store,
                 or any(not isinstance(part, str) for part in pair)):
             raise ValueError("Persisted context request fingerprints malformed")
         seen.add(tuple(pair))
+    from .work_agents import plan as approved_plan
+    allowed = {spec.name for spec in approved_plan(payload)}
     for delta in saved["deltas"]:
         if (not isinstance(delta, dict) or set(delta) != {"recipient", "result"}
                 or delta["recipient"] not in ("research","sql_analytics")
+                or delta["recipient"] not in allowed
                 or not isinstance(delta["result"], dict)):
             raise ValueError("Persisted context delta violated source scope")
         if delta["recipient"]=="research":
