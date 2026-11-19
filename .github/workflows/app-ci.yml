@@ -27,7 +27,7 @@ jobs:
       - name: Validate default full cognitive contracts with isolated providers
         env:
           RIZZLER_V23_MODE: full
-        run: python -m pytest -q tests/test_v24_context_convergence.py tests/test_v23_flags.py
+        run: python -m pytest -q tests/test_v24_context_convergence.py tests/test_v24_intent_and_recovery.py tests/test_v23_flags.py
       - name: Validate the canonical native Kaggle notebook
         run: python scripts/validate_native_notebook.py
       - name: Verify wheel bundles all six specialist skill playbooks
