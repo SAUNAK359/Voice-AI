@@ -399,8 +399,8 @@
     },
     {
       "path": "src/rizzler/v23_flags.py",
-      "bytes": 1668,
-      "sha256": "700b19e39b1a67fa3243a439edd51f2edbfd8929332b282f499a853b561bd164"
+      "bytes": 1505,
+      "sha256": "d8946bb906c602839ccbb49a26101aafd61287a777353b5c6863364420816673"
     },
     {
       "path": "src/rizzler/work_agents.py",
@@ -414,8 +414,8 @@
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 20555,
-      "sha256": "4cee39fe26c4c7e1435f8f339ec10c005e0a8fb133f57666f6b2c25e8778cf87"
+      "bytes": 26563,
+      "sha256": "f58b52227b9a541a864d7c2068e05bbeaec594ebad3520bbd320628b3505573a"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -439,8 +439,8 @@
     },
     {
       "path": "src/rizzler/work_feedback.py",
-      "bytes": 6722,
-      "sha256": "306fa3f81b2ab732a0b129593a641db4958b594610dab1f74bd3e3e9baa85734"
+      "bytes": 11802,
+      "sha256": "020070428d4fea057997bd002297720fab9f2fbe2787aea07b35f33aa5764327"
     },
     {
       "path": "src/rizzler/work_formula.py",
@@ -474,8 +474,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 39651,
-      "sha256": "2442b778ed95a93178cf7dc92bc4ed53d4425a83b7cdee60b81c3fe99ae72929"
+      "bytes": 44582,
+      "sha256": "11e62a65fca93cbd0a8a65c65661c81c54292439af330616c88b508cfc1c693d"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -484,8 +484,8 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "sha256": "5640abad59d163e34fa315bd356475980e755df916e57d032387902ac321860e",
-      "bytes": 47038
+      "bytes": 53254,
+      "sha256": "9cc4e8d99934097c0c06eebf3bcef8890ef875b8e75f275603d873a6ac70e497"
     },
     {
       "path": "src/rizzler/work_studio.py",
@@ -569,8 +569,8 @@
     },
     {
       "path": "tests/test_v23_flags.py",
-      "bytes": 1568,
-      "sha256": "453d97b7d8c8e33cacf343ea87db6fdb33feb2e0fa7d2dd4e53d32dbd5a2d6cf"
+      "bytes": 1721,
+      "sha256": "e628d6d865394eca2c7d5744f450962aadb1d1d0817bbf93fc329f6838148dab"
     },
     {
       "path": "tests/test_v23_hace_runtime.py",
@@ -629,8 +629,8 @@
     },
     {
       "path": "tests/test_v24_context_convergence.py",
-      "bytes": 14299,
-      "sha256": "b3e7a2389c7c5fd55f2259b2cc5427ecdcd36b2484826f5dba9531ead023f31a"
+      "bytes": 17622,
+      "sha256": "03c0b64ccc40f0fe8eb9e34c184431a713e00002a4c8123a5a6965084c4b3422"
     },
     {
       "path": "web/app.js",
