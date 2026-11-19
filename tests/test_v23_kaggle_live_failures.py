@@ -47,9 +47,9 @@ class KaggleLiveFailureTests(unittest.TestCase):
         from rizzler.work_ir import compile_ir
         from rizzler.work_quality import inspect_artifact
         with tempfile.TemporaryDirectory(prefix="rizzler-ir-") as root:
-            original=("# Executive report\\n\\n## Methodology and limitations\\n"
-                      "The user-supplied data is the sole basis of these calculations.\\n"
-                      "## Independent analysis\\n"
+            original=("# Executive report\n\n## Methodology and limitations\n"
+                      "The user-supplied data is the sole basis of these calculations.\n"
+                      "## Independent analysis\n"
                       "Numbers are derived from the checked source rows.")
             # Include a deliberately empty Executive report body followed by
             # actual analytical sections, the format in a real Gemini output.
