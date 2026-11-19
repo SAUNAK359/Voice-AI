@@ -8,6 +8,7 @@
 - Category-free workbook aggregation was allowed in the Gemini studio planning validator but rejected by the sheet executor. Fixed `_studies` to accept `category=None` for overall `SUM`, `AVERAGE` and `COUNT` formulas.
 - The cookie-tampering regression test mutated a cookie while leaving its original scoped cookie in the HTTP client. The test now replaces the cookie; the real HMAC authentication check is unchanged.
 - Live Gemini and research tests emitted only `execution_error`; the evidence ZIP lacks the underlying provider/contract exceptions. Added owner-scoped private, sanitized diagnostic traces at both individual specialist and parent job failure boundaries.
+- Worker inference previously limited simultaneous Gemini calls but lacked a shared requests-per-minute gate. Added SQLite-backed, model-scoped sliding-window admission across workers, configured using `RIZZLER_GEMINI_RPM`; per-attempt quota reservations now occur when the request is admitted. Provider availability still cannot be guaranteed.
 
 ## Failure diagnostics
 
