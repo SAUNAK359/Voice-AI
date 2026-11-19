@@ -156,7 +156,7 @@ def _formula(operation: str, category_col: str, value_col: str,
     raise ValueError("Unknown verified workbook operation")
 
 
-def apply_workbook_plan(path: Path, plan: dict) -> None:
+def apply_workbook_plan(path: Path, plan: dict, *, sql_investigations: list[dict] | None = None) -> None:
     from openpyxl import load_workbook
     from openpyxl.chart import BarChart,Reference
     from openpyxl.styles import Font,PatternFill
@@ -200,6 +200,47 @@ def apply_workbook_plan(path: Path, plan: dict) -> None:
                                                max_row=ws.max_row))
                 chart.width=17;chart.height=8
                 ws.add_chart(chart,"E4")
+        # Display source-backed exploratory SQL observations as native,
+        # editable workbook evidence. All numeric cells come from executed
+        # SQLite results, never generated prose or arbitrary model formulas.
+        if sql_investigations:
+            from .work_skills import csv_escape
+            if len(sql_investigations)>12 or "SQL Investigations" in wb.sheetnames:
+                raise ValueError("Invalid SQL investigation workbook evidence")
+            ev=wb.create_sheet("SQL Investigations")
+            ev.append(["VERIFIED SQL INVESTIGATIONS — SOURCE DATA ONLY"])
+            ev.append(["Result numbers originate from bounded read-only SQLite; interpretations are hypotheses."])
+            ev.column_dimensions["A"].width=30
+            ev.column_dimensions["B"].width=32
+            ev.column_dimensions["C"].width=28
+            ev.column_dimensions["D"].width=28
+            for investigation in sql_investigations:
+                if investigation.get("status")!="ok":
+                    continue
+                result=investigation.get("result") or {}
+                if result.get("verified")!="sqlite_readonly_source_rows":
+                    raise ValueError("Workbook received unverified SQL findings")
+                if len(result.get("rows",[]))>50 or len(result.get("columns",[]))>18:
+                    raise ValueError("Unbounded SQL result for workbook")
+                ev.append([str(investigation.get("question",""))[:320]])
+                ev.append(["SQL receipt: "+str(investigation.get("id",""))[:50]])
+                ev.append([str(investigation.get("rationale",""))[:320]])
+                ev.append([str(column)[:80] for column in result["columns"]])
+                for obs in result["rows"]:
+                    if len(obs)!=len(result["columns"]):
+                        raise ValueError("SQL result lost column alignment")
+                    converted=[]
+                    for value in obs:
+                        if isinstance(value,str):
+                            converted.append(csv_escape(value)[:220])
+                        elif value is None or type(value) in (float,int):
+                            converted.append(value)
+                        else:
+                            raise ValueError("Unsafe SQL workbook cell")
+                    ev.append(converted)
+                ev.append([])
+            ev.freeze_panes="A4"
+            ev["A1"].font=Font(size=15,bold=True,color="18273D")
         wb.calculation.fullCalcOnLoad=True
         wb.calculation.forceFullCalc=True
         wb.save(path)
