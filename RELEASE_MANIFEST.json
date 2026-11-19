@@ -349,13 +349,18 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "sha256": "4994d81b061a4759e2c3d9a59bd2fcf6cd1db688048acb9274c98474be2bf67e",
-      "bytes": 11804
+      "sha256": "519975663d190de01e49c234b857727c224b122a468b78d7f492ba2ab65be6de",
+      "bytes": 12231
     },
     {
       "path": "src/rizzler/work_design.py",
       "bytes": 20404,
       "sha256": "347f95e7d1879b0e42cb8c8c67be4d6546944b365363628e467cfdf4d9f13964"
+    },
+    {
+      "path": "src/rizzler/work_diagnostics.py",
+      "sha256": "2e53dcf70dda95d61608091b78c76c7a2e25e3f5faa83a4a836ab11dc8a6444c",
+      "bytes": 2707
     },
     {
       "path": "src/rizzler/work_editor.py",
@@ -364,8 +369,8 @@
     },
     {
       "path": "src/rizzler/work_excel_studio.py",
-      "bytes": 11622,
-      "sha256": "b98a19776ee441a31bf92573924af99a150626c300d721ef3bce5f680a78738e"
+      "bytes": 11649,
+      "sha256": "e96c85db85eda3365b2001993b24e6a30aef67a0bc7b75800abac95471a8b86e"
     },
     {
       "path": "src/rizzler/work_memory_context.py",
@@ -374,13 +379,13 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "9bfb677171987030385cc55408b1963098f1395e817af0c65e663cc6b3e62243",
-      "bytes": 28820
+      "sha256": "7ed24b21bb38dc19e8d6da40b78ac96dd95a4404617afe42866c5118d8585e0a",
+      "bytes": 28949
     },
     {
       "path": "src/rizzler/work_store.py",
-      "sha256": "82917890fc55acd8080b3fa7a857e0bad4be63dd53ae9488c4dd89eff1f3ce59",
-      "bytes": 44618
+      "sha256": "5640abad59d163e34fa315bd356475980e755df916e57d032387902ac321860e",
+      "bytes": 47038
     },
     {
       "path": "src/rizzler/work_studio.py",
@@ -389,8 +394,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "3fe08d8529ff120f4ca7a247c86fe4d79968b48956cda7e6ea93aa150fa175da",
-      "bytes": 18526
+      "sha256": "5008e14ef9be22c04fc60bb697e0066f6d99fb6101a3cb4fea7389d60abbb83d",
+      "bytes": 18782
     },
     {
       "path": "tests/test_contracts.py",
@@ -421,6 +426,11 @@
       "path": "tests/test_security.py",
       "bytes": 1156,
       "sha256": "dbb4405ede4aa3f4afebaf354632a6d13923d92074fa2d7e36107060f7250751"
+    },
+    {
+      "path": "tests/test_stack.py",
+      "sha256": "d27cbf02138cf476df13ae179e06dc7350191ff9817753df7a9cd5438d3b29b5",
+      "bytes": 8039
     },
     {
       "path": "tests/test_state.py",
@@ -466,6 +476,11 @@
       "path": "tests/test_v23_hace_runtime.py",
       "bytes": 4118,
       "sha256": "f2b8a9cec8e212b2dc1d12526304129e58b88432a2fa21010fbbdde6725b66d2"
+    },
+    {
+      "path": "tests/test_v23_live_failure_recovery.py",
+      "sha256": "3097f29d498452869fc7e919d5b310f5798c9634cb0e0e1a0f0c19e5d01e0f3e",
+      "bytes": 4644
     },
     {
       "path": "tests/test_v23_memory_context.py",
