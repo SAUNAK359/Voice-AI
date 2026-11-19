@@ -39,7 +39,9 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
     checkpoint = store.root / "checkpoints" / owner / jid
     checkpoint.mkdir(parents=True, exist_ok=True, mode=0o700)
     context = {"objective": payload["objective"], "sources": [], "text": None,
-               "summary": None, "receipts": {}, "uploaded": [], "preflight": {}}
+               "summary": None, "sql_exploration": None, "sql_queries": [],
+               "goal_contract": None, "goal_brief": "", "goal_review": None,
+               "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
         # Other specialists' committed findings are visible before this task
@@ -87,8 +89,11 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["text"], context["sources"] = result["text"], result["sources"]
         elif spec.name == "sql_analytics":
             context["summary"] = result["summary"]
+            context["sql_exploration"] = result.get("analysis_brief")
+            context["sql_queries"] = result.get("sql_investigations") or []
         elif spec.name == "orchestrator":
             context["text"] = result["text"]
+            context["goal_review"] = result.get("goal_review")
         elif spec.name == "quality":
             context["quality"] = result
         else:
@@ -144,6 +149,44 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                                         "cognitive_director", "gap",
                                         {"category": type(exc).__name__,
                                          "status": "approved_graph_fallback"})
+    # Generate or restore user-goal obligations once per job. This is an
+    # observable requirement contract, never a private thought transcript,
+    # and cannot grant tool access or alter the authorized persisted DAG.
+    if feature_enabled("RIZZLER_GOAL_CONTRACT"):
+        from .work_outcome import (
+            create_goal_contract, validate_goal_contract, fallback_goal, goal_brief)
+        try:
+            events=store.cognitive_events(owner,jid,limit=200)
+            prior=next((x["payload"]["contract"] for x in reversed(events)
+                        if x["agent"]=="goal_director" and x["kind"]=="state"
+                        and isinstance(x["payload"].get("contract"),dict)),None)
+            if prior is not None:
+                contract=validate_goal_contract(prior,payload["deliverables"])
+            else:
+                from .config import Settings
+                settings=Settings.from_env()
+                if not settings.gemini_api_key:
+                    raise RuntimeError("Goal planner requires configured model")
+                from google import genai
+                client=genai.Client(api_key=settings.gemini_api_key)
+                try:
+                    contract=await create_goal_contract(
+                        payload["objective"],payload["deliverables"],
+                        model=settings.gemini_model,client=client)
+                finally:
+                    await client.aio.aclose()
+                store.publish_cognition(jid,worker_id,fence,"goal_director",
+                    "state",{"contract":contract})
+            context["goal_contract"]=contract
+            context["goal_brief"]=goal_brief(contract)
+        except Exception as exc:
+            context["goal_contract"]=fallback_goal(
+                payload["objective"],payload["deliverables"])
+            context["goal_brief"]=goal_brief(context["goal_contract"])
+            store.publish_cognition(jid,worker_id,fence,"goal_director",
+                "gap",{"status":"goal_contract_fallback",
+                       "category":type(exc).__name__})
+
     dependencies = {node["id"]: set(node["depends_on"]) for node in graph["steps"]}
     finished = set()
 
@@ -187,6 +230,13 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["text"] = (context["text"] or "# Verified data analysis\n"
                                "This report contains independently computed dataset statistics.") + (
                                "\n\n## Verified dataset evidence\n" + proof)
+        if context.get("sql_exploration"):
+            # Same source-byte-verified SQL results feed every requested
+            # renderer; no separate model can reinterpret a different dataset.
+            context["text"] = (context["text"] or "# Dataset analysis\n"
+                "Analysis is limited to the owner's uploaded data.") + (
+                "\n\n## Adaptive SQL evidence and investigative findings\n"
+                + context["sql_exploration"][:15000])
         context["artifact_ir"] = compile_ir(payload["objective"][:120],
             context["text"] or "# Dataset analysis\nVerified dataset statistics",
             context["sources"], context["summary"])
@@ -244,9 +294,33 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         if len(uploads) != 1:
             raise ValueError("SQL analysis requires exactly one uploaded dataset")
         source = store.upload(owner, uploads[0])
+        if feature_enabled("RIZZLER_SQL_EXPLORATION"):
+            from .config import Settings
+            from .work_sql_exploration import explore_dataset
+            cfg = Settings.from_env()
+            if cfg.gemini_api_key:
+                try:
+                    result = await explore_dataset(
+                        source, payload["objective"] +
+                        ("\n" + context.get("goal_brief",""))[:2500],
+                        model=cfg.gemini_model, api_key=cfg.gemini_api_key)
+                    if result.get("analysis_receipts",{}).get("verified_queries",0):
+                        return result
+                    store.publish_cognition(jid,worker_id,fence,
+                        "sql_analytics","gap",{
+                            "status":"deep_exploration_unavailable",
+                            "category":str(result.get("exploration_status","unknown"))[:90],
+                            "verified_queries":0})
+                except Exception as exc:
+                    store.publish_cognition(jid,worker_id,fence,
+                        "sql_analytics","gap",{
+                            "status":"deep_exploration_unavailable",
+                            "category":type(exc).__name__})
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
+        if context.get("goal_brief"):
+            objective += "\n\n" + context["goal_brief"]
         # Memory selection may run concurrently with the expert pool; it
         # accesses only previously consented-to, encrypted owner memories.
         memory_task = None
@@ -275,6 +349,12 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 objective += ("\n\nDomain-specific expert investigations "
                               "(independent analyses, not verified truth):\n" +
                               expert_context)
+        if context.get("sql_exploration"):
+            objective += (
+                "\n\nEvidence from executed, read-only SQL experiments "
+                "on the owner's uploaded data (computed quantities are "
+                "authoritative; model interpretations remain hypotheses):\n" +
+                context["sql_exploration"][:15000])
         if payload.get("research_synthesis"):
             if not context.get("sources") or not context.get("text"):
                 raise ValueError("Requested research synthesis has no source lineage")
@@ -322,7 +402,55 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     {"error_category":type(exc).__name__,
                      "status":"memory_selection_unavailable"})
         text = await composer(objective, context["summary"])
-        return {"text": text}
+        review = None
+        if context.get("goal_contract") and feature_enabled("RIZZLER_GOAL_CONTRACT"):
+            from .work_outcome import review_outcome
+            from .config import Settings
+            from google import genai
+            cfg = Settings.from_env()
+            if cfg.gemini_api_key:
+                client = genai.Client(api_key=cfg.gemini_api_key)
+                try:
+                    review = await review_outcome(
+                        payload["objective"],context["goal_contract"],text,
+                        client=client,model=cfg.gemini_model)
+                    if not review["passed"]:
+                        gaps = [item["missing"] for item in review["assessments"]
+                                if not item["satisfied"] and item["missing"]]
+                        # Only one targeted synthesis correction from existing
+                        # approved sources and SQL results. When the needed
+                        # evidence is absent, record the gap; do not invent it.
+                        if gaps:
+                            repaired = await composer(
+                                objective + "\n\nAn independent outcome auditor "
+                                "found uncovered user requirements. Repair "
+                                "these specific omissions using ONLY the "
+                                "already provided verified evidence; if data "
+                                "is unavailable, state the gap honestly.\n"
+                                + json.dumps(gaps,ensure_ascii=False)[:1700],
+                                context["summary"])
+                            revised = await review_outcome(
+                                payload["objective"],context["goal_contract"],
+                                repaired,client=client,model=cfg.gemini_model)
+                            if revised["passed"] or sum(
+                                    x["satisfied"] for x in revised["assessments"]) > sum(
+                                    x["satisfied"] for x in review["assessments"]):
+                                text,review = repaired,revised
+                except Exception as exc:
+                    store.publish_cognition(jid,worker_id,fence,
+                        "goal_director","gap",{
+                            "status":"outcome_review_unavailable",
+                            "category":type(exc).__name__})
+                finally:
+                    await client.aio.aclose()
+                if review:
+                    store.publish_cognition(jid,worker_id,fence,
+                        "goal_director","verification",{
+                            "passed":review["passed"],
+                            "evaluated":len(review["assessments"]),
+                            "unmet":sum(not item["satisfied"] for item in review["assessments"]),
+                            "gaps":review["overall_gaps"][:5]})
+        return {"text": text, "goal_review": review}
     if name == "quality":
         receipts = context["receipts"]
         expected = formats.intersection(FILE_FORMATS)
@@ -404,7 +532,14 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
                 "artifact_qa_mode": quality_mode(),
-                "artifact_quality": detailed_qa, "evidence": {"grounded_urls": len(context["sources"]),
+                "artifact_quality": detailed_qa,
+                "goal_coverage": {
+                    "status": ("reviewed_pass" if context.get("goal_review")
+                               and context["goal_review"]["passed"]
+                               else "reviewed_gaps" if context.get("goal_review")
+                               else "not_independently_assessed"),
+                    "limits":"Model assessment is advisory, not factual proof"},
+                "evidence": {"grounded_urls": len(context["sources"]),
                              "sql_reconciled": bool(context["summary"])},
                 "limits": "Structural and evidence QA, not a claim of presentation design superiority"}
     if name not in ("powerpoint", "word", "excel", "pdf_visual"):
@@ -437,22 +572,26 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             from .work_excel_studio import create_workbook_plan
             cfg=Settings.from_env()
             excel_blueprint=await create_workbook_plan(
-                payload["objective"],table,model=cfg.gemini_model,
-                api_key=cfg.gemini_api_key)
+                payload["objective"] +
+                ("\n" + context.get("goal_brief",""))[:1900],
+                table,model=cfg.gemini_model,api_key=cfg.gemini_api_key)
         if kind == "pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
             from .config import Settings
             from .work_studio import create_storyboard
             cfg = Settings.from_env()
             studio_blueprint = await create_storyboard(
-                payload["objective"], ir, model=cfg.gemini_model,
-                api_key=cfg.gemini_api_key)
+                payload["objective"] +
+                ("\n" + context.get("goal_brief",""))[:1900],
+                ir, model=cfg.gemini_model,api_key=cfg.gemini_api_key)
         if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
             from .config import Settings
             from .work_editor import create_report_plan, report_text
             cfg=Settings.from_env()
             editor_blueprint=await create_report_plan(
-                payload["objective"],ir,medium=kind,
-                model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                payload["objective"] +
+                ("\n" + context.get("goal_brief",""))[:1900],
+                ir,medium=kind,model=cfg.gemini_model,
+                api_key=cfg.gemini_api_key)
             document_ir=compile_ir(ir.title,report_text(editor_blueprint),
                                    list(ir.sources),context["summary"])
         # Model calls run once. Recoverable renderer failures regenerate
@@ -471,7 +610,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 if excel_blueprint is not None:
                     from .work_excel_studio import apply_workbook_plan
                     await asyncio.to_thread(
-                        apply_workbook_plan,working,excel_blueprint)
+                        apply_workbook_plan,working,excel_blueprint,
+                        sql_investigations=context.get("sql_queries") or None)
             try:
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
