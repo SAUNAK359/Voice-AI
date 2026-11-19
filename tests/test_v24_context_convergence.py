@@ -251,7 +251,7 @@ class DurableContextStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             store=WorkStore(root)
             task={"objective":"Summarize observations",
-                  "deliverables":["md"],"uploads":[]}
+                  "deliverables":["research","md"],"uploads":[]}
             job=store.submit("owner1",task["objective"],
                              task["deliverables"],"durabletest001",[])
             claim=store.claim("worker",lease_seconds=100)
