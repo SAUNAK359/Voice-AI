@@ -42,6 +42,31 @@ class ResearchFailureDiagnosticTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             ResearchQualificationError("unexpected_user_facts")
 
+    def test_safe_research_categories_survive_persistent_store_contract(self):
+        import tempfile
+        from rizzler.work_store import WorkStore
+        with tempfile.TemporaryDirectory() as root:
+            store = WorkStore(root)
+            job = store.submit("owner", "Create a diagnostic document",
+                               ["txt"], "research-diagnostic-001", [])
+            try:
+                raise ResearchQualificationError(
+                    "missing_verified_quotes",
+                    counts={"empty_grounding_metadata": 2})
+            except ResearchQualificationError as exc:
+                record = failure_record(exc, "research")
+            with store._tx() as cursor:
+                store._diagnostic(cursor, job["id"], "owner", record)
+            found = store.diagnostics("owner", job["id"])
+            self.assertEqual(len(found), 1)
+            self.assertEqual(
+                found[0]["research_reason"], "missing_verified_quotes")
+            record["research_failure_categories"] = {
+                "https://private.example?key=secret": 1}
+            with self.assertRaises(ValueError):
+                with store._tx() as cursor:
+                    store._diagnostic(cursor, job["id"], "owner", record)
+
     def test_distinct_research_call_errors_are_safely_aggregated(self):
         errors=[
             ResearchQualificationError("empty_grounding_metadata"),
