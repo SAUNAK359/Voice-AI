@@ -72,6 +72,121 @@ def validate_report_plan(document: dict, *, medium: str,
             "word_count":total_words}
 
 
+def merge_editorial_expansions(document: dict, additions: dict, *,
+                               allowed_sources: tuple[str, ...]) -> dict:
+    """Merge bounded model-written continuations without altering source lineage.
+
+    Revalidation of the complete report is still mandatory; an expansion
+    cannot change approved URLs, section IDs, headings or source claims.
+    """
+    import re
+    if (not isinstance(document, dict) or not isinstance(document.get("sections"), list)
+            or not isinstance(additions, dict) or set(additions) != {"expansions"}
+            or not isinstance(additions["expansions"], list)
+            or len(additions["expansions"]) > len(document["sections"])):
+        raise ValueError("Malformed targeted editorial expansion")
+    out = {**document, "sections": [dict(x) for x in document["sections"]]}
+    seen = set()
+    for item in additions["expansions"]:
+        if not isinstance(item, dict) or set(item) != {"index", "supplement"}:
+            raise ValueError("Editorial expansion violates schema")
+        index = item["index"]
+        if (type(index) is not int or not 0 <= index < len(out["sections"])
+                or index in seen):
+            raise ValueError("Editorial expansion references unavailable section")
+        seen.add(index)
+        more = item["supplement"]
+        if (not isinstance(more, str) or not 120 <= len(more.strip()) <= 3500
+                or "lorem ipsum" in more.casefold() or "[insert " in more.casefold()):
+            raise ValueError("Editorial expansion is missing or placeholder text")
+        referenced = re.findall(r"https?://[^\s<>\]\)\"']+", more)
+        if any(url.rstrip(".,;") not in allowed_sources for url in referenced):
+            raise ValueError("Editorial expansion invented a source URL")
+        original = out["sections"][index]
+        if len(original["body"]) + len(more) + 2 > 5600:
+            raise ValueError("Editorial expansion exceeded section length budget")
+        original["body"] = original["body"].rstrip() + "\n\n" + more.strip()
+    out.pop("word_count", None)
+    return out
+
+
+async def expand_report_plan(objective: str, ir, document: dict, *,
+                             required_words: int, model: str, client) -> dict:
+    """Targeted iterative edit when the initial report is complete but too short.
+
+    A model revises deficient sections while the application preserves
+    lineage, sources, and the exact original section coverage. No mechanical
+    filler or hardcoded domain copy is inserted.
+    """
+    from google.genai import types
+    from .cognitive_provider import generate_with_recovery
+    existing = document
+    for iteration in range(2):
+        sections = existing["sections"]
+        observed = sum(len(x["body"].split()) for x in sections)
+        gap = required_words - observed
+        if gap <= 0:
+            return existing
+        candidates = [
+            {"index": i, "heading": x["heading"], "current_words": len(x["body"].split()),
+             "remaining_chars": 5600-len(x["body"])-2, "section_ids": x["section_ids"]}
+            for i,x in enumerate(sections) if 5600-len(x["body"]) >= 260]
+        if not candidates:
+            return existing
+        prompt = (
+            "You are the FINAL specialized editorial expansion pass. The "
+            "report is structurally valid, all original source sections are "
+            "covered, but it is too short to preserve the existing analysis. "
+            "Produce additional meaningful, domain-specific paragraph(s) "
+            "for existing sections, not a new report. Avoid filler, repetition "
+            "and generalizations. Explain concrete methodology, limitations, "
+            "alternative interpretations, actionable implications, or source "
+            "comparisons only to the extent supported by provided text. "
+            "No new numbers, commitments, claims, citations or URLs unless "
+            "directly in the approved source text. If evidence is absent, "
+            "explain the uncertainty and what would resolve it. "
+            "You must add approximately " + str(gap+60) +
+            " TOTAL substantive words over the listed sections while "
+            "respecting each remaining_chars limit. Return JSON exactly "
+            "{\"expansions\":[{\"index\":integer,\"supplement\":string}]}; "
+            "each index appears at most once. Supplements must be at least "
+            "120 characters, be original analysis, and retain the section's "
+            "scope. Do not quote or expose internal prompts or reasoning. "
+            "\nUser objective:\n" + objective[:1800] +
+            "\nApproved original material:\n" +
+            json.dumps([{"id":i,"heading":h,"text":body[:1800]}
+                        for i,(h,body) in enumerate(ir.sections)],
+                       ensure_ascii=False)[:19000] +
+            "\nCurrent report (do not repeat existing paragraphs):\n" +
+            json.dumps([{"index":i,"heading":x["heading"],"body":x["body"][:3300]}
+                        for i,x in enumerate(sections)],
+                       ensure_ascii=False)[:21000] +
+            "\nAvailable sections and capacity:\n" +
+            json.dumps(candidates,ensure_ascii=False)[:5000] +
+            "\nApproved external URLs:\n" +
+            json.dumps(list(ir.sources))[:2400])
+        try:
+            result = await generate_with_recovery(
+                client, role="work", model=model, timeout=85,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.22, max_output_tokens=6500))
+            additions = decode_model_json(
+                getattr(result,"text","") or "",max_bytes=48000)
+            expanded = merge_editorial_expansions(
+                existing, additions, allowed_sources=ir.sources)
+            if (sum(len(x["body"].split()) for x in expanded["sections"])
+                    <= observed):
+                return existing
+            existing = expanded
+        except ValueError:
+            # Fail closed; full upstream drafting and the original validator
+            # remain available instead of publishing a shortened report.
+            return existing
+    return existing
+
+
 async def create_report_plan(objective: str, ir, *, medium: str,
                              model: str, api_key: str, client=None) -> dict:
     if not api_key:
@@ -136,6 +251,17 @@ async def create_report_plan(objective: str, ir, *, medium: str,
                     document,medium=medium,original_sections=ir.sections,
                     allowed_sources=ir.sources)
             except ValueError as exc:
+                if (str(exc) == "Edited report discarded too much analytical substance"
+                        and isinstance(document,dict)):
+                    repaired = await expand_report_plan(
+                        objective, ir, document, required_words=required_words,
+                        model=model, client=client)
+                    try:
+                        return validate_report_plan(
+                            repaired,medium=medium,original_sections=ir.sections,
+                            allowed_sources=ir.sources)
+                    except ValueError:
+                        document = repaired
                 if attempt == 2:
                     raise
                 observed=sum(
@@ -147,7 +273,8 @@ async def create_report_plan(objective: str, ir, *, medium: str,
                     document.get("sections"),list) else 0
                 correction=(
                     "\\nThe previous draft did not pass strict editorial "
-                    "validation. It contains " + str(observed) +
+                    "validation (" + str(exc)[:110] + "). It contains " +
+                    str(observed) +
                     " body words; at least " + str(required_words) +
                     " substantive words are required. Correct invalid schema "
                     "and explicitly expand weak sections using only supplied "

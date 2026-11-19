@@ -329,8 +329,8 @@
     },
     {
       "path": "src/rizzler/research_intelligence.py",
-      "sha256": "93b2e2a1a372acc2828fc1089012531e536f1993d7ce9e021ef96f16e6657cc9",
-      "bytes": 10158
+      "sha256": "949673ac035b8f04c9562e3a7b928ff505a50d2bb0cfed840ed76c8d90df3391",
+      "bytes": 14484
     },
     {
       "path": "src/rizzler/security.py",
@@ -379,8 +379,8 @@
     },
     {
       "path": "src/rizzler/work_editor.py",
-      "bytes": 11002,
-      "sha256": "6f0a4e6ce52cd7b7c1c70ed35463b92becd369497f1edfc1511d052808e319f3"
+      "bytes": 17980,
+      "sha256": "8cc1c156e4a870832d84b413e2f1b5896805fb99d15346f49a72abb05a129fe6"
     },
     {
       "path": "src/rizzler/work_excel_studio.py",
@@ -424,8 +424,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "20d782c0d66784c85ee4148b4dce6c864ff84d4bd51442cb4f96e65304c28bc8",
-      "bytes": 24941
+      "sha256": "ad1773b270d9265ea75092ebb8588757dda76e117d1831049f07080c19ce16d2",
+      "bytes": 25224
     },
     {
       "path": "tests/test_contracts.py",
@@ -521,6 +521,11 @@
       "path": "tests/test_v23_memory_context.py",
       "bytes": 1396,
       "sha256": "7a5d983687c80e6132e638e7d1ef7d13ac95d0dcbe8e24fa00b376e646d27341"
+    },
+    {
+      "path": "tests/test_v23_pr54_recovery.py",
+      "sha256": "55212d569f468b35df7a803864d0d910cc2541cbc0ecf9b9514efea65b07cc2b",
+      "bytes": 3768
     },
     {
       "path": "tests/test_v23_research_intelligence.py",
