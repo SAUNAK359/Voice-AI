@@ -130,7 +130,7 @@ class ContentEngineTests(unittest.TestCase):
                 } for i in range(3)]})
             return ("Evidence-supported interpretation must distinguish "
                     "independent findings, alternative explanations, and "
-                    "unresolved uncertainty. ")*14
+                    "unresolved uncertainty. ")*8
         report=asyncio.run(develop_content(
             "Generate domain-specific verification report",None,generate,
             max_characters=3000))
