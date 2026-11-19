@@ -137,7 +137,9 @@ class WorkStore:
         # Snapshot runtime policy into the immutable job envelope; a restart
         # or feature flag change must not silently alter the approved DAG.
         from os import environ
-        if feature_enabled("RIZZLER_V23_UNIFIED_RESEARCH"):
+        # Full cognitive mode enhances ONLY user-requested research.
+        # An Excel-only job cannot inherit a nonexistent research dependency.
+        if "research" in formats and feature_enabled("RIZZLER_V23_UNIFIED_RESEARCH"):
             payload["research_synthesis"] = True
         from .work_agents import plan
         planned = plan(payload)
