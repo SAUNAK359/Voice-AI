@@ -126,6 +126,24 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
     async def investigate(label, instruction):
         async with source_slots:
             from .cognitive_provider import generate_with_recovery
+            tools = [types.Tool(google_search=types.GoogleSearch())]
+            thinking = None
+            if feature_enabled("RIZZLER_GEMINI_NATIVE_TOOLS"):
+                from .gemini_native import choose_native_tools, native_tools
+                # The LLM decides which optional native abilities are useful.
+                # Search remains mandatory for this source-backed stage.
+                choice = await choose_native_tools(
+                    instruction, model=cfg.gemini_model, client=client,
+                    permitted=frozenset({
+                        "google_search", "url_context", "code_execution"}))
+                if "google_search" not in choice["tools"]:
+                    raise ValueError("Research tool selection omitted required source discovery")
+                tools = native_tools(choice, types=types,
+                    permitted=frozenset({
+                        "google_search", "url_context", "code_execution"}))
+                if cfg.gemini_enable_thinking:
+                    thinking = types.ThinkingConfig(
+                        thinking_level=choice["thinking_level"])
             response=await generate_with_recovery(
                 client, role="research", model=cfg.gemini_model,
                 contents=instruction[:6500]+
@@ -133,8 +151,8 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                          "Do not invent quotes, citations, publications or dates.",
                 timeout=min(60,cfg.request_timeout),
                 config=types.GenerateContentConfig(
-                    system_instruction=skill,
-                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    system_instruction=skill, tools=tools,
+                    thinking_config=thinking,
                     temperature=0.15,max_output_tokens=1600))
         records=source_records(response)
         answer=(getattr(response,"text","") or "").strip()
