@@ -424,8 +424,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "11c79e8405c044a12fb3be070dee2263d4424d49176bbe4ff5bd25001af837ec",
-      "bytes": 24395
+      "sha256": "20d782c0d66784c85ee4148b4dce6c864ff84d4bd51442cb4f96e65304c28bc8",
+      "bytes": 24941
     },
     {
       "path": "tests/test_contracts.py",
