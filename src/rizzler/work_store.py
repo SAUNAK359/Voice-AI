@@ -861,10 +861,27 @@ class WorkStore:
 
     @staticmethod
     def _diagnostic(c, jid: str, owner: str, record: dict):
-        allowed = {"stage","code","exception_type","exception_module",
-                   "locations","fingerprint"}
-        if not isinstance(record, dict) or set(record) != allowed:
+        required = {"stage","code","exception_type","exception_module",
+                    "locations","fingerprint"}
+        research_fields = {"research_reason","research_failure_categories"}
+        if (not isinstance(record, dict)
+                or not required <= set(record)
+                or not set(record) <= required | research_fields
+                or set(record).intersection(research_fields) not in
+                   (set(), research_fields)):
             raise ValueError("Invalid safe diagnostic contract")
+        if research_fields <= set(record):
+            from .work_research_errors import SAFE_REASONS
+            reason=record["research_reason"]
+            counts=record["research_failure_categories"]
+            if (reason not in SAFE_REASONS
+                    or record["code"] != "research_" + reason
+                    or not isinstance(counts,dict)
+                    or len(counts)>len(SAFE_REASONS)
+                    or any(name not in SAFE_REASONS or
+                           type(value) is not int or not 0<=value<=1000
+                           for name,value in counts.items())):
+                raise ValueError("Unsafe research diagnostic extension")
         raw=json.dumps(record,sort_keys=True,separators=(",",":"))
         if len(raw)>2600:
             raise ValueError("Diagnostic record too large")
