@@ -98,14 +98,23 @@ Complete WorkStore receipt set + final quality gate + truthful status
 - Explicit max convergence waves and duplicate-request protection prevent
   runaway agent calls. If unresolved, generation fails closed.
 
-**Important limitation:** a pre-artifact convergence gate is implemented.
-A general dynamic graph that invalidates and reruns already-committed
-downstream artifacts, arbitrary database retrieval, cross-job durable
-read/write of new context, and live user-question/resume UI are not yet
-complete. A production upgrade must add explicit dependency/version
-invalidation, on-disk replay with integrity receipts, and user-approved
-continuations. No claim of complete N+1-to-N-2-to-N+2 runtime across
-*all* artifact types is made by this draft.
+**V24 active extensions:** Context evidence deltas now persist in the owner-scoped
+hash-verified, fenced \`context_checkpoints\` table. On worker recovery the same
+validated source baseline is restored before synthesis; downstream artifacts
+record their exact context revision and IR digest, so stale checkpoints are
+reopened. A post-artifact LLM critic may request missing evidence and trigger
+bounded upstream investigation, invalidation and re-execution of the original
+authorized graph without restarting the entire user job. A user-specific
+clarification may pause the job as \`awaiting_input\`; the authenticated Work
+API and browser permit the task owner to answer and resume the same job.
+
+**Limits of current release candidate:** The dynamic loop has a bounded
+three-pass guard, not arbitrary autonomous recursion. Large evidence inputs
+may be rejected when their complete, lossless representation exceeds the
+persistence budget; they are not silently truncated. Cross-worker model
+correctness, citation fidelity and full visual design QA still require live
+qualification. A user clarification is user-authored context, not independent
+factual evidence. The owner and resource permission gates remain mandatory.
 
 ### Cognitive Verification and Recovery
 
@@ -171,6 +180,22 @@ Native tools must not be enabled indiscriminately; capability requests
 increase cost, latency, exposure, and sometimes reduce compatibility.
 Privilege decisions and user confirmations remain host-authoritative.
 
+
+### Additional owner-scoped interfaces implemented in V24
+
+- \`GET /api/work/jobs/{jid}/questions\` lists outstanding user clarifications.
+- \`POST /api/work/jobs/{jid}/answers\` accepts authenticated answers and
+  requeues the same job only when all pending questions are answered.
+- \`work.js\` renders pending questions and protects typed answers from being
+  lost to background polling.
+- \`task_planning.propose_semantic_scope\` infers whether the real task needs
+  read-only public research or uploaded-data analysis, rather than relying on
+  positive keyword rules. The API snapshots original requested outputs for
+  stable idempotency across future LLM planning differences.
+- \`gemini_native.use_native_research\` validates model-selected built-in tool
+  combinations and falls back only for unsupported configurations, preserving
+  ground-truth source retrieval and normal 429/503 provider recovery.
+
 ### Modules to finish for actual production qualification
 
 | Area | Concrete acceptance criterion |
@@ -190,16 +215,20 @@ Privilege decisions and user confirmations remain host-authoritative.
 
 ### Feature rollout and tests
 
-Keep these experimental features disabled by default, including under
-\`RIZZLER_V23_MODE=full\`, until provider and artifact qualification:
+**All V23/V24 Work capabilities now default to enabled** through
+\`RIZZLER_V23_MODE=full\` (the default when unset). Context convergence,
+Gemini-native research tool selection and specialist quality review are
+part of the same active mode. Explicit environment overrides remain
+available to operators for incident recovery; security checks are never
+disabled. The dynamic thinking option is \`RIZZLER_GEMINI_ENABLE_THINKING=1\`
+for supported models, and a capability-incompatible extra tool/level
+recovers through the native Google Search path instead of dropping research.
 
-\`\`\`text
-RIZZLER_CONTEXT_CONVERGENCE=1
-RIZZLER_GEMINI_NATIVE_TOOLS=1
-RIZZLER_GEMINI_ENABLE_THINKING=1
-\`\`\`
+Full-mode tasks require a configured \`GEMINI_API_KEY\` and network-accessible,
+billing-enabled supported models. Production qualification must distinguish
+feature availability from verified successful behavior.
 
-Before enabling all three on real user work:
+Before declaring production qualification:
 
 1. Pass minimal Python CI, all Work extras, strict visual/structural QA,
    source integrity, frontend App CI and CodeQL.
