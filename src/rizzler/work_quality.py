@@ -179,8 +179,15 @@ def inspect_artifact(path: Path, kind: str, *,
                 actual_sources = ([r[0] for r in wb["Sources"].iter_rows(values_only=True)]
                                   if "Sources" in wb else [])
                 cells = list(wb["Summary"].iter_rows(min_row=3,min_col=2,max_col=2,values_only=True))
+                # openpyxl reopens an intentionally blank Summary text cell
+                # as None. An empty section introduction is valid, but a
+                # missing substantive paragraph is not. Compare every row,
+                # not only the truncated zip intersection.
                 valid = (present == headings and actual_sources == sources
-                         and all((cell[0] == body or cell[0] == "'"+body)
+                         and len(cells) == len(artifact_ir.sections)
+                         and all((cell[0] == body or
+                                  (body == "" and cell[0] in (None, "")) or
+                                  cell[0] == "'" + body)
                                  for cell,(_,body) in zip(cells,artifact_ir.sections)))
             finally:
                 wb.close()

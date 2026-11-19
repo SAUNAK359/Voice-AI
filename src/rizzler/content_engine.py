@@ -83,21 +83,41 @@ async def develop_content(objective: str, dataset: dict | None,
         "Research that has not been independently checked is unverified. "
         "\nTask:\n" + objective[:5500] +
         "\nVerified dataset measurements:\n" + evidence)
-    # One semantic correction is permitted for malformed model planning.
-    # The correction cannot broaden tools or alter the caller's authority.
-    for attempt in range(2):
-        raw_plan = await generate(
-            planner_request + ("\nThe previous answer failed JSON/schema validation. "
-                               "Return only the required object." if attempt else ""),
-            2400)
+    # Correct the typed content plan, including its total word budget,
+    # before launching independent section writers. Model schema failures are
+    # not provider outages and must not be handled by transport retries.
+    correction = ""
+    permitted_errors = frozenset({
+        "Content plan envelope mismatch",
+        "Content plan must contain 3–12 sections",
+        "Content plan has unknown fields",
+        "Invalid section requirements",
+        "Section depth outside configured limits",
+        "Duplicate or unsafe section heading",
+        "Section plan exceeds the permitted report size",
+    })
+    for attempt in range(3):
+        raw_plan = await generate(planner_request + correction, 2400)
         try:
             plan = _valid_plan(decode_model_json(raw_plan))
+            if sum(item["target_words"] for item in plan) > max_characters // 5:
+                raise ValueError("Section plan exceeds the permitted report size")
             break
-        except ValueError:
-            if attempt:
+        except ValueError as exc:
+            if attempt == 2:
                 raise
-    if sum(item["target_words"] for item in plan) > max_characters // 5:
-        raise ValueError("Section plan exceeds the permitted report size")
+            reason = str(exc) if str(exc) in permitted_errors else "Malformed JSON plan"
+            correction = (
+                "\nPrevious candidate rejected by the authoritative validator: " +
+                reason + ". Return a NEW complete JSON object with exactly "
+                "3–12 distinct sections; each item must have ONLY heading, "
+                "question, coverage and integer target_words. Each of the "
+                "three text fields must be at least 10 and at most 300 "
+                "characters. target_words must be 150–900. Keep the sum of "
+                "target_words at most " + str(max_characters // 5) +
+                ". Use real domain-specific headings instead of placeholders; "
+                "retain user intent, avoid invented facts and tool requests."
+            )
     semaphore = asyncio.Semaphore(parallelism)
 
     async def write(index: int, section: dict, repair_guidance: str = "") -> tuple[int, str]:
@@ -123,8 +143,21 @@ async def develop_content(objective: str, dataset: dict | None,
                    "repair it without inventing facts: " + repair_guidance[:900]
                    if repair_guidance else "")
             )
-            answer = await generate(request, min(4200, section["target_words"] * 3))
-            return index, _validate_section(section, answer)
+            for draft_attempt in range(2):
+                answer = await generate(request, min(4200, section["target_words"] * 3))
+                try:
+                    return index, _validate_section(section, answer)
+                except ValueError:
+                    if draft_attempt:
+                        raise
+                    request += (
+                        "\nThe previous draft failed minimum content or "
+                        "format validation. Write at least " +
+                        str(min(95,section["target_words"] // 2)) +
+                        " useful words and at least 350 characters, within "
+                        "12,000 characters. Do not invent measurements, "
+                        "sources or evidence; describe gaps honestly."
+                    )
 
     # Gathering ordered results preserves the intentional report narrative,
     # while all independent sections share the same verified evidence snapshot.

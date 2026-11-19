@@ -214,9 +214,24 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             if set(found).issuperset({"text","sources"}):
                 if feature_enabled("RIZZLER_CLAIM_VERIFY") and not found.get(
                         "verified_quotes"):
-                    # Provider grounding alone does not establish original
-                    # source-byte evidence. Never publish unsourced research
-                    # as a fully verified deliverable under strict mode.
+                    # Never promote provider search metadata to independent
+                    # source evidence. Preserve privacy-safe acquisition counts
+                    # so the precise failure is visible even when the stage
+                    # fails before its result can be checkpointed.
+                    audit=found.get("evidence_summary") or {}
+                    failures=found.get("retrieval_failures") or []
+                    categories={}
+                    for item in failures:
+                        category=str(item.get("error_category","unknown"))[:60]
+                        categories[category]=categories.get(category,0)+1
+                    store.publish_cognition(
+                        jid,worker_id,fence,"research","gap",{
+                            "status":"insufficient_independently_verified_quotes",
+                            "provider_sources":len(found.get("sources") or []),
+                            "retrieved_documents":len(found.get("source_documents") or []),
+                            "candidate_passages":audit.get("candidate_passages",0),
+                            "claim_verification":audit.get("claim_verification","none"),
+                            "retrieval_failure_categories":categories})
                     raise ValueError("Research has no independently checked quotations")
                 return found
             raise ValueError("Research provider returned malformed evidence")

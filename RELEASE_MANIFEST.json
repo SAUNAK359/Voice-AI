@@ -299,8 +299,8 @@
     },
     {
       "path": "src/rizzler/content_engine.py",
-      "sha256": "2c30ec40fcc4ab72071db54b5f9aae1f97bc9e6bf801ebe4d6452b3cceb3f98b",
-      "bytes": 10856
+      "sha256": "03e791b2590c8b243279c557b915ee01c9bb08b2fd4d520817ea00732f1d97d6",
+      "bytes": 12682
     },
     {
       "path": "src/rizzler/contracts.py",
@@ -394,8 +394,8 @@
     },
     {
       "path": "src/rizzler/work_quality.py",
-      "sha256": "35ffef9f71d0d95b7bf32418fca135f3bfc70eb23f1117d395dd9073052f6d25",
-      "bytes": 11319
+      "sha256": "f8c2241dc61eac15e103b8e894171a214e44c52c3e305962bc01eff597c88513",
+      "bytes": 11783
     },
     {
       "path": "src/rizzler/work_skills.py",
@@ -404,8 +404,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "57fb1ed5b4e5ba3a4a5bafddb7442e724ae81748d4de98d21d95cb871101f60a",
-      "bytes": 29038
+      "sha256": "345c4978d9eb7de8a0a44805cf5dc27b5ee37bcb62a2967b012bca14b8eecdce",
+      "bytes": 30079
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -419,8 +419,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "2fd9d6a48670d0cd1a5f5ec913f6293feee042f98ded1cad6d3c173897f75b72",
-      "bytes": 19202
+      "sha256": "86b77b466234dec63c20d7b0904063187a8b57d8d2a3907f690067cda74c8429",
+      "bytes": 20369
     },
     {
       "path": "tests/test_contracts.py",
@@ -474,8 +474,8 @@
     },
     {
       "path": "tests/test_v23_content_engine.py",
-      "sha256": "6ee5d8494ba1304f78147360575186d5cad66bd5e8eaaaab222fb96353d7f28a",
-      "bytes": 5995
+      "sha256": "badccb921f104c0cb78e84b167bce5220e319f8c177355de2d22dfe0c5049a7e",
+      "bytes": 8410
     },
     {
       "path": "tests/test_v23_e2e_cognition.py",
@@ -504,8 +504,8 @@
     },
     {
       "path": "tests/test_v23_kaggle_live_failures.py",
-      "sha256": "7194263f113a4effd1dd08cf491ec598b883a6592c46eb7ed0fe9861ef4b8813",
-      "bytes": 5663
+      "sha256": "8efeae09a04cf9a214865b7bdf079d781ee5f96230cf693384de1792b0325e5f",
+      "bytes": 7371
     },
     {
       "path": "tests/test_v23_live_failure_recovery.py",
