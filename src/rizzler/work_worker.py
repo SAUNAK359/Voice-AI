@@ -465,6 +465,12 @@ class WorkWorker:
                 self.store, claim, self.identity, self.composer, self.researcher)
         except (StaleLease, InterruptedError):
             self.store.fail(jid, self.identity, fence, "cancelled_or_stale")
+        except __import__(
+                "rizzler.work_context_intelligence",
+                fromlist=["UserInputRequired"]).UserInputRequired as exc:
+            # Persistent clarification is a nonterminal state. The next
+            # worker resumes the same authorized job after the owner answers.
+            self.store.pause_for_input(jid,self.identity,fence,exc.requests)
         except asyncio.CancelledError:
             # Never silently mark a interrupted worker's job as successful.
             self.store.fail(jid, self.identity, fence, "worker_interrupted")
