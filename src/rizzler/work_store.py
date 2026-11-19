@@ -591,6 +591,106 @@ class WorkStore:
                 self._event(c,jid,"planning","Evidence changed; impacted specialists reopened")
             return changed
 
+    def questions(self, owner: str, jid: str) -> list[dict]:
+        """Read the owner's pending and answered clarification questions."""
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE id=? AND owner=?",
+                         (jid,owner)).fetchone() is None:
+                raise Missing("Job not found")
+            rows=c.execute("""SELECT question_id,prompt,status,answer,at,answered
+                FROM job_questions WHERE job_id=? AND owner=?
+                ORDER BY at,question_id""",(jid,owner)).fetchall()
+            return [{"id":row["question_id"],"question":row["prompt"],
+                     "status":row["status"],"answer":row["answer"],
+                     "asked_at":row["at"],"answered_at":row["answered"]}
+                    for row in rows]
+
+    def pause_for_input(self, jid: str, worker: str, fence: int,
+                        requests: list[dict]) -> None:
+        """Pause without treating user-dependent work as failed or completed."""
+        if not isinstance(requests,list) or not 1<=len(requests)<=3:
+            raise ValueError("Invalid number of user questions")
+        for item in requests:
+            if (not isinstance(item,dict)
+                    or item.get("recipient")!="user"
+                    or item.get("blocking") is not True
+                    or not isinstance(item.get("question"),str)
+                    or not 16<=len(item["question"].strip())<=650):
+                raise ValueError("Invalid task clarification")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            old=c.execute("SELECT COUNT(*) FROM job_questions WHERE job_id=?",
+                          (jid,)).fetchone()[0]
+            if old+len(requests)>9:
+                raise ValueError("Clarification rounds exceeded")
+            added=0
+            for item in requests:
+                question=item["question"].strip()
+                qid=hashlib.sha256(question.encode()).hexdigest()[:24]
+                previous=c.execute("""SELECT status FROM job_questions
+                    WHERE job_id=? AND question_id=?""",(jid,qid)).fetchone()
+                if previous and previous["status"]=="answered":
+                    raise ValueError("Already answered question was not resolved")
+                if previous is None:
+                    c.execute("""INSERT INTO job_questions(
+                        job_id,owner,question_id,prompt,status,at)
+                        VALUES(?,?,?,?,?,?)""",
+                        (jid,row["owner"],qid,question,"pending",time.time()))
+                    added+=1
+            if not added:
+                raise ValueError("No additional clarification is actionable")
+            c.execute("""UPDATE jobs SET status='awaiting_input',
+                stage='awaiting_input',lease_owner=NULL,lease_until=0,
+                updated=? WHERE id=?""",(time.time(),jid))
+            self._event(c,jid,"awaiting_input","User clarification needed to continue")
+
+    def answer_questions(self, owner: str, jid: str,
+                         answers: list[dict]) -> dict:
+        """Durably record explicit user answers and requeue the same job."""
+        if not isinstance(answers,list) or not 1<=len(answers)<=9:
+            raise ValueError("Invalid clarification answer count")
+        ids=set()
+        for answer in answers:
+            if (not isinstance(answer,dict) or set(answer)!={"id","answer"}
+                    or not isinstance(answer["id"],str)
+                    or not re.fullmatch(r"[0-9a-f]{24}",answer["id"])
+                    or answer["id"] in ids
+                    or not isinstance(answer["answer"],str)
+                    or not 1<=len(answer["answer"].strip())<=4000):
+                raise ValueError("Malformed clarification answer")
+            ids.add(answer["id"])
+        with self._tx() as c:
+            row=c.execute("SELECT * FROM jobs WHERE id=? AND owner=?",
+                          (jid,owner)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            if row["status"]!="awaiting_input" or row["cancel_requested"]:
+                raise Conflict("Job is not awaiting clarification")
+            for answer in answers:
+                changed=c.execute("""UPDATE job_questions
+                    SET status='answered',answer=?,answered=?
+                    WHERE job_id=? AND owner=? AND question_id=? AND status='pending'""",
+                    (answer["answer"].strip(),time.time(),
+                     jid,owner,answer["id"]))
+                if changed.rowcount!=1:
+                    raise ValueError("Unknown or already answered clarification")
+            pending=c.execute("""SELECT COUNT(*) FROM job_questions
+                WHERE job_id=? AND status='pending'""",(jid,)).fetchone()[0]
+            if not pending:
+                from .work_agents import plan
+                approved={s.name for s in plan(json.loads(row["payload"]))}
+                for name in approved-{"research","sql_analytics"}:
+                    c.execute("""UPDATE agent_steps SET status='queued',
+                        started=0,finished=0,deadline=0,updated=?,
+                        result_json='',result_sha256='',qa_json='',error_code=''
+                        WHERE job_id=? AND agent=?""",
+                        (time.time(),jid,name))
+                c.execute("""UPDATE jobs SET status='queued',stage='accepted',
+                    attempts=0,updated=? WHERE id=?""",(time.time(),jid))
+                self._event(c,jid,"queued","Clarification received; resumable job requeued")
+            return self._view(c.execute(
+                "SELECT * FROM jobs WHERE id=?",(jid,)).fetchone())
+
     def agent_steps(self, owner: str, jid: str) -> list[dict]:
         """Owner-scoped durable per-agent statuses and SLA evidence."""
         with self._tx() as c:
