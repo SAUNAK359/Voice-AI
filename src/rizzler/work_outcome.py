@@ -20,9 +20,9 @@ def validate_goal_contract(document: dict, formats: list[str]) -> dict:
             or not isinstance(document["objective"],str)
             or not 20<=len(document["objective"].strip())<=900
             or not isinstance(document["requirements"],list)
-            or not 2<=len(document["requirements"])<=12
+            or not 2<=len(document["requirements"])<=8
             or not isinstance(document["unknowns"],list)
-            or len(document["unknowns"])>10):
+            or len(document["unknowns"])>5):
         raise ValueError("Invalid task goal contract")
     if any(not isinstance(v,str) or not 10<=len(v)<=220
            for v in document["unknowns"]):
@@ -40,9 +40,9 @@ def validate_goal_contract(document: dict, formats: list[str]) -> dict:
                 or type(entry["priority"]) is not int
                 or not 1<=entry["priority"]<=5
                 or not isinstance(entry["obligation"],str)
-                or not 15<=len(entry["obligation"])<=360
+                or not 15<=len(entry["obligation"])<=300
                 or not isinstance(entry["evidence_needed"],str)
-                or not 10<=len(entry["evidence_needed"])<=350):
+                or not 10<=len(entry["evidence_needed"])<=240):
             raise ValueError("Invalid goal success obligation")
         seen.add(id_)
         requirements.append(entry)
@@ -78,7 +78,7 @@ async def create_goal_contract(objective: str, formats: list[str], *,
     prompt=(
         "You are the outcome owner for a sophisticated multi-tool AI Work "
         "task. Derive the user's TRUE desired result, independent of the "
-        "file format. Identify 2–12 explicit, testable success obligations. "
+        "file format. Identify 2–8 explicit, testable success obligations. "
         "Use the user's exact analytical dimensions, date ranges, units, "
         "questions, constraints and audience. Decide which calculations, "
         "original evidence, investigations, comparisons, diagrams and "
