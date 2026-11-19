@@ -100,6 +100,14 @@ class WorkStore:
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS cognitive_cursor
               ON cognitive_events(owner,job_id,seq);
+            CREATE TABLE IF NOT EXISTS context_checkpoints(
+              job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              base_sha256 TEXT NOT NULL, revision TEXT NOT NULL,
+              payload_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL,
+              updated REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS context_checkpoints_owner
+              ON context_checkpoints(owner,job_id);
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
@@ -453,6 +461,112 @@ class WorkStore:
                                "kind":row["kind"],"payload":json.loads(raw),
                                "sha256":row["payload_sha256"],"at":row["at"]})
             return events
+
+    def save_context_checkpoint(self, jid: str, worker: str, fence: int,
+                                base_sha256: str, snapshot: dict) -> str:
+        """Fenced, owner-scoped, hash-checked recovery of real evidence deltas.
+
+        Not an LLM transcript. A later worker may replay only results obtained
+        under the same immutable source-stage baseline.
+        """
+        if (not isinstance(base_sha256, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", base_sha256)
+                or not isinstance(snapshot, dict)
+                or set(snapshot) != {"schema_version", "revision", "status",
+                                     "deltas", "seen"}
+                or snapshot["schema_version"] != 1
+                or snapshot["status"] not in ("investigating", "ready", "blocked")
+                or not isinstance(snapshot["deltas"], list)
+                or len(snapshot["deltas"]) > 12
+                or not isinstance(snapshot["seen"], list)
+                or len(snapshot["seen"]) > 20):
+            raise ValueError("Invalid recoverable context checkpoint")
+        raw=json.dumps(snapshot, sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=False, allow_nan=False)
+        if len(raw.encode("utf-8")) > 190_000:
+            raise ValueError("Context evidence checkpoint exceeds storage budget")
+        digest=hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        if not isinstance(snapshot["revision"],str) or not re.fullmatch(
+                r"[0-9a-f]{64}", snapshot["revision"]):
+            raise ValueError("Context revision digest missing")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            c.execute("""INSERT INTO context_checkpoints(
+              job_id,owner,base_sha256,revision,payload_json,payload_sha256,updated)
+              VALUES(?,?,?,?,?,?,?)
+              ON CONFLICT(job_id) DO UPDATE SET
+              base_sha256=excluded.base_sha256,
+              revision=excluded.revision,
+              payload_json=excluded.payload_json,
+              payload_sha256=excluded.payload_sha256,
+              updated=excluded.updated""",
+              (jid,row["owner"],base_sha256,snapshot["revision"],raw,digest,time.time()))
+        return digest
+
+    def context_checkpoint(self, owner: str, jid: str,
+                           base_sha256: str) -> dict | None:
+        """Return validated context iff the original source-stage inputs match."""
+        if not isinstance(base_sha256,str) or not re.fullmatch(
+                r"[0-9a-f]{64}",base_sha256):
+            raise ValueError("Invalid source baseline digest")
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE id=? AND owner=?",
+                         (jid,owner)).fetchone() is None:
+                raise Missing("Job not found")
+            row=c.execute("""SELECT base_sha256,revision,payload_json,payload_sha256
+                FROM context_checkpoints WHERE job_id=? AND owner=?""",
+                (jid,owner)).fetchone()
+            if row is None:
+                return None
+            raw=row["payload_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=row["payload_sha256"]:
+                raise ValueError("Context recovery record failed integrity verification")
+            if row["base_sha256"]!=base_sha256:
+                # An invalidated upstream input cannot reuse old conclusions.
+                return None
+            snapshot=json.loads(raw)
+            if (not isinstance(snapshot,dict)
+                    or snapshot.get("revision")!=row["revision"]
+                    or snapshot.get("schema_version")!=1):
+                raise ValueError("Context recovery record schema or revision mismatch")
+            return snapshot
+
+    def reopen_agents(self, jid: str, worker: str, fence: int,
+                      names: list[str]) -> list[str]:
+        """Invalidate selected committed downstream checkpoints atomically.
+
+        The original job DAG and identity are immutable. We never re-authorize
+        new agents; the next executor re-runs only these already approved nodes.
+        """
+        from .work_agents import SPECS, plan
+        if (not isinstance(names,list) or len(names)>12 or
+                len(set(names))!=len(names) or
+                any(not isinstance(n,str) or n not in SPECS for n in names)):
+            raise ValueError("Invalid downstream checkpoint invalidation")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            payload=json.loads(row["payload"])
+            approved={s.name for s in plan(payload)}
+            if not set(names)<=approved:
+                raise ValueError("Cannot reopen an unauthorized agent")
+            changed=[]
+            for name in names:
+                step=c.execute("""SELECT status FROM agent_steps
+                    WHERE job_id=? AND agent=?""",(jid,name)).fetchone()
+                if step is None:
+                    raise ValueError("Missing authorized agent checkpoint")
+                if step["status"]=="running":
+                    raise ValueError("Cannot invalidate an actively running specialist")
+                if step["status"]!="queued":
+                    c.execute("""UPDATE agent_steps SET status='queued',attempt=0,
+                        started=0,finished=0,deadline=0,updated=?,result_json='',
+                        result_sha256='',qa_json='',error_code=''
+                        WHERE job_id=? AND agent=?""",
+                        (time.time(),jid,name))
+                    changed.append(name)
+            if changed:
+                self._event(c,jid,"planning","Evidence changed; impacted specialists reopened")
+            return changed
 
     def agent_steps(self, owner: str, jid: str) -> list[dict]:
         """Owner-scoped durable per-agent statuses and SLA evidence."""
