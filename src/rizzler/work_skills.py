@@ -114,8 +114,20 @@ def sectioned(text: str) -> list[tuple[str,str]]:
 
 
 def csv_escape(value):
+    """Neutralize spreadsheet-executable text but retain genuine signed numbers."""
+    from decimal import Decimal, InvalidOperation
     v=str(value)
-    return "'"+v if v.lstrip().startswith(("=","+","-","@","\t","\r")) else v
+    stripped=v.lstrip()
+    if not stripped.startswith(("=","+","-","@","\t","\r")):
+        return v
+    if stripped.startswith(("+","-")):
+        try:
+            number=Decimal(stripped.strip())
+            if number.is_finite() and len(stripped.strip()) <= 48:
+                return v
+        except InvalidOperation:
+            pass
+    return "'" + v
 
 
 def render_one(kind: str, output: Path, title: str, content: str,
