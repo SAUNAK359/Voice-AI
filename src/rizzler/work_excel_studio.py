@@ -69,6 +69,8 @@ async def create_workbook_plan(objective: str, table, *, model: str,
         client=genai.Client(api_key=api_key)
     from google.genai import types
     from .cognitive_provider import generate_with_recovery
+    from .work_agents import read_skill
+    skill=read_skill("excel")[:6500]
     prompt=(
         "You are an expert data analyst designing an editable Excel workbook "
         "from actual user-supplied data. Select one to six analytical questions "
@@ -95,6 +97,7 @@ async def create_workbook_plan(objective: str, table, *, model: str,
                 timeout=85,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    system_instruction=skill,
                     max_output_tokens=1700,temperature=.2))
             try:
                 return validate_workbook_plan(
