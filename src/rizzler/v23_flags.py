@@ -34,6 +34,10 @@ def enabled(key: str) -> bool:
         raise ValueError("RIZZLER_V23_MODE must be off or full")
     override=environ.get(key)
     if override is None:
+        # V24 convergence changes source-acquisition behavior and must be
+        # explicitly qualified before rollout even under the V23 full profile.
+        if key == "RIZZLER_CONTEXT_CONVERGENCE":
+            return False
         return profile=="full"
     flag=override.strip().lower()
     if flag not in ("1","true","yes","0","false","no"):
