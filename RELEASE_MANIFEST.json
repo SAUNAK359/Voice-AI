@@ -684,8 +684,8 @@
     },
     {
       "path": "tests/test_v24_qualification_notebook.py",
-      "bytes": 2754,
-      "sha256": "84f1a79de7727e4c0ca49acbefba5516c1380f3342aac6e38795f634e122aef8"
+      "bytes": 2777,
+      "sha256": "33574accef2a1ccf89089632d663dbcf76e6e356d47bfabfd384b096ddd87b21"
     },
     {
       "path": "tests/test_v24_research_diagnostics.py",
