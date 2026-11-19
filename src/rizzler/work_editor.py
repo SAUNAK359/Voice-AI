@@ -86,6 +86,8 @@ async def create_report_plan(objective: str, ir, *, medium: str,
     from .cognitive_provider import generate_with_recovery
     overview=[{"id":i,"heading":title,"text":body[:2000]}
               for i,(title,body) in enumerate(ir.sections)]
+    source_word_count=sum(len(body.split()) for _,body in ir.sections)
+    required_words=max(450,round(source_word_count*0.72))
     instruction=(
         "You are a senior analytical editor and domain specialist. "
         "Develop a comprehensive publication-ready " + (
@@ -101,8 +103,11 @@ async def create_report_plan(objective: str, ir, *, medium: str,
         "Original section IDs are positional 0-based indices. Include every "
         "original ID at least once across the report and cite only approved "
         "URLs. Write 3–16 substantial, distinct sections, each >=330 "
-        "characters. Preserve at least 72% of the existing substantive "
-        "word count, preferably deepen it when evidence permits. "
+        "characters. Produce no fewer than " + str(required_words) +
+        " substantive words in total, while preserving the source's " +
+        str(source_word_count) + " words and deepening analysis only when "
+        "evidence supports it. Three sections generally need about " +
+        str((required_words+2)//3) + " words each. "
         "Return JSON exactly: {\\\"schema_version\\\":1,"
         "\\\"medium\\\":\\\"" + medium + "\\\""
         ",\\\"sections\\\":[{\\\"heading\\\":string,"
@@ -115,25 +120,41 @@ async def create_report_plan(objective: str, ir, *, medium: str,
         "\nApproved sources: " + json.dumps(list(ir.sources))[:3000]
     )
     try:
-        for attempt in range(2):
+        correction = ""
+        for attempt in range(3):
             response=await generate_with_recovery(
                 client,model=model,role="work",timeout=85,
-                contents=instruction + (
-                    "\nThe last answer did not satisfy schema or source "
-                    "coverage. Return only corrected JSON." if attempt else ""),
+                contents=instruction + correction,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     max_output_tokens=11000,temperature=0.3))
+            document = None
             try:
-                result=validate_report_plan(
-                    decode_model_json(getattr(response,"text","") or "",
-                                      max_bytes=65000),
-                    medium=medium, original_sections=ir.sections,
+                document=decode_model_json(getattr(response,"text","") or "",
+                                           max_bytes=65000)
+                return validate_report_plan(
+                    document,medium=medium,original_sections=ir.sections,
                     allowed_sources=ir.sources)
-                return result
-            except ValueError:
-                if attempt:
+            except ValueError as exc:
+                if attempt == 2:
                     raise
+                observed=sum(
+                    len(item.get("body","").split())
+                    for item in document.get("sections",[])
+                    if isinstance(item,dict) and
+                    isinstance(item.get("body"),str)
+                ) if isinstance(document,dict) and isinstance(
+                    document.get("sections"),list) else 0
+                correction=(
+                    "\\nThe previous draft did not pass strict editorial "
+                    "validation. It contains " + str(observed) +
+                    " body words; at least " + str(required_words) +
+                    " substantive words are required. Correct invalid schema "
+                    "and explicitly expand weak sections using only supplied "
+                    "evidence. Preserve all original section IDs and existing "
+                    "approved citations, distinguish uncertainty, avoid filler, "
+                    "and return JSON only."
+                )
     finally:
         if owned:
             await client.aio.aclose()
