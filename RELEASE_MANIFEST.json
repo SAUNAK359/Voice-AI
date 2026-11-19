@@ -389,8 +389,8 @@
     },
     {
       "path": "src/rizzler/v23_flags.py",
-      "bytes": 1312,
-      "sha256": "a676da53a779c87968af725dea7e156ec815f18fec78b221b9d08fa7bb528db2"
+      "bytes": 1574,
+      "sha256": "6908ffce656815b1e5adfcaf9a4c2bffb388f7f6d8399ee2d2ec0841b1dd6412"
     },
     {
       "path": "src/rizzler/work_agents.py",
@@ -401,6 +401,11 @@
       "path": "src/rizzler/work_api.py",
       "sha256": "519975663d190de01e49c234b857727c224b122a468b78d7f492ba2ab65be6de",
       "bytes": 12231
+    },
+    {
+      "path": "src/rizzler/work_context_intelligence.py",
+      "bytes": 18824,
+      "sha256": "9f0b22cca06a77b99f102cc9ee94e573d544f3bfd87c4f6b417b48db8250f7b5"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -443,14 +448,19 @@
       "bytes": 11783
     },
     {
+      "path": "src/rizzler/work_repair.py",
+      "bytes": 7976,
+      "sha256": "c2a093513d3c7107796c2a8f2778b24b168f8981863ef167a37fbd8e058c0484"
+    },
+    {
       "path": "src/rizzler/work_skills.py",
       "sha256": "3a106e32fd8088a5063764ee69efd50314222dca94e34efa7162a95c9ac1132e",
       "bytes": 8125
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "6ef09d8d9d4c34f0e391ed555af49edefaa9e9b8d56786c4b4cc5bee98fc525a",
-      "bytes": 38322
+      "bytes": 39651,
+      "sha256": "2442b778ed95a93178cf7dc92bc4ed53d4425a83b7cdee60b81c3fe99ae72929"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -464,8 +474,8 @@
     },
     {
       "path": "src/rizzler/work_studio.py",
-      "bytes": 13525,
-      "sha256": "ab920d09109769eaebca01aeed88c1fd728005804f82a29dfaeba56b6aff6334"
+      "bytes": 14924,
+      "sha256": "7ac36f6783d5d2cb652a95385826acc40b443732ef2d241ee10019a4def9d4cb"
     },
     {
       "path": "src/rizzler/work_worker.py",
@@ -601,6 +611,11 @@
       "path": "tests/test_v23_work_studio.py",
       "bytes": 6921,
       "sha256": "1a8591d18ea783803981650357f3dd88cdae29e280f2ae4b17c5b54084091507"
+    },
+    {
+      "path": "tests/test_v24_context_convergence.py",
+      "bytes": 8574,
+      "sha256": "3f139c7363a8caa467f947cf638c1d1261cf5069b4aeacb470c56c867cff3bdd"
     },
     {
       "path": "web/app.js",
