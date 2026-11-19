@@ -203,6 +203,11 @@
       "sha256": "0a46cd73ffce82f50a229b3a4bee6c794b7800c5d07816fab30909ea62eec71f"
     },
     {
+      "path": "notebooks/Rizzler_V24_Live_Qualification_Kaggle.ipynb",
+      "bytes": 17945,
+      "sha256": "e2e3c981e45b8a2d30db2c38c7288e5188ca7a43d16392dee1a3eda8117c3cd8"
+    },
+    {
       "path": "notebooks/Rizzler_V24_Real_Gemini_Qualification_Kaggle.ipynb",
       "bytes": 12429,
       "sha256": "c41d935d8e7a8ed6e7ad7f9f6f40f2b0cd7c3c1da4d214c8b53a5e4577716342"
@@ -666,6 +671,11 @@
       "path": "tests/test_v24_intent_and_recovery.py",
       "bytes": 10143,
       "sha256": "bfdf371ecbc98b2e0be12bf573488029e8ad42dc8b670d5f6b66c962cfd27588"
+    },
+    {
+      "path": "tests/test_v24_qualification_notebook.py",
+      "bytes": 1672,
+      "sha256": "d66d5aa94080d01dd09afaa88f829eaf2b36764a17418bbbb83b0e4ebbf4325f"
     },
     {
       "path": "web/app.js",
