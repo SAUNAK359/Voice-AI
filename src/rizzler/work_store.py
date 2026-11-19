@@ -18,7 +18,7 @@ from pathlib import Path
 from .contracts import Handoff, ArtifactReceipt, FILE_FORMATS
 
 KEY_RE = re.compile(r"^[A-Za-z0-9_-]{8,96}$")
-STAGES = {"planning", "research", "analysis", "rendering", "validating"}
+STAGES = {"planning", "research", "analysis", "rendering", "validating", "awaiting_input"}
 TERMINAL = {"completed", "failed", "cancelled"}
 
 
@@ -100,6 +100,15 @@ class WorkStore:
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS cognitive_cursor
               ON cognitive_events(owner,job_id,seq);
+            CREATE TABLE IF NOT EXISTS job_questions(
+              job_id TEXT NOT NULL, owner TEXT NOT NULL,
+              question_id TEXT NOT NULL, prompt TEXT NOT NULL,
+              status TEXT NOT NULL, answer TEXT NOT NULL DEFAULT '',
+              at REAL NOT NULL, answered REAL NOT NULL DEFAULT 0,
+              PRIMARY KEY(job_id,question_id),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS questions_owner
+              ON job_questions(owner,job_id,status);
             CREATE TABLE IF NOT EXISTS context_checkpoints(
               job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
               base_sha256 TEXT NOT NULL, revision TEXT NOT NULL,
@@ -262,7 +271,7 @@ class WorkStore:
             row = c.execute("SELECT * FROM jobs WHERE owner=? AND id=?", (owner, jid)).fetchone()
             if row is None:
                 raise Missing("Job not found")
-            if row["status"] == "queued":
+            if row["status"] in ("queued","awaiting_input"):
                 c.execute("UPDATE jobs SET status='cancelled',stage='cancelled',updated=? WHERE id=?",
                           (time.time(), jid))
                 self._settle_agents(c, jid, "cancelled")
