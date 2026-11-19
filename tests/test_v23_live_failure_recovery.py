@@ -72,6 +72,10 @@ class LiveFailureRecoveryTests(TestCase):
         self.assertNotIn("credentials",str(result))
 
     def test_structured_excel_no_category_aggregates(self):
+        try:
+            import openpyxl
+        except ImportError:
+            self.skipTest("Excel Work extra not installed in minimal CI")
         from rizzler.work_excel_studio import (
             validate_workbook_plan,apply_workbook_plan,inspect_workbook_plan)
         from rizzler.work_skills import render_one
