@@ -211,7 +211,8 @@ class ActualBackdelegationTests(unittest.IsolatedAsyncioTestCase):
                    return_value=SimpleNamespace(
                        gemini_api_key="fake",gemini_model="fake")), \
              patch("rizzler.work_context_intelligence.review_context",
-                   new=AsyncMock(side_effect=reviews)) as reviewer:
+                   new=AsyncMock(side_effect=reviews)) as reviewer, \
+             patch("rizzler.work_feedback.consult_specialists", new=AsyncMock(return_value=[{"specialist":"powerpoint","readiness":"ready","requests":[],"assessment":"Review complete with current available evidence."}])):
             result=await converge_context(
                 context,payload=payload,store=store,owner="owner",
                 jid="job",worker_id="worker",fence=1,
