@@ -166,6 +166,68 @@ class ContextSupervisorContractTests(unittest.TestCase):
 
 
 
+
+class ActualBackdelegationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_later_context_supervisor_reopens_research_and_reassesses(self):
+        from types import SimpleNamespace
+        payload={"objective":"Measure historical export levels from official sources",
+                 "deliverables":["research","pptx"],"uploads":[]}
+        context={"text":"Original researched narrative should remain intact.",
+                 "sources":["https://example.org/original"],
+                 "summary":None,
+                 "goal_contract":{"requirements":[
+                    {"id":"g1","kind":"evidence",
+                     "obligation":"Provide historical export level and period",
+                     "evidence_needed":"Official year-specific data","priority":5}],
+                     "unknowns":[]}}
+        request={"recipient":"research",
+                 "question":"Find the official measured export figure and exact calendar year",
+                 "reason":"The downstream presentation needs a primary measured figure",
+                 "blocking":True}
+        reviews=[
+            {"schema_version":1,"decision":"investigate",
+             "coverage":[{"id":"g1","status":"partial",
+                          "evidence_refs":["https://example.org/original"]}],
+             "requests":[request],
+             "assessment":"Missing official export measurement and period."},
+            {"schema_version":1,"decision":"ready",
+             "coverage":[{"id":"g1","status":"supported",
+                          "evidence_refs":["https://example.org/new"]}],
+             "requests":[],
+             "assessment":"The original and newly retrieved sources support the result."},
+        ]
+        class FakeStore:
+            def __init__(self): self.events=[]
+            def publish_cognition(self, *args):
+                self.events.append(args)
+                return len(self.events)
+        store=FakeStore()
+        async def researcher(query):
+            self.assertIn("New evidence requested",query)
+            return {"text":"An official report lists 125 units for 2025, "
+                           "subject to methodological limitations.",
+                    "sources":["https://example.org/new"]}
+        with patch("rizzler.config.Settings.from_env",
+                   return_value=SimpleNamespace(
+                       gemini_api_key="fake",gemini_model="fake")), \
+             patch("rizzler.work_context_intelligence.review_context",
+                   new=AsyncMock(side_effect=reviews)) as reviewer:
+            result=await converge_context(
+                context,payload=payload,store=store,owner="owner",
+                jid="job",worker_id="worker",fence=1,
+                researcher=researcher,focus=("powerpoint",),
+                max_waves=2,client=object())
+        self.assertTrue(result["ready"])
+        self.assertEqual(reviewer.await_count,2)
+        self.assertIn("Original researched narrative",context["text"])
+        self.assertIn("official report lists 125",context["text"])
+        self.assertIn("https://example.org/new",context["sources"])
+        self.assertEqual(context["context_status"],"ready")
+        self.assertEqual(len(store.events),2)
+        self.assertNotEqual(store.events[0][-1]["revision"],
+                            store.events[1][-1]["revision"])
+
+
 class NativeGeminiCapabilityTests(unittest.TestCase):
     def test_model_can_select_only_approved_native_tools(self):
         from rizzler.gemini_native import validate_native_choice
