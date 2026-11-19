@@ -263,9 +263,7 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 context, payload=payload, store=store, owner=owner,
                 jid=jid, worker_id=worker_id, fence=fence,
                 researcher=researcher,
-                focus=tuple(sorted(renderers.intersection(
-                    set().union(*(set(w) for w in
-                        topological_waves(graph, frozenset(planned))))))))
+                focus=tuple(sorted(renderers.intersection(planned)))
             context_reviewed = True
         await stage_group(wave)
 
