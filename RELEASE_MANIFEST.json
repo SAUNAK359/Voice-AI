@@ -414,8 +414,8 @@
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 18956,
-      "sha256": "b17aad505c84c62180fb7d9620f9f40489a8132bbd8c88b6c690e4700adf2c72"
+      "bytes": 20555,
+      "sha256": "4cee39fe26c4c7e1435f8f339ec10c005e0a8fb133f57666f6b2c25e8778cf87"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -436,6 +436,11 @@
       "path": "src/rizzler/work_excel_studio.py",
       "bytes": 14302,
       "sha256": "21a41f728b7be1ed2767cd2ce2dab99a4f35131b227a0a5f70d7dd7102fdc981"
+    },
+    {
+      "path": "src/rizzler/work_feedback.py",
+      "bytes": 6722,
+      "sha256": "306fa3f81b2ab732a0b129593a641db4958b594610dab1f74bd3e3e9baa85734"
     },
     {
       "path": "src/rizzler/work_formula.py",
@@ -624,8 +629,8 @@
     },
     {
       "path": "tests/test_v24_context_convergence.py",
-      "bytes": 13778,
-      "sha256": "dc29c524833e676b336dcb34f308607fe63ebfe346c0d16ad2898a0c6880bd4e"
+      "bytes": 14299,
+      "sha256": "b3e7a2389c7c5fd55f2259b2cc5427ecdcd36b2484826f5dba9531ead023f31a"
     },
     {
       "path": "web/app.js",
