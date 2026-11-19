@@ -127,15 +127,37 @@ def validate_claims(document: dict, spans: dict[str, dict]) -> list[dict]:
 
 
 def evidence_brief(spans: dict[str, dict], *, max_chars: int = 22500) -> str:
-    """Bounded high-signal excerpts for expert claim extraction."""
-    result = []
+    """Interleave passage provenance so the first noisy site cannot crowd out all others.
+
+    This is representation balancing, not relevance ranking: the model still
+    selects answer-bearing source passages. Every ID remains backed by bytes.
+    """
+    if not 1000 <= max_chars <= 100000:
+        raise ValueError("Unsafe model evidence prompt budget")
+    groups: dict[str, list[tuple[str, dict]]] = {}
     for eid, item in spans.items():
-        entry = {"id": eid, "source": item["source_url"],
-                 "location": item["location"], "text": item["text"][:1400]}
+        groups.setdefault(item["source_id"], []).append((eid, item))
+    streams = list(groups.values())
+    result: list[str] = []
+    used = 0
+    cursor = 0
+    while streams:
+        stream = streams[cursor % len(streams)]
+        eid, item = stream.pop(0)
+        entry = {"id":eid, "source":item["source_url"],
+                 "location":item["location"], "text":item["text"][:1250]}
         serialized = json.dumps(entry, ensure_ascii=False)
-        if sum(len(x) for x in result) + len(serialized) > max_chars:
+        if used + len(serialized) <= max_chars:
+            result.append(serialized)
+            used += len(serialized)
+        if not stream:
+            streams.remove(stream)
+            cursor = cursor % max(1, len(streams))
+        else:
+            cursor += 1
+        # Entries are bounded and consume the remaining prompt budget.
+        if max_chars - used < 160:
             break
-        result.append(serialized)
     return "\n".join(result)
 
 
