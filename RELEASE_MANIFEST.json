@@ -269,8 +269,8 @@
     },
     {
       "path": "src/rizzler/adaptive_experts.py",
-      "bytes": 9008,
-      "sha256": "5a5af0326f8c74766fde5d573f1b419702e5078b27f2e939a5ea1c8877f7e4f4"
+      "bytes": 11089,
+      "sha256": "116f567c38419d92dbe3899ecfab08c23c693c579c6498d1a3db34f5493a0b4f"
     },
     {
       "path": "src/rizzler/artifacts.py",
@@ -464,8 +464,8 @@
     },
     {
       "path": "tests/test_v23_adaptive_experts.py",
-      "bytes": 7242,
-      "sha256": "c99e3a200ddbfe31c0b96601a38572ccc40bc655c276293b429bfd3ed4735683"
+      "bytes": 10513,
+      "sha256": "a2bab7d1e087779ffc06108c8e20b187042430778da9fb7769942ff45a7638cb"
     },
     {
       "path": "tests/test_v23_cognitive_foundation.py",
