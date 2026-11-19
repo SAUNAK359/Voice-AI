@@ -267,6 +267,7 @@ async def explore_dataset(source, objective: str, *, model: str,
         raise ValueError("Deep SQL analysis needs an authorized model and bounded rounds")
     from .work_skills import read_dataset
     from .work_sql import analyze_sql
+    from .work_agents import read_skill
     from .cognitive_provider import generate_with_recovery
     from google import genai
     from google.genai import types
@@ -275,6 +276,7 @@ async def explore_dataset(source, objective: str, *, model: str,
     profile=dataset_intelligence(header,rows)
     client=genai.Client(api_key=api_key)
     sandbox=SQLResearchSandbox(header,rows)
+    skill=read_skill("sql_analytics")[:6500]
     queries=[]
     status="completed"
     gaps=[]
@@ -326,6 +328,7 @@ async def explore_dataset(source, objective: str, *, model: str,
                 response=await generate_with_recovery(
                     client,model=model,role="work",contents=instruction,
                     timeout=85,config=types.GenerateContentConfig(
+                        system_instruction=skill,
                         response_mime_type="application/json",
                         temperature=.2,max_output_tokens=3500))
                 plan=validate_investigation_plan(
@@ -369,6 +372,7 @@ async def explore_dataset(source, objective: str, *, model: str,
                         objective[:3500]+"\nVerified SQL results:\n"+
                         json.dumps(evidence,ensure_ascii=False)[:21000]),
                     config=types.GenerateContentConfig(
+                        system_instruction=skill,
                         response_mime_type="application/json",
                         temperature=.15,max_output_tokens=2800))
                 synthesis=validate_analyst_synthesis(
