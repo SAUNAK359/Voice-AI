@@ -15,7 +15,7 @@ async function refresh(){try{const data=await call('/jobs');const pane=$('jobs')
  for(const item of data.jobs){const row=el('p'),btn=el('button',item.status+' · '+item.id.slice(0,8)+' · '+item.stage);
  btn.onclick=()=>details(item.id);row.append(btn);pane.append(row)}}catch(e){err(e)}}
 async function details(id){
- if(selectedJob===id&&document.activeElement?.closest?.("#job-detail")?.tagName==="TEXTAREA")return;
+ if(selectedJob===id&&document.activeElement?.tagName==="TEXTAREA"&&document.activeElement?.closest?.("#job-detail"))return;
  selectedJob=id;try{const [job,ev,art,agentData]=await Promise.all([
  call('/jobs/'+id),call('/jobs/'+id+'/events'),call('/jobs/'+id+'/artifacts'),call('/jobs/'+id+'/agents')]);
  if(selectedJob!==id)return;
