@@ -148,6 +148,11 @@
       "bytes": 3292
     },
     {
+      "path": "docs/V24_CONTEXT_CONVERGENCE_IMPLEMENTATION.md",
+      "bytes": 13159,
+      "sha256": "ff9dece180de312d4a4e98cdd03df81027b7a687412fc9fecba149bb8c74c07c"
+    },
+    {
       "path": "docs/voice-pipeline.md",
       "bytes": 6313,
       "sha256": "d09f1bbf3fee24559faf3a73ada4f62627e3ad4263e00413315a7097469ff291"
@@ -343,6 +348,11 @@
       "sha256": "68d0158d8bfa63fc23295805ff8f82f01157c19ac7e07074a929454d803784f8"
     },
     {
+      "path": "src/rizzler/gemini_native.py",
+      "bytes": 4595,
+      "sha256": "c85d8b594e7a19dee84e8c7a47b7f69a03c2205857e0b3bd2bfb1f62046fc7e5"
+    },
+    {
       "path": "src/rizzler/hace_runtime.py",
       "bytes": 5532,
       "sha256": "0a4ebdb1a7f85d67222aaccce48ac00b5df7b4fea02e314a1715fdbdfd3b1c44"
@@ -389,8 +399,8 @@
     },
     {
       "path": "src/rizzler/v23_flags.py",
-      "bytes": 1574,
-      "sha256": "6908ffce656815b1e5adfcaf9a4c2bffb388f7f6d8399ee2d2ec0841b1dd6412"
+      "bytes": 1668,
+      "sha256": "700b19e39b1a67fa3243a439edd51f2edbfd8929332b282f499a853b561bd164"
     },
     {
       "path": "src/rizzler/work_agents.py",
@@ -404,8 +414,8 @@
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 18824,
-      "sha256": "9f0b22cca06a77b99f102cc9ee94e573d544f3bfd87c4f6b417b48db8250f7b5"
+      "bytes": 18956,
+      "sha256": "b17aad505c84c62180fb7d9620f9f40489a8132bbd8c88b6c690e4700adf2c72"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -479,8 +489,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "04ca3b4674c4ffbe8a11f51b12db253f9c86a84a606baf26306d6b6e67aae447",
-      "bytes": 27366
+      "bytes": 28477,
+      "sha256": "fddb5025a11e580a2f5e80bed47b0687288f9d6709dda16b1d85b4cc067b3d41"
     },
     {
       "path": "tests/test_contracts.py",
@@ -564,8 +574,8 @@
     },
     {
       "path": "tests/test_v23_kaggle_live_failures.py",
-      "sha256": "8efeae09a04cf9a214865b7bdf079d781ee5f96230cf693384de1792b0325e5f",
-      "bytes": 7371
+      "bytes": 7764,
+      "sha256": "de91977ff0ef48d1b4227be354aab47312492f6915389ea14f45e0c64e532a10"
     },
     {
       "path": "tests/test_v23_live_failure_recovery.py",
@@ -614,8 +624,8 @@
     },
     {
       "path": "tests/test_v24_context_convergence.py",
-      "bytes": 8574,
-      "sha256": "3f139c7363a8caa467f947cf638c1d1261cf5069b4aeacb470c56c867cff3bdd"
+      "bytes": 13778,
+      "sha256": "dc29c524833e676b336dcb34f308607fe63ebfe346c0d16ad2898a0c6880bd4e"
     },
     {
       "path": "web/app.js",
