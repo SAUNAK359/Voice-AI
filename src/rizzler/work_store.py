@@ -83,6 +83,14 @@ class WorkStore:
               PRIMARY KEY(job_id,agent),
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS agent_steps_status ON agent_steps(status,updated);
+            CREATE TABLE IF NOT EXISTS work_diagnostics(
+              seq INTEGER PRIMARY KEY AUTOINCREMENT,
+              job_id TEXT NOT NULL, owner TEXT NOT NULL,
+              stage TEXT NOT NULL, category TEXT NOT NULL,
+              record_json TEXT NOT NULL, at REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS work_diagnostics_cursor
+              ON work_diagnostics(owner,job_id,seq);
             CREATE TABLE IF NOT EXISTS cognitive_events(
               seq INTEGER PRIMARY KEY AUTOINCREMENT,
               job_id TEXT NOT NULL, owner TEXT NOT NULL,
@@ -600,12 +608,43 @@ class WorkStore:
                  hashlib.sha256(payload_json.encode("utf-8")).hexdigest(), now))
             self._event(c,jid,"agent_completed",agent+" specialist completed")
 
+    def diagnostics(self, owner: str, jid: str, after: int = 0) -> list[dict]:
+        """Return only safe diagnostic metadata belonging to this job owner."""
+        if type(after) is not int or after < 0:
+            raise ValueError("Invalid diagnostics cursor")
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE owner=? AND id=?",
+                         (owner,jid)).fetchone() is None:
+                raise Missing("Job not found")
+            return [{"seq":row["seq"], **json.loads(row["record_json"]),
+                     "at":row["at"]} for row in c.execute(
+                "SELECT seq,record_json,at FROM work_diagnostics "
+                "WHERE owner=? AND job_id=? AND seq>? ORDER BY seq LIMIT 100",
+                (owner,jid,after))]
+
+    @staticmethod
+    def _diagnostic(c, jid: str, owner: str, record: dict):
+        allowed = {"stage","code","exception_type","exception_module",
+                   "locations","fingerprint"}
+        if not isinstance(record, dict) or set(record) != allowed:
+            raise ValueError("Invalid safe diagnostic contract")
+        raw=json.dumps(record,sort_keys=True,separators=(",",":"))
+        if len(raw)>2600:
+            raise ValueError("Diagnostic record too large")
+        c.execute("""INSERT INTO work_diagnostics(
+            job_id,owner,stage,category,record_json,at)
+            VALUES(?,?,?,?,?,?)""",
+            (jid,owner,record["stage"],record["code"],raw,time.time()))
+
     def agent_error(self, jid: str, worker: str, fence: int, agent: str,
-                    code: str = "agent_execution_failed"):
+                    code: str = "agent_execution_failed",
+                    diagnosis: dict | None = None):
         if not isinstance(code, str) or len(code) > 80:
             raise ValueError("Invalid agent failure category")
         with self._tx() as c:
-            self._active(c,jid,worker,fence)
+            active=self._active(c,jid,worker,fence)
+            if diagnosis is not None:
+                self._diagnostic(c,jid,active["owner"],diagnosis)
             now = time.time()
             c.execute("""UPDATE agent_steps SET status='failed',updated=?,finished=?,error_code=?
                          WHERE job_id=? AND agent=? AND status='running'""",
@@ -624,7 +663,8 @@ class WorkStore:
                      error_code=? WHERE job_id=? AND status='running'""",
                   (terminal,now,now,"parent_"+terminal,jid))
 
-    def fail(self,jid,worker,fence,error_code="execution_error"):
+    def fail(self,jid,worker,fence,error_code="execution_error",
+             diagnosis: dict | None = None):
         with self._tx() as c:
             try:
                 row=self._active(c,jid,worker,fence)
@@ -633,6 +673,8 @@ class WorkStore:
                 state="cancelled"
             except StaleLease:
                 return
+            if diagnosis is not None:
+                self._diagnostic(c,jid,row["owner"],diagnosis)
             c.execute("""UPDATE jobs SET status=?,stage=?,error_code=?,
                 lease_owner=NULL,lease_until=0,updated=? WHERE id=? AND fence=?""",
                 (state,state,error_code if state=="failed" else "",time.time(),jid,fence))
