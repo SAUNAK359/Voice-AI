@@ -182,8 +182,7 @@ async def generate_with_recovery(client, *, model: str, contents, config,
             async with slots.acquire(wait_seconds=min(60, timeout)):
                 # Every configured Work process respects the same actual
                 # model request-rate window, not merely concurrent slots.
-                from .config import Settings
-                rpm=Settings.from_env().gemini_rpm
+                rpm=int(os.environ.get("RIZZLER_GEMINI_RPM", "12"))
                 await slots.admit_model_rate(
                     model,rpm=rpm,wait_seconds=min(90,timeout))
                 reserve_provider_call(role)
