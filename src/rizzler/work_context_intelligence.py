@@ -26,6 +26,18 @@ class ContextUnresolved(ValueError):
     """The model identified a material gap that cannot be solved with authorized data."""
 
 
+class UserInputRequired(ContextUnresolved):
+    """The job must await an answer, not fabricate data or fail terminally."""
+
+    def __init__(self, requests: list[dict]):
+        self.requests = [r for r in requests if r.get("recipient") == "user"
+                         and r.get("blocking") is True][:3]
+        if not self.requests:
+            raise ValueError("No actionable user clarification")
+        super().__init__("User clarification required to complete the task")
+
+
+
 def _stamp(value: Any) -> str:
     return hashlib.sha256(json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
@@ -59,6 +71,7 @@ def snapshot_context(payload: dict, context: dict, *, focus: tuple[str, ...]) ->
         "dataset": dataset,
         "artifact_ir_sha256": ir.sha256,
         "prior_gap_status": context.get("context_gaps", [])[-6:],
+        "user_clarifications": context.get("user_answers", [])[-9:],
     }
     package["revision"] = _stamp(package)
     return package
@@ -505,6 +518,11 @@ async def converge_context(context: dict, *, payload: dict,
         _checkpoint_context(context,store=store,jid=jid,worker_id=worker_id,
                             fence=fence,revision=package["revision"],
                             status="blocked")
+        user_requests = [
+            r for r in verdict["requests"]
+            if r["recipient"] == "user" and r["blocking"]]
+        if user_requests:
+            raise UserInputRequired(user_requests)
         if unresolved or verdict["decision"] == "blocked":
             raise ContextUnresolved(
                 "Required information remains unavailable; consult context gap events")
