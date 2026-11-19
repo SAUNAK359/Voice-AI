@@ -71,6 +71,27 @@ class LiveFailureRecoveryTests(TestCase):
         self.assertEqual(result["exception_type"],"ValueError")
         self.assertNotIn("credentials",str(result))
 
+    def test_cross_worker_model_rate_admission(self):
+        from rizzler.cognitive_provider import ProviderSlots
+        async def scenario(root):
+            slots1=ProviderSlots(root,capacity=2,ttl_seconds=30)
+            slots2=ProviderSlots(root,capacity=2,ttl_seconds=30)
+            started=asyncio.get_running_loop().time()
+            await asyncio.gather(
+                slots1.admit_model_rate("gemini-test",rpm=2,
+                                       window_seconds=.2,wait_seconds=2),
+                slots2.admit_model_rate("gemini-test",rpm=2,
+                                       window_seconds=.2,wait_seconds=2))
+            first=asyncio.get_running_loop().time()-started
+            await slots2.admit_model_rate("gemini-test",rpm=2,
+                                          window_seconds=.2,wait_seconds=2)
+            second=asyncio.get_running_loop().time()-started
+            return first,second
+        with tempfile.TemporaryDirectory() as d:
+            first,second=asyncio.run(scenario(d))
+        self.assertLess(first,.19)
+        self.assertGreaterEqual(second,.16)
+
     def test_csv_signed_numbers_and_formula_injection(self):
         from rizzler.work_skills import csv_escape
         for value in ("-15.75", "+20", "-1.2e3", "0", "1.00"):
