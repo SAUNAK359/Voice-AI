@@ -90,6 +90,53 @@ class ContentEngineTests(unittest.TestCase):
         self.assertEqual(result["review_rounds"], 2)
         self.assertEqual(repairs[0], 1)
 
+    def test_planner_recovers_invalid_field_lengths_without_weakening_contract(self):
+        plans=[]
+        attempts=[0]
+        async def generate(prompt,tokens):
+            if "Return only JSON" in prompt:
+                attempts[0]+=1
+                invalid=attempts[0]==1
+                plans.append(prompt)
+                return json.dumps({"sections":[{
+                    "heading":"A" if invalid else f"Evidence-led analytical section {i}",
+                    "question":"Short" if invalid else
+                        "How does the supplied evidence support this finding?",
+                    "coverage":"N/A" if invalid else
+                        "Methods, counterexamples and evidence limitations",
+                    "target_words":150
+                } for i in range(3)]})
+            return ("The supplied evidence must be interpreted carefully, "
+                    "with explicit methodological limits and independent "
+                    "numerical reconciliation when possible. ")*12
+        result=asyncio.run(develop_content(
+            "Explain the validation and limitations of a quantitative system",
+            {"rows":4},generate,max_characters=12000))
+        self.assertEqual(attempts[0],2)
+        self.assertEqual(result["section_count"],3)
+        self.assertIn("Invalid section requirements",plans[1])
+
+    def test_planner_repairs_excessive_total_word_budget(self):
+        attempts=[0]
+        async def generate(prompt,tokens):
+            if "Return only JSON" in prompt:
+                attempts[0]+=1
+                targets=900 if attempts[0]==1 else 150
+                return json.dumps({"sections":[{
+                    "heading":f"Specialist evidence section {i}",
+                    "question":"What does the admissible evidence demonstrate?",
+                    "coverage":"Methods and uncertainty in domain observations",
+                    "target_words":targets
+                } for i in range(3)]})
+            return ("Evidence-supported interpretation must distinguish "
+                    "independent findings, alternative explanations, and "
+                    "unresolved uncertainty. ")*14
+        report=asyncio.run(develop_content(
+            "Generate domain-specific verification report",None,generate,
+            max_characters=3000))
+        self.assertEqual(attempts[0],2)
+        self.assertEqual(report["section_count"],3)
+
     def test_invalid_or_placeholder_sections_fail_closed(self):
         with self.assertRaises(ValueError):
             _valid_plan({"sections": []})
