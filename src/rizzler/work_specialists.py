@@ -366,7 +366,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 dataset_rows=context["summary"]["rows"] if context["summary"] else None,
                 bundle_receipts=bundle,
                 artifact_ir=None if studio is not None else document_ir,
-                dataset_summary=context["summary"])
+                dataset_summary=context["summary"],
+                excel_plan=excel_studio)
             if receipt.kind in ("pptx", "docx", "pdf", "xlsx") and strict:
                 if not preflight or preflight["sha256"] != receipt.sha256:
                     raise ValueError("Strict QA inspection checkpoint missing or mismatched")
@@ -460,7 +461,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 report = await asyncio.to_thread(
                     inspect_artifact, working, kind, dataset_rows=dataset_rows,
                     artifact_ir=None if studio_blueprint is not None else document_ir,
-                    dataset_summary=context["summary"], visual_required=strict)
+                    dataset_summary=context["summary"], visual_required=strict,
+                    excel_plan=excel_blueprint)
                 if studio_blueprint is not None:
                     from .work_studio import inspect_storyboard
                     report["storyboard"] = await asyncio.to_thread(
