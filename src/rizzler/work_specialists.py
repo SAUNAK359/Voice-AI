@@ -203,11 +203,18 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 result = await run_agent(spec)
                 finished.add(spec.name)
                 return result
-        # TaskGroup cancels and joins sibling tasks on failure. Native threads
-        # continue only inside their isolated, fenced attempt directory.
-        async with asyncio.TaskGroup() as group:
-            for spec in selected:
-                group.create_task(bounded(spec), name="specialist-" + spec.name)
+        # Independent deliverables are isolated. One invalid PPT cannot
+        # cancel an otherwise valid Word/Excel sibling. We still fail the
+        # parent if a requested output did not succeed (no false success).
+        outcomes = await asyncio.gather(
+            *(bounded(spec) for spec in selected), return_exceptions=True)
+        failures = [item for item in outcomes if isinstance(item, BaseException)]
+        if failures:
+            for failure in failures:
+                if isinstance(failure, (asyncio.CancelledError, KeyboardInterrupt,
+                                        SystemExit)):
+                    raise failure
+            raise ExceptionGroup("Independent specialists failed", failures)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
     from .hace_runtime import topological_waves
@@ -241,12 +248,25 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
             context["text"] or "# Dataset analysis\nVerified dataset statistics",
             context["sources"], context["summary"])
 
-    # Execute the authoritative persisted DAG rather than assuming an agent
-    # name implies a fixed stage order. Stages in a wave can run concurrently;
-    # only previously committed dependency results unlock the next wave.
+    # Execute the authoritative persisted DAG. Model-led reassessment runs
+    # after source/orchestrator stages and BEFORE the first artifact stage.
+    # The authorized DAG is immutable: backdelegation can only revisit the
+    # already-approved source specialists, never gain new tool permissions.
+    context_reviewed = False
     for wave in topological_waves(graph, frozenset(planned)):
         if "artifact_ir" not in context and (renderers.intersection(wave) or "quality" in wave):
             prepare_artifact_ir()
+        if (not context_reviewed and feature_enabled("RIZZLER_CONTEXT_CONVERGENCE")
+                and (renderers.intersection(wave) or "quality" in wave)):
+            from .work_context_intelligence import converge_context
+            await converge_context(
+                context, payload=payload, store=store, owner=owner,
+                jid=jid, worker_id=worker_id, fence=fence,
+                researcher=researcher,
+                focus=tuple(sorted(renderers.intersection(
+                    set().union(*(set(w) for w in
+                        topological_waves(graph, frozenset(planned))))))))
+            context_reviewed = True
         await stage_group(wave)
 
     text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
@@ -563,6 +583,10 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         dataset_rows = context["summary"]["rows"] if context["summary"] else None
         studio_blueprint = None
         editor_blueprint = None
+        # The immutable IR remains authoritative. This bounded, versioned
+        # brief informs each format-specialist without adding tool privileges.
+        from .work_context_intelligence import context_brief
+        specialist_brief = context_brief(context)
         excel_blueprint = None
         document_ir = ir
         if kind == "xlsx" and feature_enabled("RIZZLER_EXCEL_STUDIO"):
@@ -573,7 +597,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             cfg=Settings.from_env()
             excel_blueprint=await create_workbook_plan(
                 payload["objective"] +
-                ("\n" + context.get("goal_brief",""))[:1900],
+                ("\n" + context.get("goal_brief",""))[:1900] + specialist_brief,
                 table,model=cfg.gemini_model,api_key=cfg.gemini_api_key)
         if kind == "pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
             from .config import Settings
