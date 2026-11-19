@@ -77,6 +77,8 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
         from google import genai
         client = genai.Client(api_key=api_key)
     from google.genai import types
+    from .work_agents import read_skill
+    skill=read_skill("powerpoint")[:6500]
     sections = [{"id":i,"heading":h,"content":body[:600]}
                 for i,(h,body) in enumerate(ir.sections)]
     prompt = (
@@ -112,6 +114,7 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
                                   if attempt else ""),
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    system_instruction=skill,
                     max_output_tokens=7500, temperature=0.25))
             try:
                 return validate_storyboard(
