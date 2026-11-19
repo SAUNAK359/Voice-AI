@@ -358,6 +358,40 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                               claim_summary(focused_claims)]
             else:
                 audit["claim_verification"]="no_independently_retrieved_evidence"
+        # A valid quotation is not enough if its fact is irrelevant.
+        # Use explicit missing-goal feedback to investigate NEW sources,
+        # never repeat a generic extraction over the same initial passages.
+        if feature_enabled("RIZZLER_CLAIM_VERIFY") and not focused_claims:
+            from .research_recovery import recover_missing_research
+            missing=focus_audit.get("missing_aspects") or [
+                "Find original authoritative evidence directly answering the "
+                "precise user's requested facts, figures or analysis."]
+            try:
+                recovery=await recover_missing_research(
+                    objective,missing,client=client,model=cfg.gemini_model,
+                    previously_seen={r.get("provider_url",r["url"]) for r in records})
+                audit["missing_evidence_recovery"]={
+                    "status":recovery["status"],
+                    "searches":recovery["attempts"],
+                    "retrieved_documents":len(recovery["documents"]),
+                    "verified_direct_claims":len(recovery["claims"]),
+                    "fetch_failures":len(recovery["fetch_failures"])}
+                extracted.extend(recovery["documents"])
+                fetch_failures.extend(recovery["fetch_failures"])
+                audit["retrieved_documents"]=len(extracted)
+                audit["retrieval_failures"]=len(fetch_failures)
+                if recovery["claims"]:
+                    focused_claims=recovery["claims"]
+                    focus_audit=recovery["focus"] or focus_audit
+                    records.extend(recovery["records"])
+                    sections=["## Directly relevant verified observations",
+                              claim_summary(focused_claims)]
+                    audit["quote_verified_claims"]=len(claims)+len(focused_claims)
+                    audit["claim_verification"]="verbatim_quote_checked"
+            except Exception as exc:
+                audit["missing_evidence_recovery"]={
+                    "status":"unavailable_"+type(exc).__name__,
+                    "searches":0,"verified_direct_claims":0}
         audit["objective_alignment"]=focus_audit
         audit["question_answered_with_evidence"]=bool(focused_claims)
         if feature_enabled("RIZZLER_CLAIM_VERIFY") and focused_claims:
