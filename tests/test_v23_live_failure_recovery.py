@@ -71,6 +71,14 @@ class LiveFailureRecoveryTests(TestCase):
         self.assertEqual(result["exception_type"],"ValueError")
         self.assertNotIn("credentials",str(result))
 
+    def test_csv_signed_numbers_and_formula_injection(self):
+        from rizzler.work_skills import csv_escape
+        for value in ("-15.75", "+20", "-1.2e3", "0", "1.00"):
+            self.assertEqual(csv_escape(value), value)
+        for injection in ("=1+1", "+HYPERLINK('x')", "-SUM(A1:A2)",
+                          "@SUM(A1:A2)", "\t=HYPERLINK('x')"):
+            self.assertEqual(csv_escape(injection), "'" + injection)
+
     def test_structured_excel_no_category_aggregates(self):
         try:
             import openpyxl
