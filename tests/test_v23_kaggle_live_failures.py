@@ -69,8 +69,7 @@ def test_analytical_excel_formulas_are_allowed_only_with_validated_studio_plan(t
         inspect_artifact(file,"xlsx",dataset_rows=3,excel_plan=plan)
 
 
-@pytest.mark.asyncio
-async def test_word_editor_repairs_underlength_draft_without_inventing_sources():
+def test_word_editor_repairs_underlength_draft_without_inventing_sources():
     pytest.importorskip("google.genai")
     ir=compile_ir(
         "Technical evidence analysis",
@@ -100,9 +99,9 @@ async def test_word_editor_repairs_underlength_draft_without_inventing_sources()
         }))
     client=SimpleNamespace(aio=SimpleNamespace(aclose=lambda:asyncio.sleep(0)))
     with patch("rizzler.cognitive_provider.generate_with_recovery",new=generated):
-        result=await create_report_plan(
+        result=asyncio.run(create_report_plan(
             "Prepare a careful technical report",ir,medium="docx",
-            model="test-model",api_key="fake",client=client)
+            model="test-model",api_key="fake",client=client))
     assert len(calls)==2
     assert "previous draft" in calls[-1].lower()
     assert result["word_count"]>=450
