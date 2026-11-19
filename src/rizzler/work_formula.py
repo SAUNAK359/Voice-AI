@@ -22,7 +22,8 @@ def _close(a, b):
 
 
 def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
-                    require_recalculation: bool = False) -> dict:
+                    require_recalculation: bool = False,
+                    analytical_plan: dict | None = None) -> dict:
     from openpyxl import load_workbook
     from openpyxl.utils import column_index_from_string
     from .work_skills import analyze
@@ -92,9 +93,27 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                 raise ValueError("Independent calculation conflicts with expected formula")
             verified.append((measured, expected))
             formulas += 1
-        if any(cell.data_type == "f" for ws in wb.worksheets if ws.title!="Checks"
-               for row in ws.iter_rows() for cell in row):
-            raise ValueError("Unexpected executable spreadsheet formula outside Checks")
+        # An approved analytical plan may add precisely scoped Study N
+        # formulas. Any other formula outside Checks remains forbidden.
+        studies = set()
+        if analytical_plan is not None:
+            from .work_excel_studio import inspect_workbook_plan
+            if not isinstance(analytical_plan, dict):
+                raise ValueError("Untrusted analytical workbook contract")
+            verified_studies = inspect_workbook_plan(path, analytical_plan)
+            if verified_studies.get("passed") is not True:
+                raise ValueError("Analytical study formula verification failed")
+            studies = {f"Study {index}" for index in
+                       range(1, len(analytical_plan["analyses"])+1)}
+        for ws in wb.worksheets:
+            if ws.title == "Checks":
+                continue
+            for row in ws.iter_rows():
+                for cell in row:
+                    if cell.data_type != "f":
+                        continue
+                    if ws.title not in studies or cell.column != 2 or cell.row < 4:
+                        raise ValueError("Unexpected executable spreadsheet formula outside Checks")
     finally:
         wb.close()
     report = {"status":"independently_verified","formulas":formulas,

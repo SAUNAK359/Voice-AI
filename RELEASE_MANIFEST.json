@@ -138,6 +138,11 @@
       "sha256": "f77b0265c6956d36dbddecf3be6e176d9c8f44edb5614a1f4fb5184ec63765b7"
     },
     {
+      "path": "docs/V23_KAGGLE_LIVE_FAILURE_FORENSICS_20261119.md",
+      "sha256": "e0e76d135ff821d96a404e346b4994ba798ef06fac4d6dc1cb5cf5a242c11237",
+      "bytes": 4506
+    },
+    {
       "path": "docs/V23_KAGGLE_REMEDIATION_AND_GATES.md",
       "sha256": "4e028c195123f496430fe0e60a80f660de367c1d246a53caf47dbc5f1d411c21",
       "bytes": 3292
@@ -369,8 +374,8 @@
     },
     {
       "path": "src/rizzler/work_editor.py",
-      "bytes": 9780,
-      "sha256": "c1e77e759ab8d494abf2eba1fe02273a350a7a1ef6d0bca55ecf06695b83852c"
+      "bytes": 11002,
+      "sha256": "6f0a4e6ce52cd7b7c1c70ed35463b92becd369497f1edfc1511d052808e319f3"
     },
     {
       "path": "src/rizzler/work_excel_studio.py",
@@ -378,9 +383,19 @@
       "sha256": "e96c85db85eda3365b2001993b24e6a30aef67a0bc7b75800abac95471a8b86e"
     },
     {
+      "path": "src/rizzler/work_formula.py",
+      "sha256": "c670e993e068c237e29b27fb355fa5fc4ac81c9f15cf0f53ae73f7a9ed40c8b6",
+      "bytes": 7462
+    },
+    {
       "path": "src/rizzler/work_memory_context.py",
       "bytes": 3373,
       "sha256": "b0145722c1c26bc193724b467a13e6c976373ef78faa2a8e65367bd90ecfa207"
+    },
+    {
+      "path": "src/rizzler/work_quality.py",
+      "sha256": "35ffef9f71d0d95b7bf32418fca135f3bfc70eb23f1117d395dd9073052f6d25",
+      "bytes": 11319
     },
     {
       "path": "src/rizzler/work_skills.py",
@@ -389,8 +404,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "sha256": "7ed24b21bb38dc19e8d6da40b78ac96dd95a4404617afe42866c5118d8585e0a",
-      "bytes": 28949
+      "sha256": "57fb1ed5b4e5ba3a4a5bafddb7442e724ae81748d4de98d21d95cb871101f60a",
+      "bytes": 29038
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -404,8 +419,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "sha256": "5008e14ef9be22c04fc60bb697e0066f6d99fb6101a3cb4fea7389d60abbb83d",
-      "bytes": 18782
+      "sha256": "2fd9d6a48670d0cd1a5f5ec913f6293feee042f98ded1cad6d3c173897f75b72",
+      "bytes": 19202
     },
     {
       "path": "tests/test_contracts.py",
@@ -486,6 +501,11 @@
       "path": "tests/test_v23_hace_runtime.py",
       "bytes": 4118,
       "sha256": "f2b8a9cec8e212b2dc1d12526304129e58b88432a2fa21010fbbdde6725b66d2"
+    },
+    {
+      "path": "tests/test_v23_kaggle_live_failures.py",
+      "sha256": "7194263f113a4effd1dd08cf491ec598b883a6592c46eb7ed0fe9861ef4b8813",
+      "bytes": 5663
     },
     {
       "path": "tests/test_v23_live_failure_recovery.py",

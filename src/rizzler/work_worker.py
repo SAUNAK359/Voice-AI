@@ -76,6 +76,18 @@ async def compose_work(objective: str, data_summary: dict | None, *, max_chars=4
         await client.aio.aclose()
 
 
+def _usable_source_document(document: object) -> bool:
+    """True only for successfully retrieved structured source bytes.
+
+    A nonempty block/table list is required; provider attribution or a
+    failed acquisition response is not independently fetched evidence.
+    """
+    return (isinstance(document, dict)
+            and (isinstance(document.get("blocks"), list)
+                 and isinstance(document.get("tables"), list))
+            and bool(document["blocks"] or document["tables"]))
+
+
 async def grounded_research(objective: str) -> tuple[str,list[str]]:
     """Two bounded source-grounded research perspectives with honest provenance.
 
@@ -171,15 +183,13 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 batch=await asyncio.gather(
                     *(acquire(rec) for rec in records[offset:offset+4]))
                 retrieved.extend(batch)
-                usable=sum("blocks" in doc and
-                           (doc["blocks"] or doc["tables"]) for doc in retrieved)
+                usable=sum(1 for doc in retrieved if _usable_source_document(doc))
                 if usable>=3:
                     break
-            extracted=[doc for doc in retrieved if "blocks" in doc and
-                       (doc["blocks"] or doc["tables"])]
+            extracted=[doc for doc in retrieved if _usable_source_document(doc)]
             fetch_failures=[{"url": doc["source_url"],
                              "error_category": doc.get("error_category", "empty_content")}
-                            for doc in retrieved if doc not in extracted]
+                            for doc in retrieved if not _usable_source_document(doc)]
             audit["source_document_fetch"]=True
             audit["retrieved_documents"]=len(extracted)
             audit["retrieval_failures"]=len(fetch_failures)
