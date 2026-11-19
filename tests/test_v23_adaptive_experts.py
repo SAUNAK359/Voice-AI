@@ -118,6 +118,63 @@ class DynamicExpertContracts(unittest.TestCase):
             self.assertEqual(len([e for e in store.cognitive_events("owner_1",job["id"])
                                   if e["agent"]=="domain_expert"]),2)
 
+    def test_invalid_advisory_expert_is_quarantined_without_blocking_valid_sibling(self):
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        try:
+            from google import genai
+        except ImportError:
+            self.skipTest("Live provider SDK extra not installed")
+        from rizzler.adaptive_experts import run_expert_subtasks
+        with tempfile.TemporaryDirectory() as tmp:
+            store=WorkStore(Path(tmp)/"work")
+            job=store.submit("owner_1","Develop a documented technical report",
+                             ["md"],"expert_quarantine_test_001",[])
+            claim=store.claim("worker_1",45)
+            def field(identifier,depth,parent,specialist):
+                return {"id":identifier,"depth":depth,"parent":parent,
+                        "specialist":specialist,
+                        "objective":"Investigate a clearly bounded methodology",
+                        "output_contract":"Return source-aware documented findings",
+                        "evidence_refs":[]}
+            stages={"schema_version":23,"stages":[
+                field("root",1,None,"orchestrator"),
+                field("weak",2,"root","pdf_visual"),
+                field("valid",3,"weak","quality")]}
+            seen={}
+            async def generate(client,*,contents,**kwargs):
+                key="weak" if '"id": "weak"' in contents else "valid"
+                seen[key]=seen.get(key,0)+1
+                if key=="weak":
+                    return SimpleNamespace(text=json.dumps({
+                        "finding":"Too short","method":"Short",
+                        "assumptions":[],"unresolved":[],"source_refs":[]}))
+                return SimpleNamespace(text=json.dumps({
+                    "finding":"The evidence and methodology have to be "
+                              "validated independently before any claims are "
+                              "advanced for publication or technical adoption.",
+                    "method":"Compare inputs, controls and alternative explanations.",
+                    "assumptions":[],"unresolved":["Original source checks pending"],
+                    "source_refs":[]}))
+            aio=SimpleNamespace(aclose=lambda:asyncio.sleep(0))
+            with patch.object(genai,"Client",return_value=SimpleNamespace(aio=aio)),patch(
+                    "rizzler.cognitive_provider.generate_with_recovery",
+                    side_effect=generate):
+                outcome=asyncio.run(run_expert_subtasks(
+                    store,claim,"worker_1",stages,
+                    objective="Develop a documented technical report",
+                    sources=[],evidence="",model="mock",api_key="mock"))
+            self.assertEqual(outcome["rejected"],1)
+            self.assertEqual(outcome["executed"],1)
+            self.assertEqual(len(outcome["results"]),1)
+            self.assertEqual(seen["weak"],3)
+            ledger=store.cognitive_events("owner_1",job["id"])
+            self.assertEqual(len([v for v in ledger
+                if v["agent"]=="domain_expert" and v["kind"]=="finding"]),1)
+            self.assertEqual(len([v for v in ledger
+                if v["agent"]=="domain_expert" and v["kind"]=="gap"]),1)
+
     def test_public_expert_context_preserves_uncertainty(self):
         result = {"results":[{"task_id":"trade_economics",
             "result":{"finding":"The sampled evidence suggests different outcomes",
