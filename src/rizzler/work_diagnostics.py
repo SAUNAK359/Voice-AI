@@ -33,6 +33,9 @@ def failure_code(exc: BaseException) -> str:
             return "provider_authorization"
         if status == 400:
             return "provider_invalid_request"
+    from .work_research_errors import ResearchQualificationError
+    if isinstance(error, ResearchQualificationError):
+        return "research_" + error.reason
     if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
         return "deadline_exceeded"
     if isinstance(error, (ConnectionError, OSError)):
@@ -62,7 +65,12 @@ def failure_record(exc: BaseException, stage: str) -> dict:
            for f in frames[-4:]]
     typ = type(error).__name__[:90]
     module = type(error).__module__[:100]
+    from .work_research_errors import ResearchQualificationError
+    research = ({"research_reason": error.reason,
+                 "research_failure_categories": error.counts}
+                if isinstance(error, ResearchQualificationError) else {})
     return {"stage": stage, "code": failure_code(exc),
+            **research,
             "exception_type": typ, "exception_module": module,
             "locations": src,
             "fingerprint": hashlib.sha256(
