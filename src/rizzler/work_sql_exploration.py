@@ -173,6 +173,11 @@ class SQLResearchSandbox:
                     out.append(value if isinstance(value,(int,float)) or value is None
                                else str(value)[:200])
                 values.append(out)
+            # Persist only bounded query receipts in the fenced WorkStore;
+            # raw wide rows must never overflow its 150 KB checkpoint budget.
+            if len(json.dumps({"columns":cols,"rows":values},
+                              ensure_ascii=False).encode("utf-8")) > 5200:
+                raise ValueError("SQL result exceeds evidence receipt budget")
             return {"columns":cols,"rows":values,"count":len(values),
                     "verified":"sqlite_readonly_source_rows"}
         finally:
