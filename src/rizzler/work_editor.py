@@ -199,6 +199,8 @@ async def create_report_plan(objective: str, ir, *, medium: str,
         client=genai.Client(api_key=api_key)
     from google.genai import types
     from .cognitive_provider import generate_with_recovery
+    from .work_agents import read_skill
+    skill=read_skill("word" if medium=="docx" else "pdf_visual")[:6500]
     overview=[{"id":i,"heading":title,"text":body[:2000]}
               for i,(title,body) in enumerate(ir.sections)]
     source_word_count=sum(len(body.split()) for _,body in ir.sections)
@@ -242,6 +244,7 @@ async def create_report_plan(objective: str, ir, *, medium: str,
                 contents=instruction + correction,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    system_instruction=skill,
                     max_output_tokens=11000,temperature=0.3))
             document = None
             try:
