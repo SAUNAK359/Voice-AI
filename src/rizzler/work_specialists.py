@@ -33,6 +33,19 @@ def _valid_cached(spec, result: dict, checkpoint: Path, required: set[str]):
 
 
 async def execute_specialists(store, claim: dict, worker_id: str, composer, researcher):
+    """Run a bounded series of evidence-converging passes on one fenced job."""
+    from .work_feedback import ReplanRequired
+    for revision_pass in range(3):
+        try:
+            return await _execute_once(store,claim,worker_id,composer,researcher)
+        except ReplanRequired:
+            if revision_pass == 2:
+                raise ValueError(
+                    "Upstream evidence revisions exceeded the bounded work budget")
+    raise ValueError("Agent execution did not converge")
+
+
+async def _execute_once(store, claim: dict, worker_id: str, composer, researcher):
     jid, owner, fence = claim["id"], claim["owner"], claim["fence"]
     payload = claim["payload"]
     formats = set(payload["deliverables"])
@@ -226,6 +239,17 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 if isinstance(failure, (asyncio.CancelledError, KeyboardInterrupt,
                                         SystemExit)):
                     raise failure
+            from .work_feedback import EvidenceGap
+            gaps = [failure for failure in failures if isinstance(failure,EvidenceGap)]
+            if gaps:
+                # Collect all affected specialist questions; the supervisor
+                # reconciles their competing needs and reruns upstream work.
+                unique={}
+                for gap in gaps:
+                    for request in gap.requests:
+                        key=(request["recipient"],request["question"].casefold().strip())
+                        unique.setdefault(key,request)
+                raise EvidenceGap(gaps[0].specialist,list(unique.values())[:6])
             raise ExceptionGroup("Independent specialists failed", failures)
         store.renew(jid, worker_id, fence, lease_seconds=45)
 
@@ -282,7 +306,30 @@ async def execute_specialists(store, claim: dict, worker_id: str, composer, rese
                 researcher=researcher,
                 focus=tuple(sorted(renderers.intersection(planned))))
             context_reviewed = True
-        await stage_group(wave)
+        try:
+            await stage_group(wave)
+        except Exception as exc:
+            from .work_feedback import EvidenceGap, ReplanRequired
+            if not isinstance(exc,EvidenceGap) or not feature_enabled(
+                    "RIZZLER_CONTEXT_CONVERGENCE"):
+                raise
+            from .work_context_intelligence import converge_context, ContextUnresolved
+            delta_before = len(context.get("_context_delta") or [])
+            await converge_context(
+                context,payload=payload,store=store,owner=owner,jid=jid,
+                worker_id=worker_id,fence=fence,researcher=researcher,
+                focus=tuple(sorted(renderers.intersection(planned))),
+                forced_requests=exc.requests)
+            if len(context.get("_context_delta") or []) <= delta_before:
+                raise ContextUnresolved(
+                    "Specialist evidence gap did not yield new verified information")
+            # Preserve upstream source receipts; rebuild only dependent
+            # content and outputs, never a complete new user job.
+            store.reopen_agents(jid,worker_id,fence,[
+                name for name in planned
+                if name not in ("research","sql_analytics")])
+            raise ReplanRequired(
+                "Validated source revision requires downstream re-execution")
 
     text = context["text"] or "# Verified analysis\nNo ungrounded model conclusions were generated."
     receipts = list(context["receipts"].values())
@@ -605,9 +652,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         specialist_brief = context_brief(context)
         excel_blueprint = None
         document_ir = ir
-        if kind == "xlsx" and feature_enabled("RIZZLER_EXCEL_STUDIO"):
-            if table is None:
-                raise ValueError("Advanced Excel analysis requires uploaded source data")
+        if kind == "xlsx" and feature_enabled("RIZZLER_EXCEL_STUDIO") and table is not None:
             from .config import Settings
             from .work_excel_studio import create_workbook_plan
             cfg=Settings.from_env()
@@ -677,9 +722,30 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     raise
                 repairs += 1
                 working.unlink(missing_ok=True)
+        semantic_review = None
+        if (feature_enabled("RIZZLER_CONTEXT_CONVERGENCE")
+                and context.get("context_package") is not None):
+            from .config import Settings
+            from .work_agents import plan as approved_plan
+            from .work_feedback import review_rendered_candidate, RECIPIENTS
+            cfg=Settings.from_env()
+            reviewer_plan=(studio_blueprint or editor_blueprint or
+                           excel_blueprint or
+                           {"title":ir.title,
+                            "source_section_ids":list(range(len(ir.sections))),
+                            "source_urls":list(ir.sources),
+                            "content_preview":ir.content[:9000]})
+            semantic_review = await review_rendered_candidate(
+                specialist=name,kind=kind,plan=reviewer_plan,
+                inspection=report,context_package=context["context_package"],
+                model=cfg.gemini_model,api_key=cfg.gemini_api_key,
+                permitted=frozenset(
+                    s.name for s in approved_plan(payload)).intersection(RECIPIENTS))
         receipt = verify_artifact(working, kind)
         inspections[kind] = {"sha256":receipt.sha256,
                               "quality":report, "repair_attempts":repairs}
+        if semantic_review is not None:
+            inspections[kind]["semantic_review"] = semantic_review
         if studio_blueprint is not None:
             inspections[kind]["studio_blueprint"] = studio_blueprint
         if editor_blueprint is not None:
