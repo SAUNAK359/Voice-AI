@@ -572,22 +572,26 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             from .work_excel_studio import create_workbook_plan
             cfg=Settings.from_env()
             excel_blueprint=await create_workbook_plan(
-                payload["objective"],table,model=cfg.gemini_model,
-                api_key=cfg.gemini_api_key)
+                payload["objective"] +
+                ("\n" + context.get("goal_brief",""))[:1900],
+                table,model=cfg.gemini_model,api_key=cfg.gemini_api_key)
         if kind == "pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
             from .config import Settings
             from .work_studio import create_storyboard
             cfg = Settings.from_env()
             studio_blueprint = await create_storyboard(
-                payload["objective"], ir, model=cfg.gemini_model,
-                api_key=cfg.gemini_api_key)
+                payload["objective"] +
+                ("\n" + context.get("goal_brief",""))[:1900],
+                ir, model=cfg.gemini_model,api_key=cfg.gemini_api_key)
         if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
             from .config import Settings
             from .work_editor import create_report_plan, report_text
             cfg=Settings.from_env()
             editor_blueprint=await create_report_plan(
-                payload["objective"],ir,medium=kind,
-                model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                payload["objective"] +
+                ("\n" + context.get("goal_brief",""))[:1900],
+                ir,medium=kind,model=cfg.gemini_model,
+                api_key=cfg.gemini_api_key)
             document_ir=compile_ir(ir.title,report_text(editor_blueprint),
                                    list(ir.sources),context["summary"])
         # Model calls run once. Recoverable renderer failures regenerate
