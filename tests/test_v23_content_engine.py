@@ -133,7 +133,7 @@ class ContentEngineTests(unittest.TestCase):
                     "unresolved uncertainty. ")*8
         report=asyncio.run(develop_content(
             "Generate domain-specific verification report",None,generate,
-            max_characters=3000))
+            max_characters=4000))
         self.assertEqual(attempts[0],2)
         self.assertEqual(report["section_count"],3)
 
