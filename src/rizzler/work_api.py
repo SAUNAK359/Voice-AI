@@ -61,8 +61,27 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
             objective, formats=data.get("objective"),data.get("deliverables")
             uploads=data.get("uploads",[])
             if not isinstance(objective,str):raise ValueError("Objective must be text")
-            return store.submit(who,objective,formats,
-                req.headers.get("idempotency-key",""),uploads)
+            effective_formats=list(formats) if isinstance(formats,list) else formats
+            requested_formats=None
+            from .v23_flags import enabled as capability_enabled
+            if capability_enabled("RIZZLER_COGNITIVE_PLANNER"):
+                from .config import Settings
+                from .task_planning import propose_semantic_scope
+                cfg=Settings.from_env()
+                if cfg.gemini_api_key and isinstance(effective_formats,list):
+                    scope=await propose_semantic_scope(
+                        objective,effective_formats,uploads,cfg)
+                    expanded=list(effective_formats)
+                    if scope["research"] and "research" not in expanded:
+                        expanded.append("research")
+                    if scope["analysis"] and "data_analysis" not in expanded:
+                        expanded.append("data_analysis")
+                    if expanded!=effective_formats:
+                        requested_formats=effective_formats
+                        effective_formats=expanded
+            return store.submit(who,objective,effective_formats,
+                req.headers.get("idempotency-key",""),uploads,
+                requested_formats=requested_formats)
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError) as exc:
             raise HTTPException(status_code=400,detail="Invalid job request") from None
         except Conflict:
