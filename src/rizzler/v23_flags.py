@@ -25,7 +25,10 @@ FEATURES=frozenset({
 })
 
 
-EXPERIMENTAL_FEATURES = frozenset({"RIZZLER_CONTEXT_CONVERGENCE"})
+EXPERIMENTAL_FEATURES = frozenset({
+    "RIZZLER_CONTEXT_CONVERGENCE",
+    "RIZZLER_GEMINI_NATIVE_TOOLS",
+})
 
 
 def enabled(key: str) -> bool:
