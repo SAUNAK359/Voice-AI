@@ -65,6 +65,10 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
             requested_formats=None
             from .v23_flags import enabled as capability_enabled
             if capability_enabled("RIZZLER_COGNITIVE_PLANNER"):
+                # Key retries identify the same original user request even
+                # if a later Gemini classification chooses different tools.
+                if isinstance(effective_formats,list):
+                    requested_formats=list(effective_formats)
                 from .config import Settings
                 from .task_planning import propose_semantic_scope
                 cfg=Settings.from_env()
