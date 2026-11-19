@@ -194,7 +194,10 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                     *(acquire(rec) for rec in records[offset:offset+4]))
                 retrieved.extend(batch)
                 usable=sum(1 for doc in retrieved if _usable_source_document(doc))
-                if usable>=3:
+                # Continue beyond the first few reachable pages. They may
+                # discuss the topic without answering the objective, while
+                # primary statistical sources appear later in search results.
+                if usable>=7:
                     break
             extracted=[doc for doc in retrieved if _usable_source_document(doc)]
             fetch_failures=[{"url": doc["source_url"],
@@ -325,8 +328,13 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                     # Only publish claims judged to answer the task, never
                     # substitute tangential (even perfectly quoted) content.
                     if focused_claims:
-                        sections+=["## Directly relevant verified observations",
-                                   claim_summary(focused_claims)]
+                        # A provider-attributed general synthesis cannot
+                        # override the independently accepted, task-aligned
+                        # observations. Preserve auxiliary research only as
+                        # explicitly labeled background when verified mode
+                        # is not enabled.
+                        sections=["## Directly relevant verified observations",
+                                  claim_summary(focused_claims)]
             else:
                 audit["claim_verification"]="no_independently_retrieved_evidence"
         audit["objective_alignment"]=focus_audit
