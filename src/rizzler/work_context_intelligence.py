@@ -298,11 +298,35 @@ async def converge_context(context: dict, *, payload: dict,
                 context.get("text") or "# Dataset analysis\nVerified dataset statistics",
                 list(context.get("sources") or []), context.get("summary"))
             package = snapshot_context(payload, context, focus=focus)
+            from .work_feedback import consult_specialists
+            challenges = await consult_specialists(
+                package, specialists=focus, permitted=permitted,
+                model=cfg.gemini_model, client=client) if focus else []
+            # Actual output specialists raise stage-specific evidence requests.
+            # The supervisor sees their diagnosis and decides on convergence.
+            package_for_review = {**package, "downstream_challenges": challenges}
             verdict = await review_context(
-                package, model=cfg.gemini_model, client=client,
+                package_for_review, model=cfg.gemini_model, client=client,
                 permitted=permitted)
-            unresolved = [r for r in verdict["requests"] if r["blocking"]]
+            downstream = [request for item in challenges
+                          for request in item["requests"] if request["blocking"]]
+            # A generic supervisor cannot override a downstream specialist's
+            # outstanding blocking requirement with a premature 'ready'.
+            # Preserve the specialist's specific questions for backdelegation.
+            all_requests = list(verdict["requests"])
+            for request in downstream:
+                if not any(r["recipient"] == request["recipient"] and
+                           r["question"].casefold().strip() ==
+                           request["question"].casefold().strip()
+                           for r in all_requests):
+                    all_requests.append(request)
+            unresolved = [r for r in all_requests if r["blocking"]]
+            if unresolved and verdict["decision"] == "ready":
+                verdict = {**verdict, "decision": "investigate"}
+            verdict = {**verdict, "requests": all_requests}
             public = {"revision": package["revision"], "wave": wave,
+                      "downstream_challengers": [item["specialist"]
+                           for item in challenges if item["readiness"] == "needs_evidence"],
                       "decision": verdict["decision"],
                       "requirements": {r["id"]: r["status"]
                                        for r in verdict["coverage"]},
