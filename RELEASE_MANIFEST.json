@@ -138,6 +138,11 @@
       "sha256": "f77b0265c6956d36dbddecf3be6e176d9c8f44edb5614a1f4fb5184ec63765b7"
     },
     {
+      "path": "docs/V23_KAGGLE_REMEDIATION_AND_GATES.md",
+      "sha256": "fd8df257a585b48743a3751e12c38c68481169a1501e83cf24ccb30059beeac5",
+      "bytes": 2947
+    },
+    {
       "path": "docs/voice-pipeline.md",
       "bytes": 6313,
       "sha256": "d09f1bbf3fee24559faf3a73ada4f62627e3ad4263e00413315a7097469ff291"
@@ -479,8 +484,8 @@
     },
     {
       "path": "tests/test_v23_live_failure_recovery.py",
-      "sha256": "3097f29d498452869fc7e919d5b310f5798c9634cb0e0e1a0f0c19e5d01e0f3e",
-      "bytes": 4644
+      "sha256": "ad78aa50a0b01e8c46d35f89a6970b4b111cc119c9350f1e08421018bf35aa73",
+      "bytes": 4787
     },
     {
       "path": "tests/test_v23_memory_context.py",
