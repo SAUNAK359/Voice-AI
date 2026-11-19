@@ -263,6 +263,85 @@ def _merge_validated(context: dict, *, recipient: str, result: dict,
     return False
 
 
+
+def _baseline_digest(payload: dict, context: dict) -> str:
+    """Stable proof of upstream committed state across worker restarts."""
+    baseline = {
+        "objective": payload["objective"],
+        "formats": payload["deliverables"],
+        "uploads": payload.get("uploads") or [],
+        "sources": context.get("sources") or [],
+        "research_text": context.get("text"),
+        "sql_summary": context.get("summary"),
+        "sql_exploration": context.get("sql_exploration"),
+    }
+    return _stamp(baseline)
+
+
+def restore_context(context: dict, *, payload: dict, store,
+                    owner: str, jid: str) -> bool:
+    """Replay only source-vetted incremental findings for this exact job input.
+
+    Must be called after research/SQL checkpoints are restored and BEFORE any
+    synthesized content; otherwise the current model report could overwrite
+    newer research deltas on a lease-recovery attempt.
+    """
+    base = _baseline_digest(payload, context)
+    context["_source_baseline_digest"] = base
+    saved = store.context_checkpoint(owner, jid, base)
+    context["_context_delta"] = []
+    context["_context_requests_done"] = set()
+    if saved is None:
+        return False
+    seen = set()
+    for pair in saved["seen"]:
+        if (not isinstance(pair, list) or len(pair) != 2
+                or any(not isinstance(part, str) for part in pair)):
+            raise ValueError("Persisted context request fingerprints malformed")
+        seen.add(tuple(pair))
+    for delta in saved["deltas"]:
+        if (not isinstance(delta, dict) or set(delta) != {"recipient", "result"}
+                or delta["recipient"] not in ("research","sql_analytics")
+                or not isinstance(delta["result"], dict)):
+            raise ValueError("Persisted context delta violated source scope")
+        if delta["recipient"]=="research":
+            from .work_agents import gate_agent
+            gate_agent("research", delta["result"],
+                       frozenset(payload["deliverables"]))
+        elif not isinstance(delta["result"].get("analysis_brief"), str):
+            raise ValueError("Persisted SQL evidence lacks computed investigation")
+        _merge_validated(context, recipient=delta["recipient"],
+                         result=delta["result"], request={})
+    context["_context_delta"] = saved["deltas"]
+    context["_context_requests_done"] = seen
+    return bool(saved["deltas"])
+
+
+def _checkpoint_context(context: dict, *, store, jid: str, worker_id: str,
+                        fence: int, revision: str, status: str):
+    if "_source_baseline_digest" not in context:
+        raise ValueError("Missing durable upstream baseline")
+    deltas = context.get("_context_delta") or []
+    pairs = sorted([list(x) for x in context.get("_context_requests_done",set())])
+    store.save_context_checkpoint(
+        jid,worker_id,fence,context["_source_baseline_digest"],
+        {"schema_version":1,"revision":revision,
+         "status":status,"deltas":deltas,"seen":pairs})
+
+
+def _delta_from_verified_result(recipient: str, result: dict) -> dict:
+    """Persist useful typed results, not API traces or private model prompts."""
+    if recipient == "research":
+        return {"recipient":"research","result":{
+            "text":result["text"][:17500],
+            "sources":result["sources"][:24]}}
+    if recipient == "sql_analytics":
+        return {"recipient":"sql_analytics","result":{
+            "analysis_brief":result["analysis_brief"][:20000],
+            "sql_investigations":(result.get("sql_investigations") or [])[:16]}}
+    raise ValueError("No evidence-producing specialist for context delta")
+
+
 async def converge_context(context: dict, *, payload: dict,
                            store, owner: str, jid: str, worker_id: str,
                            fence: int, researcher: Callable,
@@ -345,6 +424,9 @@ async def converge_context(context: dict, *, payload: dict,
                 context["context_package"] = package
                 context["context_status"] = "ready"
                 context["_context_requests_done"] = seen
+                _checkpoint_context(context,store=store,jid=jid,worker_id=worker_id,
+                                    fence=fence,revision=package["revision"],
+                                    status="ready")
                 return {"ready": True, "history": history,
                         "context_revision": package["revision"]}
             if wave == max_waves:
@@ -363,9 +445,21 @@ async def converge_context(context: dict, *, payload: dict,
                         request, objective=payload["objective"], payload=payload,
                         context=context, store=store, owner=owner,
                         researcher=researcher)
-                    progress |= _merge_validated(
+                    changed = _merge_validated(
                         context, recipient=recipient, result=response,
                         request=request)
+                    progress |= changed
+                    if changed:
+                        context.setdefault("_context_delta", []).append(
+                            _delta_from_verified_result(recipient, response))
+                        context["_context_requests_done"] = seen
+                        _checkpoint_context(
+                            context,store=store,jid=jid,worker_id=worker_id,
+                            fence=fence,
+                            revision=_stamp({
+                                "source_baseline":context["_source_baseline_digest"],
+                                "deltas":context["_context_delta"]}),
+                            status="investigating")
                 except Exception as exc:
                     store.publish_cognition(jid, worker_id, fence,
                         "context_intelligence", "gap",
@@ -380,6 +474,9 @@ async def converge_context(context: dict, *, payload: dict,
         context["context_gaps"] = [
             {"recipient": r["recipient"], "question": r["question"][:350]}
             for r in verdict["requests"] if r["blocking"]]
+        _checkpoint_context(context,store=store,jid=jid,worker_id=worker_id,
+                            fence=fence,revision=package["revision"],
+                            status="blocked")
         if unresolved or verdict["decision"] == "blocked":
             raise ContextUnresolved(
                 "Required information remains unavailable; consult context gap events")
