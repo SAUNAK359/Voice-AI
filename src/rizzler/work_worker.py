@@ -317,9 +317,13 @@ class WorkWorker:
             # Never silently mark a interrupted worker's job as successful.
             self.store.fail(jid, self.identity, fence, "worker_interrupted")
             raise
-        except Exception:
-            # Error strings could include user prompts and provider secrets.
-            self.store.fail(jid, self.identity, fence, "execution_error")
+        except Exception as exc:
+            from .work_diagnostics import failure_code, failure_record
+            # Only the exception category and source-code locations are stored.
+            # Raw provider messages, prompts and credentials never enter logs.
+            self.store.fail(jid,self.identity,fence,
+                            failure_code(exc),
+                            diagnosis=failure_record(exc,"work_job"))
         finally:
             guard.cancel()
             await asyncio.gather(guard, return_exceptions=True)

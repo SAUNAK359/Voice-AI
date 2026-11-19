@@ -179,6 +179,15 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid cognitive cursor or event integrity") from None
 
+    @api.get("/jobs/{jid}/diagnostics")
+    def diagnostics(req: Request,jid: str,after: int=0):
+        try:
+            return {"job_id":jid,"diagnostics":store.diagnostics(owner(req),jid,after)}
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+        except ValueError:
+            raise HTTPException(status_code=400,detail="Invalid diagnostics cursor") from None
+
     @api.post("/jobs/{jid}/cancel")
     def cancel(req: Request,jid: str):
         who=owner(req);same_origin(req)
