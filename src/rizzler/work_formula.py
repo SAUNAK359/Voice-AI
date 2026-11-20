@@ -36,6 +36,29 @@ def _missing_system_calc_component() -> bool:
     return probe.returncode != 0 or b"install ok installed" not in probe.stdout
 
 
+def _convert_calc_for_recalculation(binary: str, path: Path,
+                                    out: Path, profile: str) -> Path:
+    """Isolated, externally computed XLSX recalculation. Never fake caches."""
+    try:
+        process = subprocess.run(
+            [binary, "--headless", "-env:UserInstallation="+profile,
+             "--convert-to", "xlsx", "--outdir", str(out), str(path)],
+            capture_output=True, timeout=60, check=False)
+    except subprocess.TimeoutExpired as exc:
+        raise SpreadsheetRecalculationUnavailable(
+            "Spreadsheet recalculation exceeded time budget") from exc
+    target = out / path.name
+    if process.returncode or not target.is_file():
+        if _missing_system_calc_component():
+            raise SpreadsheetRecalculationUnavailable(
+                "Independent LibreOffice Calc component is missing; "
+                "install libreoffice-calc to qualify XLSX")
+        raise SpreadsheetRecalculationUnavailable(
+            "Independent LibreOffice spreadsheet conversion failed; "
+            "the workbook was NOT qualified")
+    return target
+
+
 def _close(a, b):
     return (isinstance(a, (int, float)) and not isinstance(a, bool)
             and isinstance(b, (int, float)) and not isinstance(b, bool)
@@ -150,23 +173,8 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
             out = root/"out"
             out.mkdir()
             profile = (root/"profile").as_uri()
-            try:
-                process = subprocess.run(
-                    [binary, "--headless", "-env:UserInstallation="+profile,
-                     "--convert-to", "xlsx", "--outdir", str(out), str(path)],
-                    capture_output=True, timeout=60, check=False)
-            except subprocess.TimeoutExpired as exc:
-                raise SpreadsheetRecalculationUnavailable(
-                    "Spreadsheet recalculation exceeded time budget") from exc
-            target = out/path.name
-            if process.returncode or not target.is_file():
-                if _missing_system_calc_component():
-                    raise SpreadsheetRecalculationUnavailable(
-                        "Independent LibreOffice Calc component is missing; "
-                        "install libreoffice-calc to qualify XLSX")
-                raise SpreadsheetRecalculationUnavailable(
-                    "Independent LibreOffice spreadsheet conversion failed; "
-                    "the workbook was NOT qualified")
+            target = _convert_calc_for_recalculation(
+                binary, path, out, profile)
             recalc = load_workbook(target, read_only=True, data_only=True)
             try:
                 computed = list(recalc["Checks"].iter_rows(
