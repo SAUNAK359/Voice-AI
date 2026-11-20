@@ -693,79 +693,192 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         # brief informs each format-specialist without adding tool privileges.
         from .work_context_intelligence import context_brief
         specialist_brief = context_brief(context)
-        excel_blueprint = None
-        document_ir = ir
-        if kind == "xlsx" and feature_enabled("RIZZLER_EXCEL_STUDIO") and table is not None:
+        # The original ArtifactIR and source receipts are immutable. A
+        # failure can replan THIS format without losing successful siblings.
+        from .work_execution_recovery import (
+            RecoveryExhausted, recovery_diagnostic,
+            select_recovery, enforce_bounded_recovery,
+            raise_verified_backdelegation, PLAN_FORMATS)
+        from .work_agents import plan as approved_plan
+        from .work_feedback import RECIPIENTS
+        permitted=frozenset(
+            spec.name for spec in approved_plan(payload)).intersection(RECIPIENTS)
+        prior_events=store.cognitive_events(owner,jid,limit=200)
+        history=[
+            {"stage":entry["payload"].get("stage"),
+             "error_code":entry["payload"].get("error_code"),
+             "action":entry["payload"].get("action")}
+            for entry in prior_events
+            if entry["agent"]=="recovery_controller"
+            and entry["payload"].get("kind")==kind
+            and entry["kind"]=="state"
+        ]
+        if len(history)>3:
+            history=history[-3:]
+        excel_blueprint=None
+        studio_blueprint=None
+        editor_blueprint=None
+        document_ir=ir
+        repairs=0
+        need_plan=True
+        recovery_hint=""
+
+        def record_component_event(event: dict) -> None:
+            # No model responses, user content, secret keys or private uploads
+            # enter the shared cognitive ledger.
+            store.publish_cognition(jid,worker_id,fence,
+                                    "component_planner","verification",event)
+
+        async def build_format_plan():
+            nonlocal excel_blueprint,studio_blueprint,editor_blueprint,document_ir
+            excel_blueprint=None
+            studio_blueprint=None
+            editor_blueprint=None
+            document_ir=ir
             from .config import Settings
-            from .work_excel_studio import create_workbook_plan
             cfg=Settings.from_env()
-            excel_blueprint=await create_workbook_plan(
-                payload["objective"] +
-                ("\n" + context.get("goal_brief",""))[:1900] + specialist_brief,
-                table,model=cfg.gemini_model,api_key=cfg.gemini_api_key)
-        if kind == "pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
-            from .config import Settings
-            from .work_studio import create_storyboard
-            cfg = Settings.from_env()
-            studio_blueprint = await create_storyboard(
-                payload["objective"] +
-                ("\n" + context.get("goal_brief",""))[:1900] +
-                specialist_brief,
-                ir, model=cfg.gemini_model,api_key=cfg.gemini_api_key)
-        if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
-            from .config import Settings
-            from .work_editor import create_report_plan, report_text
-            cfg=Settings.from_env()
-            editor_blueprint=await create_report_plan(
-                payload["objective"] +
-                ("\n" + context.get("goal_brief",""))[:1900],
-                ir,medium=kind,model=cfg.gemini_model,
-                api_key=cfg.gemini_api_key)
-            document_ir=compile_ir(ir.title,report_text(editor_blueprint),
-                                   list(ir.sources),context["summary"])
-        # Model calls run once. Recoverable renderer failures regenerate
-        # only the file from the validated, immutable content blueprint.
-        repairs = 0
-        for attempt_no in range(2):
-            if studio_blueprint is not None:
-                from .work_studio import render_storyboard
-                await asyncio.to_thread(
-                    render_storyboard, working, studio_blueprint,
-                    title=ir.title, sources=ir.sources, table=table)
-            else:
-                await asyncio.to_thread(render_one, kind, working,
-                                        document_ir.title, document_ir.content,
-                                        table, list(document_ir.sources))
-                if excel_blueprint is not None:
-                    from .work_excel_studio import apply_workbook_plan
-                    await asyncio.to_thread(
-                        apply_workbook_plan,working,excel_blueprint,
-                        sql_investigations=context.get("sql_queries") or None)
+            scoped_objective=(payload["objective"]+
+                ("\n"+context.get("goal_brief",""))[:1900]+
+                specialist_brief+recovery_hint)
+            if (kind=="xlsx" and feature_enabled("RIZZLER_EXCEL_STUDIO")
+                    and table is not None):
+                from .work_excel_studio import create_workbook_plan
+                excel_blueprint=await create_workbook_plan(
+                    scoped_objective,table,model=cfg.gemini_model,
+                    api_key=cfg.gemini_api_key)
+            if kind=="pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
+                if feature_enabled("RIZZLER_COMPONENT_PLANNING"):
+                    from .work_incremental_studio import create_incremental_storyboard
+                    studio_blueprint=await create_incremental_storyboard(
+                        scoped_objective,ir,model=cfg.gemini_model,
+                        api_key=cfg.gemini_api_key,checkpoint=checkpoint,
+                        progress=record_component_event)
+                else:
+                    from .work_studio import create_storyboard
+                    studio_blueprint=await create_storyboard(
+                        scoped_objective,ir,model=cfg.gemini_model,
+                        api_key=cfg.gemini_api_key)
+            if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
+                from .work_editor import create_report_plan,report_text
+                cfg=Settings.from_env()
+                editor_blueprint=await create_report_plan(
+                    scoped_objective,ir,medium=kind,
+                    model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                document_ir=compile_ir(
+                    ir.title,report_text(editor_blueprint),
+                    list(ir.sources),context["summary"])
+
+        # Model-owned recovery decisions are bounded. Deterministic guards
+        # alone decide which file, evidence and stage may be changed.
+        for attempt_no in range(4):
+            phase="planning" if need_plan else "render_quality"
             try:
-                report = await asyncio.to_thread(
-                    inspect_artifact, working, kind, dataset_rows=dataset_rows,
+                if need_plan:
+                    await build_format_plan()
+                    need_plan=False
+                phase="render_quality"
+                if studio_blueprint is not None:
+                    from .work_studio import render_storyboard
+                    await asyncio.to_thread(
+                        render_storyboard,working,studio_blueprint,
+                        title=ir.title,sources=ir.sources,table=table)
+                else:
+                    await asyncio.to_thread(
+                        render_one,kind,working,document_ir.title,
+                        document_ir.content,table,list(document_ir.sources))
+                    if excel_blueprint is not None:
+                        from .work_excel_studio import apply_workbook_plan
+                        await asyncio.to_thread(
+                            apply_workbook_plan,working,excel_blueprint,
+                            sql_investigations=context.get("sql_queries") or None)
+                report=await asyncio.to_thread(
+                    inspect_artifact,working,kind,dataset_rows=dataset_rows,
                     artifact_ir=None if studio_blueprint is not None else document_ir,
-                    dataset_summary=context["summary"], visual_required=strict,
+                    dataset_summary=context["summary"],visual_required=strict,
                     excel_plan=excel_blueprint)
                 if studio_blueprint is not None:
                     from .work_studio import inspect_storyboard
-                    report["storyboard"] = await asyncio.to_thread(
-                        inspect_storyboard, working, studio_blueprint)
+                    report["storyboard"]=await asyncio.to_thread(
+                        inspect_storyboard,working,studio_blueprint)
                 if editor_blueprint is not None:
                     from .work_editor import inspect_report_document
-                    report["editorial"] = await asyncio.to_thread(
-                        inspect_report_document, working, editor_blueprint,
+                    report["editorial"]=await asyncio.to_thread(
+                        inspect_report_document,working,editor_blueprint,
                         source_urls=ir.sources)
                 if excel_blueprint is not None:
                     from .work_excel_studio import inspect_workbook_plan
-                    report["analytical_studies"] = await asyncio.to_thread(
+                    report["analytical_studies"]=await asyncio.to_thread(
                         inspect_workbook_plan,working,excel_blueprint)
                 break
-            except ValueError:
-                if attempt_no:
-                    raise
-                repairs += 1
+            except (ValueError,RuntimeError,OSError,TypeError) as exc:
                 working.unlink(missing_ok=True)
+                if not feature_enabled("RIZZLER_AUTONOMOUS_RECOVERY"):
+                    # Preserve previous fail-closed behavior if explicitly disabled.
+                    if attempt_no>=1:
+                        raise
+                    repairs+=1
+                    need_plan=False
+                    continue
+                if attempt_no>=3:
+                    raise RecoveryExhausted(
+                        "Artifact failed validation after supervised repair budget") from exc
+                from .config import Settings
+                cfg=Settings.from_env()
+                diagnostic=recovery_diagnostic(
+                    exc,stage=phase,kind=kind,attempt=attempt_no)
+                try:
+                    decision=await select_recovery(
+                        objective=payload["objective"],kind=kind,
+                        specialist=name,diagnostic=diagnostic,
+                        history=history,ir=ir,model=cfg.gemini_model,
+                        api_key=cfg.gemini_api_key,permitted=permitted)
+                    enforce_bounded_recovery(
+                        history,decision,max_attempts=3)
+                except Exception as decision_error:
+                    store.publish_cognition(
+                        jid,worker_id,fence,"recovery_controller","gap",{
+                            "kind":kind,"stage":phase,
+                            "error_code":diagnostic["error_code"],
+                            "status":"recovery_decision_unavailable",
+                            "category":type(decision_error).__name__})
+                    raise RecoveryExhausted(
+                        "Specialist recovery could not select a safe action"
+                    ) from decision_error
+                action=decision["action"]
+                history.append({"stage":phase,"action":action,
+                                "error_code":diagnostic["error_code"]})
+                store.publish_cognition(
+                    jid,worker_id,fence,"recovery_controller","state",{
+                        "kind":kind,"stage":phase,
+                        "error_code":diagnostic["error_code"],
+                        "action":action,"attempt":len(history)})
+                if action=="backdelegate":
+                    raise_verified_backdelegation(
+                        decision,specialist=name,permitted=permitted)
+                if action=="abort":
+                    raise RecoveryExhausted(
+                        "Format specialist refused unsafe recovery") from exc
+                if action=="rerender":
+                    if phase=="planning":
+                        raise RecoveryExhausted(
+                            "Cannot rerender an unapproved source plan") from exc
+                    need_plan=False
+                elif action=="replan":
+                    if kind not in PLAN_FORMATS or (
+                            kind=="xlsx" and table is None):
+                        raise RecoveryExhausted(
+                            "No authorized domain-specific replanner") from exc
+                    need_plan=True
+                    recovery_hint=(
+                        "\nValidated last attempt failed: "+
+                        diagnostic["error_code"]+
+                        ". Regenerate a different source-grounded "+
+                        kind+" content plan correcting that class of defect. "
+                        "Do not add source URLs, facts or output permissions.")
+                else:
+                    raise RecoveryExhausted(
+                        "Unknown cognitive recovery action") from exc
+                repairs+=1
         semantic_review = None
         if (feature_enabled("RIZZLER_CONTEXT_CONVERGENCE")
                 and context.get("context_package") is not None):
