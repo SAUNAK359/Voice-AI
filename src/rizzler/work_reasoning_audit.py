@@ -231,3 +231,66 @@ async def choose_comparison_plan(objective: str,table, *,
     finally:
         if owned:
             await client.aio.aclose()
+
+
+async def select_optional_method(objective: str,table, *,
+                                 model: str,api_key: str,client=None) -> dict:
+    """Model selects whether two-series arithmetic helps THIS task.
+
+    A skipped method is an explicit advisory choice, not a fabricated receipt.
+    A selected method is independently validated and executable.
+    """
+    if not api_key:
+        raise MethodologyError("No authorized analytical planning model")
+    owned=client is None
+    if owned:
+        from google import genai
+        client=genai.Client(api_key=api_key)
+    from google.genai import types
+    from .cognitive_provider import generate_with_recovery
+    headers,rows=table
+    prompt=(
+        "You own the source-bound analytical method decision. Does the "
+        "original user's goal benefit from computing a two-measure grouped "
+        "difference from the supplied REAL table, or should this optional "
+        "method be skipped? Choose based on semantic relevance, data type "
+        "and available evidence, not fixed keyword rules. "
+        "Never invent field names, currency, units, causal interpretation "
+        "or sample statistics. For relevant comparisons provide an EXACT "
+        "executable plan; otherwise choose skip. Return JSON only: "
+        '{"mode":"compare|skip","reason":"task-specific decision",'
+        '"plan":null}. For compare, plan must be '
+        '{"schema_version":2,"category_column":"exact field",'
+        '"first_measure":"exact numeric field",'
+        '"second_measure":"exact numeric field",'
+        '"aggregation":"sum|mean","measurement_unit":"source unit or '
+        'unspecified_by_source","analytical_question":"why this matters",'
+        '"confounder_columns":["real schema field"]}. '
+        "No private chain of thought.\nTask:\n"+objective[:2700]+
+        "\nExact source fields and first rows:\n"+
+        json.dumps({"headers":headers,"preview":rows[:5]},
+                   ensure_ascii=False,default=str)[:9500])
+    try:
+        response=await generate_with_recovery(
+            client,model=model,role="work",timeout=85,
+            contents=prompt,config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                max_output_tokens=1400,temperature=.12))
+        decoded=decode_model_json(
+            getattr(response,"text","") or "",max_bytes=12000)
+        if (not isinstance(decoded,dict)
+                or set(decoded)!={"mode","reason","plan"}
+                or decoded["mode"] not in ("compare","skip")
+                or not isinstance(decoded["reason"],str)
+                or not 16<=len(decoded["reason"].strip())<=480):
+            raise MethodologyError("Optional domain method decision invalid")
+        if decoded["mode"]=="skip":
+            if decoded["plan"] is not None:
+                raise MethodologyError("Unrequested comparison plan in skip decision")
+            return {"mode":"skip","reason":decoded["reason"]}
+        validated=validate_comparison_plan(decoded["plan"],table)
+        return {"mode":"compare","reason":decoded["reason"],
+                "plan":validated}
+    finally:
+        if owned:
+            await client.aio.aclose()
