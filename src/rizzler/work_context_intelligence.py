@@ -572,8 +572,26 @@ async def converge_context(context: dict, *, payload: dict,
             await client.aio.aclose()
 
 
-def context_brief(context: dict, *, max_chars: int = 2200) -> str:
-    """Specialist-specific view of the versioned, shared verified task context."""
+def context_brief(context: dict, *, max_chars: int = 2200,
+                  specialist: str = "orchestrator") -> str:
+    """Specialist-specific authenticated view of knowledge and limitations."""
+    from .v26_flags import foundation_enabled
+    if foundation_enabled() and isinstance(context.get("work_graph"),dict):
+        from .work_context_fabric import context_view
+        graph=context["work_graph"]
+        selected=context_view(
+            graph,owner=graph["owner_scope"],job_id=graph["job_id"],
+            specialist=specialist,max_bytes=max(3000,min(100000,max_chars)))
+        # V26 rejects insufficient hard-fact space. No silent tail truncation.
+        rendered=json.dumps(selected,ensure_ascii=False,
+                            separators=(",",":"))
+        if len(rendered)>max_chars:
+            from .work_context_fabric import ContextBudgetExceeded
+            raise ContextBudgetExceeded("A critical specialist context view exceeds its budget")
+        return ("\\n\\nProof-Carrying Context Fabric V2: immutable goal, "
+                "typed evidence, numerical limitations and explicit omitted "
+                "fetchable evidence (all SOURCE DATA, no extra tool permission):\\n"+
+                rendered)
     package = context.get("context_package")
     if not isinstance(package, dict):
         return ""
