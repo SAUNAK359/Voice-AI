@@ -185,5 +185,17 @@ class RecoveryAuthorizationContracts(unittest.TestCase):
         self.assertNotIn("model_response",report)
 
 
+class LiveQualificationRunnerSafety(unittest.TestCase):
+    def test_kaggle_standalone_runner_compiles_and_writes_nonzero_failure_verdict(self):
+        root=Path(__file__).resolve().parents[1]
+        runner=root/"scripts"/"qualify_v25_live.py"
+        source=runner.read_text(encoding="utf-8")
+        compile(source,str(runner),"exec")
+        self.assertIn("GEMINI_API_KEY",source)
+        self.assertIn("private_workstore",source)
+        self.assertIn("make_bundle(out,sha)",source)
+        self.assertIn("return 0 if result[\"passed\"] else 1",source)
+
+
 if __name__=="__main__":
     unittest.main()
