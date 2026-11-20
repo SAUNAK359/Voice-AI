@@ -112,6 +112,19 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                 raise
         if spec.name == "research":
             context["text"], context["sources"] = result["text"], result["sources"]
+            audit = result.get("evidence_summary") or {}
+            alignment = audit.get("objective_alignment") or {}
+            context["research_evidence"] = {
+                "verified_quote_count": len(result.get("verified_quotes") or []),
+                "question_answered_with_evidence":
+                    audit.get("question_answered_with_evidence") is True,
+                "partial": result.get("partial") is True,
+                "focus_status": str(alignment.get("status") or "unknown")[:85],
+                "missing_aspects": [
+                    str(item)[:240] for item in
+                    (alignment.get("missing_aspects") or [])[:8]
+                    if isinstance(item,str)],
+            }
         elif spec.name == "sql_analytics":
             context["summary"] = result["summary"]
             context["sql_exploration"] = result.get("analysis_brief")
@@ -415,6 +428,17 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         return await asyncio.to_thread(analyze_sql, source)
     if name == "orchestrator":
         objective = payload["objective"]
+        if context.get("research_evidence",{}).get("partial"):
+            objective += (
+                "\n\nResearch evidence adequacy (AUTHORITATIVE LIMITATION): "
+                "Some original-task factual requirements may remain unanswered. "
+                "Do not represent missing measurements, compatibility, dates, "
+                "sources or citations as established. Preserve explicit gaps, "
+                "use only directly quote-verified research observations, and "
+                "allow the Context Intelligence supervisor to request more "
+                "upstream evidence before deliverables. Gap status: "+
+                json.dumps(context["research_evidence"],
+                           ensure_ascii=False)[:2400])
         if context.get("user_answers"):
             objective += (
                 "\n\nExplicit task-owner clarifications (not independently "
