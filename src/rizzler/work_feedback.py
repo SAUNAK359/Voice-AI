@@ -16,7 +16,8 @@ RECIPIENTS = frozenset({"research", "sql_analytics", "user"})
 
 
 def validate_specialist_feedback(raw: dict, *, specialist: str,
-                                 permitted: frozenset[str]) -> dict:
+                                 permitted: frozenset[str],
+                                 requirements: list[dict] | None = None) -> dict:
     if specialist not in RENDERERS:
         raise ValueError("Invalid downstream specialist")
     if (not isinstance(raw, dict) or set(raw) != {
@@ -29,12 +30,19 @@ def validate_specialist_feedback(raw: dict, *, specialist: str,
     requests = raw["requests"]
     if not isinstance(requests, list) or len(requests) > 2:
         raise ValueError("Downstream feedback exceeds request budget")
+    from .v26_flags import enabled
+    v26=enabled("RIZZLER_V26_OUTCOME_PHASES") and requirements is not None
     seen = set()
     for item in requests:
-        if not isinstance(item, dict) or set(item) != {
-                "recipient", "question", "reason", "blocking"}:
+        keys={"recipient", "question", "reason", "blocking"}
+        if v26:
+            keys.add("requirement_id")
+        if not isinstance(item, dict) or set(item) != keys:
             raise ValueError("Downstream request schema mismatch")
         recipient, question = item["recipient"], item["question"]
+        if v26:
+            from .work_outcome_phases import validate_evidence_request
+            validate_evidence_request(item,requirements)
         if (recipient not in RECIPIENTS
                 or (recipient != "user" and recipient not in permitted)
                 or not isinstance(question, str)
@@ -67,6 +75,8 @@ async def consult_specialists(package: dict, *, specialists: tuple[str, ...],
             name not in RENDERERS for name in specialists):
         raise ValueError("Invalid specialist challenge context")
     sem = asyncio.Semaphore(2)
+    from .v26_flags import enabled
+    v26 = enabled("RIZZLER_V26_OUTCOME_PHASES")
 
     async def consult(name):
         skill = read_skill(name)[:4600]
@@ -89,8 +99,15 @@ async def consult_specialists(package: dict, *, specialists: tuple[str, ...],
             '","readiness":"ready|needs_evidence","requests":['
             '{"recipient":"research|sql_analytics|user",'
             '"question":"precise missing datum",'
-            '"reason":"why your artifact needs it","blocking":true}],'
-            '"assessment":"brief evidence adequacy explanation"}. '
+            '"reason":"why your artifact needs it","blocking":true' +
+            (',"requirement_id":"g1"' if v26 else "") +
+            '}],"assessment":"brief evidence adequacy explanation"}. '
+            "A missing binary or unrendered output is EXECUTION_PENDING, "
+            "NOT missing source information. No research queries for future "
+            "slides or files. The request must concern a specific missing "
+            "fact, calculation or user clarification needed BEFORE rendering. "
+            + ("Every request must bind to an actual source-goal ID "
+               "(not deliverable/quality). " if v26 else "") +
             "Only request source agents listed as authorized below. "
             "At most two requests, prioritized by impact. "
             "\nAuthorized prior specialists: " + json.dumps(sorted(permitted)) +
@@ -110,7 +127,8 @@ async def consult_specialists(package: dict, *, specialists: tuple[str, ...],
                     return validate_specialist_feedback(
                         decode_model_json(getattr(response, "text", "") or "",
                                           max_bytes=16000),
-                        specialist=name, permitted=permitted)
+                        specialist=name, permitted=permitted,
+                        requirements=package["requirements"] if v26 else None)
                 except ValueError:
                     if attempt:
                         raise
