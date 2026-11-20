@@ -120,6 +120,36 @@ class ProofCarryingContextTests(unittest.TestCase):
         self.assertEqual(nodes["metric:comparison_total_difference"]["data"]["value"],-150)
         self.assertTrue(any(x["kind"]=="uncertainty" for x in view["nodes"]))
 
+    def test_large_optional_metrics_never_hide_hard_facts_or_caveats(self):
+        from rizzler.work_reasoning_audit import execute_comparison
+        headers=["period","first","second"]
+        rows=[[str(i),str(i+5),str(i)] for i in range(90)]
+        method={"schema_version":2,"category_column":"period",
+                "first_measure":"first","second_measure":"second",
+                "aggregation":"sum","measurement_unit":"unspecified_by_source",
+                "analytical_question":"Compare two source series across observed periods.",
+                "confounder_columns":[]}
+        receipt=execute_comparison(method,(headers,rows))
+        ir=compile_ir("Analysis",
+            "# Observations\\nSynthetic observations require explicit uncertainty.",
+            [])
+        graph=migrate_v1(ir,owner="tenant_1",job_id="job_123",
+            objective="Review the source evidence",deliverables=["pptx"],
+            comparison_receipt=receipt)
+        view=context_view(graph,owner="tenant_1",job_id="job_123",
+                          specialist="powerpoint",max_bytes=11000)
+        ids={node["id"] for node in view["nodes"]}
+        self.assertIn("metric:comparison_total_difference",ids)
+        self.assertIn("uncertainty:domain_method_0",ids)
+        self.assertGreater(view["omitted_context"]["count"],0)
+        expansion=context_fetch(
+            graph,owner="tenant_1",job_id="job_123",
+            specialist="powerpoint",ids=["metric:comparison_group_89"],
+            purpose="Need the exact original quarterly differential",
+            max_bytes=7000)
+        self.assertIn("metric:comparison_group_89",
+                      {node["id"] for node in expansion["nodes"]})
+
     def test_tampered_content_fails_canonical_digest_validation(self):
         graph=self.setup_graph()
         invalid=copy.deepcopy(graph)
