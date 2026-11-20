@@ -338,6 +338,31 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                 researcher=researcher,
                 focus=tuple(sorted(renderers.intersection(planned))))
             context_reviewed = True
+        from .v26_flags import foundation_enabled
+        if foundation_enabled() and renderers.intersection(wave):
+            # Build the owner-scoped proof fabric AFTER context convergence.
+            # A source delta regenerates ArtifactIR and invalidates earlier views.
+            from .work_context_fabric import migrate_v1
+            new_ir=context["artifact_ir"]
+            if context.get("_v26_ir_sha")!=new_ir.sha256:
+                goal=context.get("goal_contract") or {}
+                graph_v2=migrate_v1(
+                    new_ir,owner=owner,job_id=jid,
+                    objective=payload["objective"],
+                    deliverables=payload["deliverables"],
+                    requirements=goal.get("requirements") or [],
+                    unknowns=goal.get("unknowns") or [],
+                    dataset_summary=context.get("summary"))
+                context["work_graph"]=graph_v2
+                context["_v26_ir_sha"]=new_ir.sha256
+                store.publish_cognition(
+                    jid,worker_id,fence,"context_fabric","verification",{
+                        "schema_version":2,
+                        "context_revision":graph_v2["context_revision"],
+                        "artifact_ir_sha256":new_ir.sha256,
+                        "node_count":len(graph_v2["nodes"]),
+                        "owner_scoped":True,
+                        "provenance_policy":"v1_narrative_is_unverified"})
         try:
             await stage_group(wave)
         except Exception as exc:
@@ -698,7 +723,10 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         # The immutable IR remains authoritative. This bounded, versioned
         # brief informs each format-specialist without adding tool privileges.
         from .work_context_intelligence import context_brief
-        specialist_brief = context_brief(context)
+        from .v26_flags import foundation_enabled
+        specialist_brief = context_brief(
+            context,specialist=name,
+            max_chars=15000 if foundation_enabled() else 2200)
         # The original ArtifactIR and source receipts are immutable. A
         # failure can replan THIS format without losing successful siblings.
         from .work_execution_recovery import (
