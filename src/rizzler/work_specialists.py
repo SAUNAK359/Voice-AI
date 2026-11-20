@@ -89,7 +89,13 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                          payload, store, owner, composer, researcher,
                          jid, worker_id, fence, attempt),
                          timeout=spec.sla_seconds * (
-                             4 if (
+                             6 if (
+                                 spec.name=="powerpoint" and
+                                 feature_enabled("RIZZLER_COMPONENT_PLANNING"))
+                             else 4 if (
+                                 spec.name in ("word","excel","pdf_visual") and
+                                 feature_enabled("RIZZLER_AUTONOMOUS_RECOVERY"))
+                             else 4 if (
                                  spec.name == "orchestrator" and
                                  feature_enabled("RIZZLER_COGNITIVE_EXPERTS")
                              ) or (
