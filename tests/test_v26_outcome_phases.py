@@ -82,17 +82,19 @@ class OutcomePhaseSafetyTests(unittest.TestCase):
                  "reason":"The deck itself is required by the final deliverable.",
                  "blocking":True,"requirement_id":"g2"}
         with patch.dict("os.environ",FLAGS,clear=True):
-            with self.assertRaises(ValueError):
-                validate_context_review(
-                    review(decision="investigate",requests=[request]),
-                    package=package(),permitted=frozenset({"research"}))
-            with self.assertRaises(ValueError):
-                validate_specialist_feedback(
-                    {"specialist":"powerpoint",
-                     "readiness":"needs_evidence","requests":[request],
-                     "assessment":"Evidence requests must be source scoped and independently verified."},
-                    specialist="powerpoint",permitted=frozenset({"research"}),
-                    requirements=REQS)
+            corrected=validate_context_review(
+                review(decision="investigate",requests=[request]),
+                package=package(),permitted=frozenset({"research"}))
+            self.assertEqual(corrected["decision"],"ready")
+            self.assertEqual(corrected["requests"],[])
+            normalized=validate_specialist_feedback(
+                {"specialist":"powerpoint",
+                 "readiness":"needs_evidence","requests":[request],
+                 "assessment":"Evidence requests must be source scoped and independently verified."},
+                specialist="powerpoint",permitted=frozenset({"research"}),
+                requirements=REQS)
+            self.assertEqual(normalized["readiness"],"ready")
+            self.assertEqual(normalized["requests"],[])
 
     def test_real_source_gap_may_authorize_a_bounded_investigation(self):
         request={"recipient":"research",
