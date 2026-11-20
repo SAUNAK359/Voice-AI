@@ -639,9 +639,11 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             document_ir = context["artifact_ir"]
             if studio is not None:
                 from .work_studio import validate_storyboard, inspect_storyboard
+                from .v26_flags import enabled as v26_enabled
                 valid_storyboard = validate_storyboard(
                     studio, context["artifact_ir"].sections,
-                    context["artifact_ir"].sources)
+                    context["artifact_ir"].sources,
+                    allow_editorial=v26_enabled("RIZZLER_V26_EDITORIAL_DIRECTOR"))
                 studio_qa = await asyncio.to_thread(
                     inspect_storyboard, checkpoint / receipt.name, valid_storyboard)
                 if not studio_qa["passed"]:
@@ -783,7 +785,15 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             if kind=="pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
                 from .config import Settings
                 cfg=Settings.from_env()
-                if feature_enabled("RIZZLER_COMPONENT_PLANNING"):
+                from .v26_flags import enabled as v26_enabled
+                if v26_enabled("RIZZLER_V26_EDITORIAL_DIRECTOR"):
+                    from .work_artifact_strategy import create_editorial_storyboard
+                    studio_blueprint=await create_editorial_storyboard(
+                        scoped_objective,ir,model=cfg.gemini_model,
+                        api_key=cfg.gemini_api_key,
+                        checkpoint=checkpoint,
+                        progress=record_component_event)
+                elif feature_enabled("RIZZLER_COMPONENT_PLANNING"):
                     from .work_incremental_studio import create_incremental_storyboard
                     studio_blueprint=await create_incremental_storyboard(
                         scoped_objective,ir,model=cfg.gemini_model,
