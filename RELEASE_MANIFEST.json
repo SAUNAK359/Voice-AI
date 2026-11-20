@@ -534,8 +534,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 55485,
-      "sha256": "eed7af667ea0d5311fa346d5821f5d6f0e2a897d62c2e2b9130a8ae32d48f086"
+      "bytes": 55578,
+      "sha256": "0ec2d5eee4345bf7ca7cf5a42870b9119c7cabc1aeb09f7e9c30427cdfcf9955"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
