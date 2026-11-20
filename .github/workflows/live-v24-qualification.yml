@@ -46,7 +46,7 @@ jobs:
       - name: Install notebook runtime and strict visual renderers
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libreoffice-writer libreoffice-impress
+          sudo apt-get install -y -qq libreoffice-writer libreoffice-impress libreoffice-calc
           python -m pip install -q "nbconvert>=7,<9" "ipykernel>=6,<8"
       - name: Execute pinned paid Gemini scenarios
         run: |
