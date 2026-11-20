@@ -86,6 +86,7 @@ class RealSpecialistRecoveryIntegration(unittest.IsolatedAsyncioTestCase):
                   "reason":"The first file write failed before format verification.",
                   "request":None}
         with patch.dict(os.environ,{"GEMINI_API_KEY":"not_a_real_key",
+                                    "RIZZLER_ACCESS_KEY":"test_access_key_123456789",
                                     "RIZZLER_V23_MODE":"full"},clear=False), \
              patch("rizzler.work_specialists.render_one",
                    side_effect=self.render_once_failure), \
@@ -115,6 +116,7 @@ class RealSpecialistRecoveryIntegration(unittest.IsolatedAsyncioTestCase):
                       "reason":"A missing source is essential before presenting the claim.",
                       "blocking":True}}
         with patch.dict(os.environ,{"GEMINI_API_KEY":"not_a_real_key",
+                                    "RIZZLER_ACCESS_KEY":"test_access_key_123456789",
                                     "RIZZLER_V23_MODE":"full"},clear=False), \
              patch("rizzler.work_specialists.render_one",
                    side_effect=self.render_once_failure), \
