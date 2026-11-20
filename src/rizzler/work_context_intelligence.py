@@ -104,6 +104,24 @@ def validate_context_review(document: dict, *, package: dict,
         document = dict(document)
         document["coverage"] = normalize_context_coverage(
             document["coverage"],package["requirements"])
+        # Models sometimes describe not-yet-created files as missing evidence.
+        # Drop ONLY requests bound to a typed output-only obligation; genuine
+        # source requests are not ignored. No brittle text/keyword routing.
+        source_requirements={
+            item["id"] for item in package["requirements"]
+            if item.get("kind") not in ("deliverable","quality","visualization")}
+        requests_kept=[
+            item for item in document["requests"]
+            if not isinstance(item,dict)
+            or item.get("requirement_id") in source_requirements
+            or "requirement_id" not in item]
+        removed=len(document["requests"])-len(requests_kept)
+        document["requests"]=requests_kept
+        if (removed and not requests_kept
+                and all(row["status"]=="supported"
+                        for row in document["coverage"]
+                        if row["id"] in source_requirements)):
+            document["decision"]="ready"
     raw_coverage = document["coverage"]
     valid_ids = {x["id"] for x in package["requirements"]}
     if not isinstance(raw_coverage, list) or len(raw_coverage) != len(valid_ids):
