@@ -741,18 +741,20 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             studio_blueprint=None
             editor_blueprint=None
             document_ir=ir
-            from .config import Settings
-            cfg=Settings.from_env()
             scoped_objective=(payload["objective"]+
                 ("\n"+context.get("goal_brief",""))[:1900]+
                 specialist_brief+recovery_hint)
             if (kind=="xlsx" and feature_enabled("RIZZLER_EXCEL_STUDIO")
                     and table is not None):
+                from .config import Settings
+                cfg=Settings.from_env()
                 from .work_excel_studio import create_workbook_plan
                 excel_blueprint=await create_workbook_plan(
                     scoped_objective,table,model=cfg.gemini_model,
                     api_key=cfg.gemini_api_key)
             if kind=="pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
+                from .config import Settings
+                cfg=Settings.from_env()
                 if feature_enabled("RIZZLER_COMPONENT_PLANNING"):
                     from .work_incremental_studio import create_incremental_storyboard
                     studio_blueprint=await create_incremental_storyboard(
