@@ -39,8 +39,8 @@
     },
     {
       "path": ".github/workflows/live-v24-qualification.yml",
-      "bytes": 3305,
-      "sha256": "4aa641e3a9c81b97a5ea07ef852480319b6b85078a01c0e861b5b1881ab9d0c2"
+      "bytes": 3322,
+      "sha256": "c227778bfaef1fb7613b4174637c2910fd50e24aaf3e6aebd837a87ba074c174"
     },
     {
       "path": ".gitignore",
@@ -209,13 +209,13 @@
     },
     {
       "path": "notebooks/Rizzler_V24_Live_Qualification_Kaggle.ipynb",
-      "bytes": 18899,
-      "sha256": "754d197917c3dfa35cd75a06f4a726c2cc4e0f649ecf376c45f353edaef2f637"
+      "bytes": 19460,
+      "sha256": "d46321ff5e41d9f0a9ecd6a906911af457dcf34362ca52bd0111f5dc8536bdbb"
     },
     {
       "path": "notebooks/Rizzler_V24_Real_Gemini_Qualification_Kaggle.ipynb",
-      "bytes": 18579,
-      "sha256": "8b64272b25f979296c128874afa2207c7e16cd2e299b120f170632db2e95a9b9"
+      "bytes": 19140,
+      "sha256": "1e3ceb2b86fd22ab77481f3e7f0bf1308aeb82a263a0711438ad0fcc8e5889c3"
     },
     {
       "path": "notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb",
@@ -394,13 +394,13 @@
     },
     {
       "path": "src/rizzler/research_intelligence.py",
-      "sha256": "949673ac035b8f04c9562e3a7b928ff505a50d2bb0cfed840ed76c8d90df3391",
-      "bytes": 14484
+      "bytes": 16458,
+      "sha256": "f01d292949f9c80cc26a67bc37437e8f6646d5f85f2688bebf7935faaba37547"
     },
     {
       "path": "src/rizzler/research_recovery.py",
-      "sha256": "a301f732b01c11ce69f8f185b2322f1f464d595f466597eabc40674113cc9e4c",
-      "bytes": 8036
+      "bytes": 8408,
+      "sha256": "e2b715a71546dec58aea3b5925f48c5d111337233e7c12b5522e6cdea40910f5"
     },
     {
       "path": "src/rizzler/security.py",
@@ -449,8 +449,8 @@
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 27715,
-      "sha256": "1e18323072f662bd858f628c53dc95803ff1d96a98a3c75284a1661ec957feb5"
+      "bytes": 27841,
+      "sha256": "209d7ce71f62b25516e6a036b81eb8c5b032d9dcbf1933848fd2edb5e2b74805"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -459,8 +459,8 @@
     },
     {
       "path": "src/rizzler/work_diagnostics.py",
-      "bytes": 3143,
-      "sha256": "a2c411b2ab24347f9d1002842a010ed08ce041a9d2337b3962461588af36906a"
+      "bytes": 3327,
+      "sha256": "681ba779bbd46b77f97ffced1d4ad4480f4db5daa3cbbbd477b415b702b62040"
     },
     {
       "path": "src/rizzler/work_editor.py",
@@ -479,8 +479,8 @@
     },
     {
       "path": "src/rizzler/work_formula.py",
-      "sha256": "c670e993e068c237e29b27fb355fa5fc4ac81c9f15cf0f53ae73f7a9ed40c8b6",
-      "bytes": 7462
+      "bytes": 8744,
+      "sha256": "35c8dbd12ad448e634315b69bc7f2295287d75d5448509276d3bfbfe4b212701"
     },
     {
       "path": "src/rizzler/work_memory_context.py",
@@ -514,8 +514,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 45626,
-      "sha256": "2324c86bef3ef88f357d6f8e887d42d02f20bbc4b8bc14c990dd7104693ff105"
+      "bytes": 47095,
+      "sha256": "e9557b0f8d93333d1fe3aa9673e5537de445bae0417bc50c039f9f56d658871b"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -534,8 +534,8 @@
     },
     {
       "path": "src/rizzler/work_worker.py",
-      "bytes": 29083,
-      "sha256": "42e7f5baba3c60be54939abf3a501c5abc5e98368b7430ad471ede711d0a91e4"
+      "bytes": 31187,
+      "sha256": "d82c25743c5d374c3ae449e9b2903a65e3c0e1c1dec26f1fc40e24414ff6c192"
     },
     {
       "path": "tests/test_contracts.py",
@@ -681,6 +681,11 @@
       "path": "tests/test_v24_intent_and_recovery.py",
       "bytes": 10143,
       "sha256": "bfdf371ecbc98b2e0be12bf573488029e8ad42dc8b670d5f6b66c962cfd27588"
+    },
+    {
+      "path": "tests/test_v24_live_evidence_regressions.py",
+      "bytes": 4791,
+      "sha256": "488b9517ac88635648bc40a89ff10e9b77896ab95294d67101abdca10a59440a"
     },
     {
       "path": "tests/test_v24_qualification_notebook.py",
