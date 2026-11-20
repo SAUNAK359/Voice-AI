@@ -686,9 +686,26 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 valid_storyboard = validate_storyboard(
                     studio, context["artifact_ir"].sections,
                     context["artifact_ir"].sources,
-                    allow_editorial=v26_enabled("RIZZLER_V26_EDITORIAL_DIRECTOR"))
+                    allow_editorial=v26_enabled("RIZZLER_V26_EDITORIAL_DIRECTOR"),
+                    allow_visual=v26_enabled("RIZZLER_V26_ARTIFACT_STRATEGY"))
                 studio_qa = await asyncio.to_thread(
                     inspect_storyboard, checkpoint / receipt.name, valid_storyboard)
+                if "visual_plan" in valid_storyboard:
+                    if not payload.get("uploads"):
+                        raise ValueError("Semantic chart plan lacks source upload")
+                    from .work_skills import read_dataset
+                    from .work_visual_strategy import (
+                        validate_visual_plan,inspect_chart_bindings)
+                    original_table=await asyncio.to_thread(
+                        read_dataset,store.upload(
+                            owner,payload["uploads"][0]))
+                    validate_visual_plan(
+                        valid_storyboard["visual_plan"],
+                        valid_storyboard,original_table)
+                    await asyncio.to_thread(
+                        inspect_chart_bindings,
+                        checkpoint/receipt.name,
+                        valid_storyboard["visual_plan"],original_table)
                 if not studio_qa["passed"]:
                     raise ValueError("Studio slide coverage and evidence check failed")
             if editor is not None:
@@ -847,6 +864,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     studio_blueprint=await create_storyboard(
                         scoped_objective,ir,model=cfg.gemini_model,
                         api_key=cfg.gemini_api_key)
+            if (kind=="pptx" and
+                    v26_enabled("RIZZLER_V26_ARTIFACT_STRATEGY")
+                    and table is not None):
+                from .v26_flags import foundation_enabled
+                if not foundation_enabled() or studio_blueprint is None:
+                    raise ValueError("V26 charts require a qualified studio and context")
+                from .work_visual_strategy import create_visual_plan
+                visual_plan=await create_visual_plan(
+                    scoped_objective,studio_blueprint,table,
+                    model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                studio_blueprint={
+                    **studio_blueprint,"visual_plan":visual_plan}
             if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
                 from .work_editor import create_report_plan,report_text
                 cfg=Settings.from_env()
@@ -889,6 +918,15 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     from .work_studio import inspect_storyboard
                     report["storyboard"]=await asyncio.to_thread(
                         inspect_storyboard,working,studio_blueprint)
+                    if "visual_plan" in studio_blueprint:
+                        from .work_visual_strategy import (
+                            validate_visual_plan,inspect_chart_bindings)
+                        validate_visual_plan(
+                            studio_blueprint["visual_plan"],
+                            studio_blueprint,table)
+                        report["chart_semantics"]=await asyncio.to_thread(
+                            inspect_chart_bindings,working,
+                            studio_blueprint["visual_plan"],table)
                 if editor_blueprint is not None:
                     from .work_editor import inspect_report_document
                     report["editorial"]=await asyncio.to_thread(
