@@ -815,6 +815,37 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     from .work_excel_studio import inspect_workbook_plan
                     report["analytical_studies"]=await asyncio.to_thread(
                         inspect_workbook_plan,working,excel_blueprint)
+                if (feature_enabled("RIZZLER_CANDIDATE_QUALITY") and
+                        kind in ("pptx","docx","xlsx","pdf")):
+                    from .config import Settings
+                    from .work_semantic_quality import (
+                        assess_candidate_quality,CandidateQualityIssue)
+                    cfg=Settings.from_env()
+                    reviewer_plan=(studio_blueprint or editor_blueprint or
+                        excel_blueprint or {
+                            "title":ir.title,
+                            "report_sections":[
+                                {"id":i,"heading":heading[:110],
+                                 "preview":body[:650]}
+                                for i,(heading,body) in enumerate(
+                                    ir.sections[:30])],
+                            "source_urls":list(ir.sources)})
+                    critique=await assess_candidate_quality(
+                        objective=payload["objective"],kind=kind,
+                        ir=ir,plan=reviewer_plan,
+                        structural_report=report,
+                        model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                    if critique["status"]=="revise":
+                        categories=tuple(dict.fromkeys(
+                            item["category"] for item in critique["issues"]))
+                        store.publish_cognition(jid,worker_id,fence,
+                            "candidate_reviewer","gap",{
+                                "kind":kind,"status":"revision_required",
+                                "categories":list(categories)})
+                        raise CandidateQualityIssue(categories)
+                    report["critical_semantic_review"]={
+                        "status":"accepted_by_model_reviewer",
+                        "limitations":"Model opinion is not independent factual proof"}
                 break
             except (ValueError,RuntimeError,OSError,TypeError) as exc:
                 working.unlink(missing_ok=True)
