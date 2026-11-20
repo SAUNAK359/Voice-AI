@@ -32,6 +32,22 @@ def validate_specialist_feedback(raw: dict, *, specialist: str,
         raise ValueError("Downstream feedback exceeds request budget")
     from .v26_flags import enabled
     v26=enabled("RIZZLER_V26_OUTCOME_PHASES") and requirements is not None
+    if v26:
+        raw=dict(raw)
+        source_ids={item["id"] for item in requirements
+                    if item.get("kind") not in (
+                        "deliverable","quality","visualization")}
+        kept=[
+            item for item in raw["requests"]
+            if not isinstance(item,dict)
+            or item.get("requirement_id") in source_ids
+            or "requirement_id" not in item]
+        removed=len(raw["requests"])-len(kept)
+        if removed:
+            raw["requests"]=kept
+            if not any(item.get("blocking") for item in kept):
+                raw["readiness"]="ready"
+    requests=raw["requests"]
     seen = set()
     for item in requests:
         keys={"recipient", "question", "reason", "blocking"}
