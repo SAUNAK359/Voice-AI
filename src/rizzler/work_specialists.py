@@ -849,8 +849,11 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 break
             except (ValueError,RuntimeError,OSError,TypeError) as exc:
                 working.unlink(missing_ok=True)
-                if not feature_enabled("RIZZLER_AUTONOMOUS_RECOVERY"):
-                    # Preserve previous fail-closed behavior if explicitly disabled.
+                if (not feature_enabled("RIZZLER_AUTONOMOUS_RECOVERY")
+                        or not os.environ.get("GEMINI_API_KEY")):
+                    # Offline, credential-free tests retain only the original
+                    # bounded render retry. No fake LLM cognitive decisions,
+                    # synthetic evidence, or weakened artifact QA are made.
                     if attempt_no>=1:
                         raise
                     repairs+=1
