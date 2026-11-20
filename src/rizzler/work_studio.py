@@ -22,13 +22,14 @@ MAX_SLIDES = 36
 def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
                         sources: tuple[str, ...], *,
                         min_slides: int = 3, max_slides: int = MAX_SLIDES,
-                        allow_editorial: bool = False) -> dict:
+                        allow_editorial: bool = False,
+                        allow_visual: bool = False) -> dict:
     """Reject hallucinated citations, omitted sections or empty slide content."""
     if not isinstance(document, dict) or not {
             "schema_version", "slides"}.issubset(document) or (
-            set(document) - ({"schema_version", "slides", "sections_covered",
-                              "editorial_plan"} if allow_editorial else
-                             {"schema_version", "slides", "sections_covered"})):
+            set(document) - ({"schema_version","slides","sections_covered"} |
+                             ({"editorial_plan"} if allow_editorial else set()) |
+                             ({"visual_plan"} if allow_visual else set()))):
         raise ValueError("Invalid presentation blueprint envelope")
     if document["schema_version"] != 1 or not isinstance(document["slides"], list):
         raise ValueError("Unsupported presentation blueprint")
@@ -80,6 +81,14 @@ def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
               "sections_covered":sorted(used)}
     if editorial_plan is not None:
         verified["editorial_plan"]=editorial_plan
+    if allow_visual and "visual_plan" in document:
+        visuals=document["visual_plan"]
+        if (not isinstance(visuals,dict) or
+                visuals.get("schema_version")!=2 or
+                not isinstance(visuals.get("slides"),list) or
+                len(visuals["slides"])!=len(slides)):
+            raise ValueError("Presentation visual plan does not match the slide contract")
+        verified["visual_plan"]=visuals
     return verified
 
 
@@ -230,6 +239,9 @@ def render_storyboard(path: Path, blueprint: dict, *, title: str,
             paragraph.font.bold=bold
             paragraph.font.color.rgb=ink
         return shape
+    visual_plan=blueprint.get("visual_plan")
+    if visual_plan is not None and table is None:
+        raise ValueError("Semantic chart strategy requires real source data")
     for index,plan in enumerate(slides):
         slide=prs.slides.add_slide(prs.slide_layouts[6])
         bg=slide.background.fill;bg.solid();bg.fore_color.rgb=RGBColor(255,255,255)
@@ -237,7 +249,25 @@ def render_storyboard(path: Path, blueprint: dict, *, title: str,
         box(slide,.75,1.19,11.8,1.02,plan["message"],size=19,ink=teal,bold=True)
         bullets=plan["bullets"];n=len(bullets);kind=plan["kind"]
         chart_added=False
-        if kind == "metrics" and n <= 3 and table and table[1]:
+        if visual_plan is not None:
+            from .work_visual_strategy import chart_values
+            visual=visual_plan["slides"][index]
+            if visual["visual_type"]!="none":
+                categories,series=chart_values(visual,table)
+                chart_data=CategoryChartData()
+                chart_data.categories=categories
+                for label,values in series.items():
+                    chart_data.add_series(label[:80],values)
+                chart_type=(XL_CHART_TYPE.LINE_MARKERS
+                            if visual["visual_type"]=="line"
+                            else XL_CHART_TYPE.COLUMN_CLUSTERED)
+                chart=slide.shapes.add_chart(
+                    chart_type,Inches(6.05),Inches(2.46),
+                    Inches(6.45),Inches(3.95),chart_data).chart
+                chart.has_legend=len(series)>1
+                chart.value_axis.has_major_gridlines=True
+                chart_added=True
+        elif kind == "metrics" and n <= 3 and table and table[1]:
             # Native, editable visualization of independently computed source
             # values. Never create a chart from unsupported model numbers.
             from .work_skills import analyze
