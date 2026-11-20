@@ -45,6 +45,9 @@ def failure_code(exc: BaseException) -> str:
     from .work_incremental_studio import ComponentPlanError
     if isinstance(error, ComponentPlanError):
         return "incremental_component_plan_invalid"
+    from .work_semantic_quality import CandidateQualityIssue
+    if isinstance(error, CandidateQualityIssue):
+        return "candidate_quality_revision_required"
     from .work_formula import SpreadsheetRecalculationUnavailable
     if isinstance(error, SpreadsheetRecalculationUnavailable):
         return "spreadsheet_recalculation_unavailable"
