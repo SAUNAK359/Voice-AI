@@ -51,7 +51,9 @@ def _has_placeholder(value: str) -> bool:
     return "lorem ipsum" in value.casefold()
 
 
-def storyboard_diagnostics(document: dict, *, sections=None, sources=None) -> list[dict]:
+def storyboard_diagnostics(document: dict, *, sections=None, sources=None,
+                           min_slides: int = 3,
+                           max_slides: int = MAX_SLIDES) -> list[dict]:
     """Identify ALL locally repairable problems, including missing section IDs.
 
     Structural and authorization errors are not repaired by deleting or
@@ -65,7 +67,8 @@ def storyboard_diagnostics(document: dict, *, sections=None, sources=None) -> li
             not isinstance(document.get("slides"), list)):
         raise StoryboardQualificationError("invalid_envelope")
     slides = document["slides"]
-    if not 3 <= len(slides) <= MAX_SLIDES:
+    if not (1 <= min_slides <= max_slides <= MAX_SLIDES and
+            min_slides <= len(slides) <= max_slides):
         raise StoryboardQualificationError("invalid_slide_count")
     issues, used = [], set()
     for index, slide in enumerate(slides):
@@ -127,11 +130,14 @@ def storyboard_diagnostics(document: dict, *, sections=None, sources=None) -> li
     return issues
 
 
-def repair_failure_reason(document: object, *, sections, sources) -> str:
+def repair_failure_reason(document: object, *, sections, sources,
+                          min_slides: int = 3,
+                          max_slides: int = MAX_SLIDES) -> str:
     """Return a stable diagnostic category, never untrusted source text."""
     try:
         errors=storyboard_diagnostics(
-            document, sections=sections, sources=sources)
+            document, sections=sections, sources=sources,
+            min_slides=min_slides, max_slides=max_slides)
     except StoryboardQualificationError as exc:
         return exc.reason
     fields={issue["field"] for issue in errors}
@@ -283,12 +289,15 @@ def apply_storyboard_patch(original: dict, proposed: dict, *,
 
 
 async def repair_storyboard(document: dict, *, sections, sources,
-                            model: str, client, failure: str) -> dict:
+                            model: str, client, failure: str,
+                            min_slides: int = 3,
+                            max_slides: int = MAX_SLIDES) -> dict:
     """Gemini proposes scoped edits. Validate every edit and entire final deck."""
     from google.genai import types
     from .cognitive_provider import generate_with_recovery
     from .work_studio import validate_storyboard
-    issues=storyboard_diagnostics(document,sections=sections,sources=sources)
+    issues=storyboard_diagnostics(document,sections=sections,sources=sources,
+                                  min_slides=min_slides,max_slides=max_slides)
     if not issues:
         raise StoryboardQualificationError("model_contract_failed")
     editable=[i for i in issues if i["field"] in EDITABLE]
@@ -300,7 +309,8 @@ async def repair_storyboard(document: dict, *, sections, sources,
         # Only generated metadata is wrong; no content may be changed.
         updated=apply_storyboard_patch(document,{"changes":[]},
                   diagnostics=issues,sections=sections,sources=sources)
-        return validate_storyboard(updated,sections,sources)
+        return validate_storyboard(updated,sections,sources,
+                                   min_slides=min_slides,max_slides=max_slides)
     impacted=sorted({x["index"] for x in editable})
     excerpts=[{"index":i,"original_slide":document["slides"][i]}
               for i in impacted]
@@ -351,7 +361,8 @@ async def repair_storyboard(document: dict, *, sections, sources,
                 getattr(response,"text","") or "",max_bytes=22000)
             repaired=apply_storyboard_patch(document,proposed,
                          diagnostics=issues,sections=sections,sources=sources)
-            return validate_storyboard(repaired,sections,sources)
+            return validate_storyboard(repaired,sections,sources,
+                                       min_slides=min_slides,max_slides=max_slides)
         except (ValueError,TypeError,KeyError) as exc:
             last=str(exc)
     raise StoryboardQualificationError("targeted_repair_failed")
