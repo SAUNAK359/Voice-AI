@@ -114,7 +114,7 @@ class EditorialExecutionTests(unittest.IsolatedAsyncioTestCase):
                 "rizzler.work_editorial_director.create_editorial_plan",
                 new=AsyncMock(return_value=plan())),patch(
                 "rizzler.work_studio.create_storyboard",new=fake_deck),patch(
-                "rizzler.work_artifact_strategy.v25_enabled",return_value=False):
+                "rizzler.v23_flags.enabled",return_value=False):
             result=await create_editorial_storyboard(
                 "Explain trade data for executives",ir,
                 model="mock",api_key="not_used",
