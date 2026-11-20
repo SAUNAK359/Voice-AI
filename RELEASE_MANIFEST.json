@@ -24,8 +24,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3579,
-      "sha256": "b290ce38544397e4546761d5a57ced4c07fecaf6ea41c22910ad805aef63b350"
+      "bytes": 3909,
+      "sha256": "6035a7970753461020325ceba28cf454d949cdc7603d699752583e1b7991ac01"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -804,8 +804,8 @@
     },
     {
       "path": "tests/test_v26_visual_strategy.py",
-      "bytes": 4347,
-      "sha256": "65f51d2e1d184ac00a3c7932ae073a7e923ed422241914192bbebfd4f388a096"
+      "bytes": 4533,
+      "sha256": "e1a2ebd55599191e3019cf9478f8335e7c45b874d7e4c6b456312a252797f4f8"
     },
     {
       "path": "web/app.js",
