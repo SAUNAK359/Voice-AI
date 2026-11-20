@@ -469,8 +469,8 @@
     },
     {
       "path": "src/rizzler/work_context_fabric.py",
-      "bytes": 18408,
-      "sha256": "c61eeea56632f67fc1ee537c24de77329246a5ab23d1aa8aec3c04c7ad53f329"
+      "bytes": 18678,
+      "sha256": "6ff1dd3c1606f03d8a63a525a4c1f791ce62193fdcad17ecdff594a48e5be7b9"
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
@@ -564,8 +564,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 57816,
-      "sha256": "6ec0d8d915dd6eb5552205464a249fef60f39f5f65e342d4524d8199fc5c1421"
+      "bytes": 58177,
+      "sha256": "71b9d5f575fbf2ca80b938ca7b2abc10dfec15441375fa7a5c5c6fafe0ce0a6b"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -574,8 +574,8 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "bytes": 61390,
-      "sha256": "758cd6b348cb6d664eef97bf6c9678fc465924e22cc2685f26e8ca1bf1a518d8"
+      "bytes": 65134,
+      "sha256": "1357e76ce1c84da34fcdf152523f7d7243115a2087e4dea7eb151a2a6566207d"
     },
     {
       "path": "src/rizzler/work_studio.py",
@@ -769,8 +769,8 @@
     },
     {
       "path": "tests/test_v26_context_fabric.py",
-      "bytes": 5764,
-      "sha256": "04ecfe65a44a99138a29a8abaef0e2b14d4ab95ef6cc195f0d53edbe0181a4cc"
+      "bytes": 8062,
+      "sha256": "b150fe8f026228aaffc84376483e87299a867980b60cd4e9833539f42db4e636"
     },
     {
       "path": "tests/test_v26_editorial_strategy.py",
