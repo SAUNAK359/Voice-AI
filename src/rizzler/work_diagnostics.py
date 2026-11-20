@@ -36,6 +36,9 @@ def failure_code(exc: BaseException) -> str:
     from .work_research_errors import ResearchQualificationError
     if isinstance(error, ResearchQualificationError):
         return "research_" + error.reason
+    from .work_formula import SpreadsheetRecalculationUnavailable
+    if isinstance(error, SpreadsheetRecalculationUnavailable):
+        return "spreadsheet_recalculation_unavailable"
     if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
         return "deadline_exceeded"
     if isinstance(error, (ConnectionError, OSError)):
