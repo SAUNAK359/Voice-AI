@@ -239,7 +239,7 @@ def context_view(graph: dict,*,owner: str,job_id: str,
         raise ContextBudgetExceeded("Invalid scoped context budget")
     lookup={item["id"]:item for item in graph["nodes"]}
     required={item["id"] for item in graph["nodes"]
-              if item["kind"] in ("goal","requirement","uncertainty")
+              if item["kind"] in ("goal","requirement","uncertainty","metric","insight","recommendation")
               and item["visibility"]!="private"}
     optional=optional_ids if optional_ids is not None else [
         x["id"] for x in graph["nodes"] if x["visibility"]=="job"]
