@@ -191,6 +191,20 @@ async def focus_claims(objective: str, claims: list[dict], *, client, model: str
                 decode_model_json(getattr(response, "text", "") or ""), claims)
             selected = {x for x in decision["selected_ids"]}
             relevant = [x for x in claims if x["id"] in selected]
+            if not relevant and not decision["answers_question"] and attempt == 0:
+                # A broad user request can include required documents as well
+                # as factual research. Re-review ONLY source-backed factual
+                # claims, not whether the artifact itself has been delivered.
+                # Still allow a genuine zero-selection result on retry.
+                prompt += (
+                    "\nYour previous assessment selected no factual "
+                    "observations. Re-evaluate every validated claim against "
+                    "the domain facts the user actually asked to investigate. "
+                    "If a claim establishes even a PART of those facts, select "
+                    "its existing ID while retaining answers_question=false "
+                    "and listing specific missing factual aspects. Do not "
+                    "include merely related or unsupported claims.")
+                continue
             # A task can be partially answered by real, byte-backed facts.
             # Never discard relevant verified quotations merely because the
             # entire multi-format user request is still incomplete. Return
