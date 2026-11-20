@@ -39,6 +39,12 @@ def failure_code(exc: BaseException) -> str:
     from .work_repair import StoryboardQualificationError
     if isinstance(error, StoryboardQualificationError):
         return "powerpoint_" + error.reason
+    from .work_execution_recovery import RecoveryExhausted
+    if isinstance(error, RecoveryExhausted):
+        return "supervised_recovery_exhausted"
+    from .work_incremental_studio import ComponentPlanError
+    if isinstance(error, ComponentPlanError):
+        return "incremental_component_plan_invalid"
     from .work_formula import SpreadsheetRecalculationUnavailable
     if isinstance(error, SpreadsheetRecalculationUnavailable):
         return "spreadsheet_recalculation_unavailable"
