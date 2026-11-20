@@ -74,6 +74,21 @@ opt-in until the real provider, document, database and adversarial gates pass.
 - tests/test_v26_visual_strategy.py covers true chart encoding, negative
   balances, duplication, schema privilege and editable source-value checks.
 
+### Phase E first tranche — Actual multimodal rendered-page quality critic
+- work_visual_critic.py: independently rasterize every qualified PPTX, DOCX or
+  PDF page through real LibreOffice/PyMuPDF, producing bounded PNG input to
+  an independent Gemini vision critic rather than trusting a design blueprint.
+- Explicit page-index coverage, visual-specific issue categories, capped
+  findings, strict refusal if page budget exceeds 60 or a page was unreviewed.
+- A material visual defect triggers the existing domain-specific bounded
+  recovery supervisor. This improves detection; it does not guarantee every
+  issue will be repairable or that model aesthetic opinion is absolute.
+- tests/test_v26_visual_critic.py covers actual PDF rasterization in the Work
+  CI matrix and the absence of false passes for missing pages or overlap.
+- The V26 live paid qualification runner enables this visual critic with
+  strict render QA and preserves category-only diagnostics. Consumer page
+  image bytes are not included in the exported evidence ZIP.
+
 ### Rollout controls
 V26 flags default OFF. The foundational context/phase/graph flags must
 be enabled together; editorial behavior must be enabled deliberately.
