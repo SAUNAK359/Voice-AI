@@ -54,8 +54,8 @@ def _range(col,last):
 
 def _formula(agg,group_col,measure_col,last,row):
     name="SUMIF" if agg=="sum" else "AVERAGEIF"
-    return "="+name+"("+_range(group_col,last)+",A"+str(row)+","+
-        _range(measure_col,last)+")"
+    return ("="+name+"("+_range(group_col,last)+",A"+str(row)+","+
+            _range(measure_col,last)+")")
 
 
 def apply_source_dashboard(path: Path,table,receipt: dict) -> dict:
