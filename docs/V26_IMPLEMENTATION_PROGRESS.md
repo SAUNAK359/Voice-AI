@@ -90,6 +90,20 @@ be enabled together; editorial behavior must be enabled deliberately.
 Offline tests validate schemas, tenant isolation, source-authorization,
 technical-log exclusion, source-revision replay and selected slide coverage.
 
+### Phase G first tranche — Real-provider qualification runner
+- scripts/qualify_v26_live.py: runs paid Gemini + actual V26 context, editorial,
+  arithmetic and visual planning, with strict Office/LibreOffice inspections.
+  It reuses actual durable WorkStore jobs and exports sanitized diagnostic
+  bundles on pass/failure; claims smoke-test status only, NEVER production.
+- notebooks/Rizzler_V26_Real_Gemini_Qualification_Kaggle.ipynb:
+  Kaggle Internet + GEMINI_API_KEY secret, repository SHA recording,
+  Work dependency installation, independent process execution and ZIP link.
+- tests/test_v26_live_qualification.py: offline notebook Python compilation,
+  flag coverage, expected SHA enforcement, secret boundary and no fake
+  production-certification verdict.
+- Paid model/provider qualification: NOT_RUN unless an authorized Kaggle
+  notebook produces real proof; CI success alone cannot change this.
+
 ## NOT YET IMPLEMENTED OR QUALIFIED
 
 The following are **explicitly open**; do not call the upgrade finished:
