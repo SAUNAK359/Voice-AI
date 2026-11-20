@@ -709,7 +709,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             cfg = Settings.from_env()
             studio_blueprint = await create_storyboard(
                 payload["objective"] +
-                ("\n" + context.get("goal_brief",""))[:1900],
+                ("\n" + context.get("goal_brief",""))[:1900] +
+                specialist_brief,
                 ir, model=cfg.gemini_model,api_key=cfg.gemini_api_key)
         if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
             from .config import Settings
