@@ -56,6 +56,21 @@ opt-in until the real provider, document, database and adversarial gates pass.
   coverage remains unchanged unless the feature is explicitly enabled.
 - Existing per-format strict validation and bounded repair remain intact.
 
+### Phase D initial — Semantically correct editable PowerPoint charts
+- work_visual_strategy.py: LLM chooses actual slide/category/metric
+  bindings from source headers and chart purpose (not a keyword router).
+- Validated native bar/line charts support multiple real series and a
+  strictly defined difference computation from original numeric inputs.
+- The runtime rejects unsupported claim-to-chart binding, duplicate chart
+  encodings, invented fields and nonnumeric/nonfinite data.
+- work_studio.py now renders the approved source series rather than always
+  choosing the first numeric source column when the new strategy is enabled.
+- A second inspection independently reopens the PPTX native chart series
+  and reconciles values with the original data source at both candidate
+  and final WorkStore quality gates.
+- tests/test_v26_visual_strategy.py covers true chart encoding, negative
+  balances, duplication, schema privilege and editable source-value checks.
+
 ### Rollout controls
 V26 flags default OFF. The foundational context/phase/graph flags must
 be enabled together; editorial behavior must be enabled deliberately.
