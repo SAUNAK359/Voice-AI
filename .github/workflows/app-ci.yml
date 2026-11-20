@@ -28,6 +28,10 @@ jobs:
         env:
           RIZZLER_V23_MODE: full
         run: python -m pytest -q tests/test_v24_context_convergence.py tests/test_v24_intent_and_recovery.py tests/test_v23_flags.py
+      - name: Verify V26 source-grounded native presentation and Work contracts
+        env:
+          RIZZLER_V23_MODE: full
+        run: python -m pytest -q tests/test_v26_visual_strategy.py tests/test_v26_context_fabric.py tests/test_v26_outcome_phases.py tests/test_v26_editorial_strategy.py tests/test_v26_reasoning_audit.py
       - name: Validate the canonical native Kaggle notebook
         run: python scripts/validate_native_notebook.py
       - name: Verify wheel bundles all six specialist skill playbooks
