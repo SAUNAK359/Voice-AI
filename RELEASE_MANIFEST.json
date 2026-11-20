@@ -169,8 +169,8 @@
     },
     {
       "path": "docs/V26_IMPLEMENTATION_PROGRESS.md",
-      "bytes": 6527,
-      "sha256": "c91d9fc2075d27208c43260a13395a93ba68aaee0f724a6a3f731461ffe3f21d"
+      "bytes": 6751,
+      "sha256": "42419fb9ce56d81018e5c3d707196914d247c57751f6a6da500e69644d1f1fb2"
     },
     {
       "path": "docs/voice-pipeline.md",
@@ -474,8 +474,8 @@
     },
     {
       "path": "src/rizzler/work_context_fabric.py",
-      "bytes": 21246,
-      "sha256": "1278ebf122130bd065efe98cf86cdc70ed389653d68bd21f9bf5095029e6b266"
+      "bytes": 21431,
+      "sha256": "5c962aa66df4b48f4d8b97cbcaef4d891c19f940496430bdf4548202f58efac5"
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
@@ -784,8 +784,8 @@
     },
     {
       "path": "tests/test_v26_context_fabric.py",
-      "bytes": 9437,
-      "sha256": "bed8e9c6b305d79835dd25ade176361cd4f570095873c4ff7c461add75260b4b"
+      "bytes": 11142,
+      "sha256": "ba884950ce9844726195a7c696e457340a7e783d4df39b5e42bc564fc594125b"
     },
     {
       "path": "tests/test_v26_editorial_strategy.py",
