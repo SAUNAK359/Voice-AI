@@ -338,7 +338,42 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                 researcher=researcher,
                 focus=tuple(sorted(renderers.intersection(planned))))
             context_reviewed = True
-        from .v26_flags import foundation_enabled
+        from .v26_flags import foundation_enabled, enabled as v26_enabled
+        if (v26_enabled("RIZZLER_V26_DOMAIN_METHODS")
+                and renderers.intersection(wave)
+                and payload.get("uploads")
+                and not context.get("_v26_method_attempted")):
+            if not foundation_enabled():
+                raise ValueError("V26 domain methods require complete context foundation")
+            from .config import Settings
+            from .work_skills import read_dataset
+            from .work_reasoning_audit import (
+                select_optional_method,execute_comparison)
+            cfg=Settings.from_env()
+            source_table=await asyncio.to_thread(
+                read_dataset,store.upload(owner,payload["uploads"][0]))
+            selection=await select_optional_method(
+                payload["objective"],source_table,
+                model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+            if selection["mode"]=="compare":
+                receipt=await asyncio.to_thread(
+                    execute_comparison,selection["plan"],source_table)
+                context["v26_comparison_receipt"]=receipt
+                store.publish_cognition(
+                    jid,worker_id,fence,"domain_method","verification",{
+                        "method":"source_bound_two_series",
+                        "source_sha256":receipt["source_sha256"],
+                        "total_difference":receipt["total_difference"],
+                        "all_differences_negative":
+                            receipt["all_differences_negative"],
+                        "uniform_differences":receipt["uniform_differences"],
+                        "causal_inference_supported":False})
+            else:
+                store.publish_cognition(
+                    jid,worker_id,fence,"domain_method","state",{
+                        "method":"source_bound_two_series",
+                        "status":"not_relevant_to_user_goal"})
+            context["_v26_method_attempted"]=True
         if foundation_enabled() and renderers.intersection(wave):
             # Build the owner-scoped proof fabric AFTER context convergence.
             # A source delta regenerates ArtifactIR and invalidates earlier views.
@@ -352,7 +387,8 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                     deliverables=payload["deliverables"],
                     requirements=goal.get("requirements") or [],
                     unknowns=goal.get("unknowns") or [],
-                    dataset_summary=context.get("summary"))
+                    dataset_summary=context.get("summary"),
+                    comparison_receipt=context.get("v26_comparison_receipt"))
                 previous=store.knowledge_checkpoint(owner,jid)
                 if previous is not None and (
                         previous["context_revision"]==graph_v2["context_revision"]):
