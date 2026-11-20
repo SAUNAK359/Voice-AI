@@ -239,7 +239,9 @@ def context_view(graph: dict,*,owner: str,job_id: str,
         raise ContextBudgetExceeded("Invalid scoped context budget")
     lookup={item["id"]:item for item in graph["nodes"]}
     required={item["id"] for item in graph["nodes"]
-              if item["kind"] in ("goal","requirement","uncertainty","metric","insight","recommendation")
+              if (item["kind"] in ("goal","requirement","uncertainty")
+                  or (item["kind"] in ("metric","insight","recommendation")
+                      and item["data"].get("critical") is True))
               and item["visibility"]!="private"}
     optional=optional_ids if optional_ids is not None else [
         x["id"] for x in graph["nodes"] if x["visibility"]=="job"]
@@ -407,6 +409,7 @@ def migrate_v1(ir,*,owner: str,job_id: str,objective: str,
                 data={"name":name,"value":val,
                       "unit":receipt["measurement_unit"],
                       "period":"observed_uploaded_dataset",
+                      "critical":True,
                       "first_measure":receipt["first_measure"],
                       "second_measure":receipt["second_measure"],
                       "source_table_sha256":receipt["source_sha256"]},
@@ -418,6 +421,7 @@ def migrate_v1(ir,*,owner: str,job_id: str,objective: str,
                 data={"name":"difference","value":float(record["difference"]),
                       "unit":receipt["measurement_unit"],
                       "period":record["category"],
+                      "critical":False,
                       "source_table_sha256":receipt["source_sha256"]},
                 dependencies=("source:domain_method",),status="computed_summary"))
         for index,limitation in enumerate(
