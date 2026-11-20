@@ -20,7 +20,8 @@ MAX_SLIDES = 36
 
 
 def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
-                        sources: tuple[str, ...]) -> dict:
+                        sources: tuple[str, ...], *,
+                        min_slides: int = 3, max_slides: int = MAX_SLIDES) -> dict:
     """Reject hallucinated citations, omitted sections or empty slide content."""
     if not isinstance(document, dict) or not {
             "schema_version", "slides"}.issubset(document) or (
@@ -29,7 +30,8 @@ def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
     if document["schema_version"] != 1 or not isinstance(document["slides"], list):
         raise ValueError("Unsupported presentation blueprint")
     slides = document["slides"]
-    if not 3 <= len(slides) <= MAX_SLIDES:
+    if not (1 <= min_slides <= max_slides <= MAX_SLIDES and
+            min_slides <= len(slides) <= max_slides):
         raise ValueError("Slide coverage outside approved bounds")
     used: set[int] = set()
     output = []
@@ -68,10 +70,13 @@ def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
 
 
 async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
-                            client=None) -> dict:
+                            client=None, min_slides: int = 3,
+                            max_slides: int = MAX_SLIDES) -> dict:
     """Model proposes editable slide arguments; contract validates all references."""
     if not api_key:
         raise RuntimeError("Studio requires model configuration")
+    if not 1 <= min_slides <= max_slides <= MAX_SLIDES:
+        raise ValueError("Invalid bounded storyboard size contract")
     owned = client is None
     if owned:
         from google import genai
@@ -91,7 +96,8 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
         "Build an analytical, persuasive, nonrepetitive presentation from the "
         "provided report sections and verified sources. Choose the number "
         "of slides according to task complexity, user specification and "
-        "available evidence; 3 to 36 slides. Each slide communicates ONE "
+        "available evidence; produce between " + str(min_slides) + " and " +
+        str(max_slides) + " slides. Each slide communicates ONE "
         "substantive claim using an editable layout. The model decides the "
         "appropriate slide kind: takeaway, comparison, process, evidence, "
         "metrics or decision. No generic filler, duplicate conclusions or "
@@ -149,10 +155,12 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
                 candidate=decode_model_json(
                     getattr(response,"text","") or "",max_bytes=66000)
                 return validate_storyboard(
-                    candidate, ir.sections, ir.sources)
+                    candidate, ir.sections, ir.sources,
+                    min_slides=min_slides, max_slides=max_slides)
             except (ValueError,TypeError) as exc:
                 failure_reason=repair_failure_reason(
-                    candidate, sections=ir.sections, sources=ir.sources)
+                    candidate, sections=ir.sections, sources=ir.sources,
+                    min_slides=min_slides, max_slides=max_slides)
                 if isinstance(candidate,dict) and isinstance(
                         candidate.get("slides"),list):
                     # The model receives a minimal diff request first.
@@ -162,7 +170,8 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
                     try:
                         return await repair_storyboard(
                             candidate,sections=ir.sections,sources=ir.sources,
-                            model=model,client=client,failure=str(exc))
+                            model=model,client=client,failure=str(exc),
+                            min_slides=min_slides, max_slides=max_slides)
                     except (ValueError,TypeError,KeyError) as repair_exc:
                         if isinstance(repair_exc,StoryboardQualificationError):
                             failure_reason=repair_exc.reason
