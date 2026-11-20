@@ -326,7 +326,8 @@ def affected_dependents(graph: dict,changed_ids: set[str]) -> list[str]:
 def migrate_v1(ir,*,owner: str,job_id: str,objective: str,
                deliverables: list[str],requirements: list[dict] | None = None,
                dataset_summary: dict | None = None,
-               unknowns: list[str] | None = None) -> dict:
+               unknowns: list[str] | None = None,
+               comparison_receipt: dict | None = None) -> dict:
     """No promotion of old narrative into independently verified evidence."""
     from .work_outcome_phases import phase_projection
     if not isinstance(objective,str) or not objective.strip():
@@ -382,6 +383,51 @@ def migrate_v1(ir,*,owner: str,job_id: str,objective: str,
                           "dataset_summary_sha256":ir.dataset_digest},
                     dependencies=("source:dataset",),
                     status="computed_summary"))
+    if comparison_receipt is not None:
+        receipt=comparison_receipt
+        if (not isinstance(receipt,dict)
+                or receipt.get("schema_version")!=2
+                or not HEX64.fullmatch(str(receipt.get("source_sha256","")))):
+            raise ContextIntegrityError("Missing trusted quantitative source receipt")
+        out.append(node(
+            id="source:domain_method",kind="source",status="attributed",
+            data={"source_sha256":receipt["source_sha256"],
+                  "provenance":"independently_executed_uploaded_table",
+                  "content_verified":False}))
+        for name in ("total_first","total_second","total_difference"):
+            raw=receipt.get(name)
+            try:
+                val=float(raw)
+            except (TypeError,ValueError) as exc:
+                raise ContextIntegrityError("Invalid computed comparison receipt") from exc
+            if not math.isfinite(val):
+                raise ContextIntegrityError("Non-finite analytical metric")
+            out.append(node(
+                id="metric:comparison_"+name,kind="metric",
+                data={"name":name,"value":val,
+                      "unit":receipt["measurement_unit"],
+                      "period":"observed_uploaded_dataset",
+                      "first_measure":receipt["first_measure"],
+                      "second_measure":receipt["second_measure"],
+                      "source_table_sha256":receipt["source_sha256"]},
+                dependencies=("source:domain_method",),
+                status="computed_summary"))
+        for index,record in enumerate(receipt.get("groups",[])[:64]):
+            out.append(node(
+                id="metric:comparison_group_"+str(index),kind="metric",
+                data={"name":"difference","value":float(record["difference"]),
+                      "unit":receipt["measurement_unit"],
+                      "period":record["category"],
+                      "source_table_sha256":receipt["source_sha256"]},
+                dependencies=("source:domain_method",),status="computed_summary"))
+        for index,limitation in enumerate(
+                receipt.get("epistemic_limitations",[])[:6]):
+            out.append(node(
+                id="uncertainty:domain_method_"+str(index),
+                kind="uncertainty",
+                data={"statement":str(limitation),
+                      "impact":"constrains numerical interpretation"},
+                dependencies=("source:domain_method",),status="unknown"))
     for i,unknown in enumerate((unknowns or [])[:30]):
         out.append(node(id="uncertainty:"+str(i),kind="uncertainty",
                         data={"statement":unknown,
