@@ -28,6 +28,7 @@ V26_FLAGS={
     "RIZZLER_V26_EDITORIAL_DIRECTOR":"1",
     "RIZZLER_V26_DOMAIN_METHODS":"1",
     "RIZZLER_V26_ARTIFACT_STRATEGY":"1",
+    "RIZZLER_V26_VISUAL_CRITIC":"1",
 }
 TESTS=[
     "test_v26_outcome_phases.py",
@@ -35,6 +36,7 @@ TESTS=[
     "test_v26_editorial_strategy.py",
     "test_v26_reasoning_audit.py",
     "test_v26_visual_strategy.py",
+    "test_v26_visual_critic.py",
     "test_v25_work_recovery_integration.py",
     "test_v24_storyboard_recovery.py",
 ]
