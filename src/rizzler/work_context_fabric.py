@@ -415,7 +415,14 @@ def migrate_v1(ir,*,owner: str,job_id: str,objective: str,
                       "source_table_sha256":receipt["source_sha256"]},
                 dependencies=("source:domain_method",),
                 status="computed_summary"))
-        for index,record in enumerate(receipt.get("groups",[])[:64]):
+        comparison_groups=receipt.get("groups",[])
+        if not isinstance(comparison_groups,list):
+            raise ContextIntegrityError("Computed comparison groups must be structured")
+        if len(comparison_groups)>256:
+            raise ContextBudgetExceeded(
+                "Group evidence exceeds the bounded knowledge graph; "
+                "persist a queryable dataset receipt instead of truncating it")
+        for index,record in enumerate(comparison_groups):
             out.append(node(
                 id="metric:comparison_group_"+str(index),kind="metric",
                 data={"name":"difference","value":float(record["difference"]),
