@@ -117,6 +117,14 @@ class WorkStore:
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS context_checkpoints_owner
               ON context_checkpoints(owner,job_id);
+            CREATE TABLE IF NOT EXISTS knowledge_checkpoints(
+              job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              goal_digest TEXT NOT NULL, revision TEXT NOT NULL,
+              payload_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL,
+              updated REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS knowledge_checkpoints_owner
+              ON knowledge_checkpoints(owner,job_id);
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
@@ -484,6 +492,67 @@ class WorkStore:
                                "kind":row["kind"],"payload":json.loads(raw),
                                "sha256":row["payload_sha256"],"at":row["at"]})
             return events
+
+    def save_knowledge_checkpoint(self, jid: str, worker: str,
+                                  fence: int, graph: dict) -> str:
+        """Persist a canonical owner-scoped PCCF v2 snapshot under the lease.
+
+        This is separate from V25 source-convergence deltas; source changes
+        may replace the graph, but no model can silently alter the original
+        authorized goal digest. A transaction fences every write.
+        """
+        from .work_context_fabric import validate_fabric
+        validate_fabric(graph)
+        if graph["job_id"] != jid:
+            raise ValueError("Context knowledge job ID mismatch")
+        raw=json.dumps(graph,sort_keys=True,separators=(",",":"),
+                       ensure_ascii=False,allow_nan=False)
+        if len(raw.encode("utf-8"))>2_000_000:
+            raise ValueError("Context graph storage budget exceeded")
+        digest=hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        with self._tx() as c:
+            active=self._active(c,jid,worker,fence)
+            if active["owner"]!=graph["owner_scope"]:
+                raise Missing("Knowledge owner does not match fenced job")
+            previous=c.execute(
+                "SELECT goal_digest FROM knowledge_checkpoints "
+                "WHERE job_id=? AND owner=?",(jid,active["owner"])).fetchone()
+            if previous and previous["goal_digest"]!=graph["immutable_goal_digest"]:
+                raise ValueError("Immutable user outcome cannot change via context replay")
+            c.execute("""INSERT INTO knowledge_checkpoints(
+              job_id,owner,goal_digest,revision,payload_json,payload_sha256,updated)
+              VALUES(?,?,?,?,?,?,?)
+              ON CONFLICT(job_id) DO UPDATE SET
+              revision=excluded.revision,
+              payload_json=excluded.payload_json,
+              payload_sha256=excluded.payload_sha256,
+              updated=excluded.updated""",
+              (jid,active["owner"],graph["immutable_goal_digest"],
+               graph["context_revision"],raw,digest,time.time()))
+        return digest
+
+    def knowledge_checkpoint(self, owner: str, jid: str) -> dict | None:
+        """Verify canonical bytes and owner scope on every context retrieval."""
+        from .work_context_fabric import validate_fabric
+        with self._tx() as c:
+            parent=c.execute(
+                "SELECT id FROM jobs WHERE id=? AND owner=?",(jid,owner)).fetchone()
+            if parent is None:
+                raise Missing("Job not found")
+            row=c.execute("""SELECT payload_json,payload_sha256,revision
+                 FROM knowledge_checkpoints
+                 WHERE job_id=? AND owner=?""",(jid,owner)).fetchone()
+            if row is None:
+                return None
+            raw=row["payload_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=row["payload_sha256"]:
+                raise ValueError("Persisted knowledge content digest mismatched")
+            graph=json.loads(raw)
+            validate_fabric(graph)
+            if (graph["owner_scope"]!=owner or graph["job_id"]!=jid
+                    or graph["context_revision"]!=row["revision"]):
+                raise ValueError("Persisted knowledge identity or revision mismatch")
+            return graph
 
     def save_context_checkpoint(self, jid: str, worker: str, fence: int,
                                 base_sha256: str, snapshot: dict) -> str:
