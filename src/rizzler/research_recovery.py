@@ -160,7 +160,13 @@ async def recover_missing_research(objective: str, missing: list[str], *,
         except Exception as exc:
             focus={"status":"unavailable_"+type(exc).__name__}
     return {
-        "status":"direct_answer_recovered" if focused else "missing_answers_remain",
+        # A recovery pass may find true, relevant quotations without
+        # resolving every requirement. Do not report full recovery unless
+        # the independent focus model explicitly judged full coverage.
+        "status": ("direct_answer_recovered" if focused and focus and
+                   focus.get("status")=="answers_question"
+                   else "partial_verified_recovery" if focused
+                   else "missing_answers_remain"),
         "claims":focused,
         "documents":documents,
         "records":records,
