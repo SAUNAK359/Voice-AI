@@ -394,8 +394,8 @@
     },
     {
       "path": "src/rizzler/research_intelligence.py",
-      "bytes": 16458,
-      "sha256": "f01d292949f9c80cc26a67bc37437e8f6646d5f85f2688bebf7935faaba37547"
+      "bytes": 16649,
+      "sha256": "1f1795a6eae99ec55d3f16688e6f311d4bdad2a183891b393b5163eb3a45253e"
     },
     {
       "path": "src/rizzler/research_recovery.py",
@@ -479,8 +479,8 @@
     },
     {
       "path": "src/rizzler/work_formula.py",
-      "bytes": 8744,
-      "sha256": "35c8dbd12ad448e634315b69bc7f2295287d75d5448509276d3bfbfe4b212701"
+      "bytes": 8938,
+      "sha256": "eb56c3b896065bea9ea8a057377dc6f879bff98ec89225ded7523012b81c9833"
     },
     {
       "path": "src/rizzler/work_memory_context.py",
@@ -684,8 +684,8 @@
     },
     {
       "path": "tests/test_v24_live_evidence_regressions.py",
-      "bytes": 4791,
-      "sha256": "488b9517ac88635648bc40a89ff10e9b77896ab95294d67101abdca10a59440a"
+      "bytes": 5228,
+      "sha256": "3bd96625b7019a672ad8286def80e21ecb0268fb793e162eadceba0e0da06ee3"
     },
     {
       "path": "tests/test_v24_qualification_notebook.py",
