@@ -137,6 +137,27 @@ def validate_focus(data: dict, claims: list[dict]) -> dict:
             "selected_ids": items, "missing_aspects": missing}
 
 
+def project_focus_decision(decision: dict, claims: list[dict]
+                           ) -> tuple[list[dict], dict]:
+    """Apply an already-validated model coverage verdict without losing facts.
+
+    No provider SDK needed: this pure stage is independently regression
+    tested by the minimal CI and cannot introduce new source identifiers.
+    """
+    validated = validate_focus(decision, claims)
+    selected = set(validated["selected_ids"])
+    relevant = [item for item in claims if item["id"] in selected]
+    status = ("answers_question" if validated["answers_question"]
+              else "partial_answer" if relevant else "unanswered_objective")
+    return relevant, {
+        "status": status,
+        "answers_question": validated["answers_question"],
+        "missing_aspects": validated["missing_aspects"],
+        "selected": len(relevant),
+        "reviewed": len(claims),
+    }
+
+
 async def focus_claims(objective: str, claims: list[dict], *, client, model: str
                        ) -> tuple[list[dict], dict]:
     """Judge whether source-supported findings answer the user's actual ask.
@@ -189,8 +210,7 @@ async def focus_claims(objective: str, claims: list[dict], *, client, model: str
                     temperature=0.1, max_output_tokens=1500))
             decision = validate_focus(
                 decode_model_json(getattr(response, "text", "") or ""), claims)
-            selected = {x for x in decision["selected_ids"]}
-            relevant = [x for x in claims if x["id"] in selected]
+            relevant, report = project_focus_decision(decision, claims)
             if not relevant and not decision["answers_question"] and attempt == 0:
                 # A broad user request can include required documents as well
                 # as factual research. Re-review ONLY source-backed factual
@@ -205,20 +225,9 @@ async def focus_claims(objective: str, claims: list[dict], *, client, model: str
                     "and listing specific missing factual aspects. Do not "
                     "include merely related or unsupported claims.")
                 continue
-            # A task can be partially answered by real, byte-backed facts.
-            # Never discard relevant verified quotations merely because the
-            # entire multi-format user request is still incomplete. Return
-            # provenance-preserving partial evidence AND explicit coverage gaps
-            # to the Context Intelligence supervisor for backdelegation.
-            status = ("answers_question" if decision["answers_question"]
-                      else "partial_answer" if relevant
-                      else "unanswered_objective")
-            return relevant, {
-                "status": status,
-                "answers_question": decision["answers_question"],
-                "missing_aspects": decision["missing_aspects"],
-                "selected": len(relevant),
-                "reviewed": len(claims)}
+            # Leave all facts and missing aspects in the validated pure
+            # projection so the supervisor, not a fallback guess, converges.
+            return relevant, report
         except ValueError:
             continue
     return [], {"status": "focus_contract_invalid", "missing_aspects": []}
