@@ -162,7 +162,14 @@ async def focus_claims(objective: str, claims: list[dict], *, client, model: str
         "definitions. If they ask how something works, explanatory findings "
         "may be the direct answer. Ignore superficial thematic overlap. "
         "Never mark the objective fully answered when its essential "
-        "requested information is absent. Return ONLY JSON with exactly "
+        "requested information is absent. Separate source-factual questions "
+        "from output-format instructions: a source cannot itself prove that "
+        "the requested slides or documents have already been delivered. "
+        "When some independently verified claims address a required part "
+        "of the question, SELECT their IDs even if the full task is not "
+        "answered, set answers_question=false, and identify the remaining "
+        "factual gaps precisely. Partial evidence must never be described "
+        "as full coverage. Return ONLY JSON with exactly "
         "{\"answers_question\":boolean,\"selected_ids\":[string],"
         "\"missing_aspects\":[string]}. Select IDs ONLY from the supplied "
         "independently quote-validated claims. Each missing aspect must "
@@ -184,9 +191,17 @@ async def focus_claims(objective: str, claims: list[dict], *, client, model: str
                 decode_model_json(getattr(response, "text", "") or ""), claims)
             selected = {x for x in decision["selected_ids"]}
             relevant = [x for x in claims if x["id"] in selected]
-            return (relevant if decision["answers_question"] else []), {
-                "status": "answers_question" if decision["answers_question"]
-                          else "unanswered_objective",
+            # A task can be partially answered by real, byte-backed facts.
+            # Never discard relevant verified quotations merely because the
+            # entire multi-format user request is still incomplete. Return
+            # provenance-preserving partial evidence AND explicit coverage gaps
+            # to the Context Intelligence supervisor for backdelegation.
+            status = ("answers_question" if decision["answers_question"]
+                      else "partial_answer" if relevant
+                      else "unanswered_objective")
+            return relevant, {
+                "status": status,
+                "answers_question": decision["answers_question"],
                 "missing_aspects": decision["missing_aspects"],
                 "selected": len(relevant),
                 "reviewed": len(claims)}
