@@ -210,6 +210,11 @@ async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
 def render_storyboard(path: Path, blueprint: dict, *, title: str,
                       sources: tuple[str, ...], table=None) -> None:
     """Render native, editable elements and per-slide evidence notes."""
+    from .v26_flags import enabled as v26_enabled
+    if v26_enabled("RIZZLER_V26_ARTIFACT_STRATEGY"):
+        from .work_presentation_layout import render_professional_storyboard
+        return render_professional_storyboard(
+            path,blueprint,title=title,sources=sources,table=table)
     from pptx import Presentation
     from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
