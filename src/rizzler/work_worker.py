@@ -348,7 +348,11 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                                 focus_audit={
                                     "status":"unavailable_"+type(exc).__name__,
                                     "missing_aspects":[]}
-                            if focused_claims:
+                            # A partial source-backed answer is valuable but
+                            # not completion. Continue seeking its missing
+                            # obligations; never discard verified facts.
+                            if (focused_claims and
+                                    focus_audit.get("status") == "answers_question"):
                                 break
                         else:
                             audit["claim_verification"]="no_accepted_source_quotes"
@@ -382,7 +386,8 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
         # A valid quotation is not enough if its fact is irrelevant.
         # Use explicit missing-goal feedback to investigate NEW sources,
         # never repeat a generic extraction over the same initial passages.
-        if feature_enabled("RIZZLER_CLAIM_VERIFY") and not focused_claims:
+        if (feature_enabled("RIZZLER_CLAIM_VERIFY") and
+                focus_audit.get("status") != "answers_question"):
             from .research_recovery import recover_missing_research
             missing=focus_audit.get("missing_aspects") or [
                 "Find original authoritative evidence directly answering the "
@@ -402,19 +407,45 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 audit["retrieved_documents"]=len(extracted)
                 audit["retrieval_failures"]=len(fetch_failures)
                 if recovery["claims"]:
-                    focused_claims=recovery["claims"]
-                    focus_audit=recovery["focus"] or focus_audit
+                    # Merge independently verified partial findings; recovery
+                    # must not erase previously accepted observations.
+                    merged = {item["id"]:item for item in focused_claims}
+                    for item in recovery["claims"]:
+                        merged.setdefault(item["id"], item)
+                    focused_claims=list(merged.values())
                     records.extend(recovery["records"])
-                    sections=["## Directly relevant verified observations",
-                              claim_summary(focused_claims)]
-                    audit["quote_verified_claims"]=len(claims)+len(focused_claims)
+                    audit["quote_verified_claims"]=len(claims)+len(
+                        recovery["claims"])
                     audit["claim_verification"]="verbatim_quote_checked"
+                    try:
+                        _, revised_focus = await focus_claims(
+                            objective, focused_claims,
+                            client=client, model=cfg.gemini_model)
+                        focus_audit = revised_focus
+                    except Exception as exc:
+                        audit["recovery_focus_review"] = (
+                            "unavailable_" + type(exc).__name__)
             except Exception as exc:
                 audit["missing_evidence_recovery"]={
                     "status":"unavailable_"+type(exc).__name__,
                     "searches":0,"verified_direct_claims":0}
+        # A source-backed partial answer remains explicitly incomplete.
+        # The downstream Context Intelligence supervisor must decide whether
+        # to re-delegate or ask the user; no source metadata can fill the gap.
+        fully_answered = focus_audit.get("status") == "answers_question"
         audit["objective_alignment"]=focus_audit
-        audit["question_answered_with_evidence"]=bool(focused_claims)
+        audit["question_answered_with_evidence"] = bool(
+            focused_claims) and fully_answered
+        audit["verified_partial_findings"] = len(focused_claims)
+        if feature_enabled("RIZZLER_CLAIM_VERIFY") and focused_claims:
+            sections=["## " + ("Verified relevant observations" if
+                fully_answered else "Verified partial observations — incomplete"),
+                claim_summary(focused_claims)]
+            if not fully_answered:
+                gaps=focus_audit.get("missing_aspects") or [
+                    "Essential domain evidence has not yet been demonstrated."]
+                sections.extend(["## Unresolved factual requirements",
+                    "\n".join("- " + str(item)[:230] for item in gaps[:8])]) 
         if feature_enabled("RIZZLER_CLAIM_VERIFY") and focused_claims:
             # Publish only citations that actually substantiate accepted,
             # task-relevant findings. Discovery inventory remains in audit;
@@ -446,7 +477,10 @@ async def grounded_research(objective: str) -> tuple[str,list[str]]:
                 "retrieval_failures":fetch_failures,
                 "verified_quotes":focused_claims[:20],
                 "rejected_or_background_quotes":len(claims)-len(focused_claims),
-                "evidence_summary":audit, "partial":len(successful)<len(requests)}
+                "evidence_summary":audit,
+                "partial":len(successful)<len(requests) or (
+                    feature_enabled("RIZZLER_CLAIM_VERIFY") and
+                    not audit["question_answered_with_evidence"])}
     finally:
         await client.aio.aclose()
 
