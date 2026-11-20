@@ -169,8 +169,8 @@
     },
     {
       "path": "docs/V26_IMPLEMENTATION_PROGRESS.md",
-      "bytes": 4768,
-      "sha256": "694a0072836a23d4fdeb71acb5d13a0d0933f7256af76fb84e0074a6a4e52e7e"
+      "bytes": 5554,
+      "sha256": "e2235d84975146da9c9120713050a57e4ea77b13cdabd8f9699942b6cc97a619"
     },
     {
       "path": "docs/voice-pipeline.md",
@@ -474,8 +474,8 @@
     },
     {
       "path": "src/rizzler/work_context_fabric.py",
-      "bytes": 18678,
-      "sha256": "6ff1dd3c1606f03d8a63a525a4c1f791ce62193fdcad17ecdff594a48e5be7b9"
+      "bytes": 21246,
+      "sha256": "1278ebf122130bd065efe98cf86cdc70ed389653d68bd21f9bf5095029e6b266"
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
@@ -548,6 +548,11 @@
       "bytes": 11783
     },
     {
+      "path": "src/rizzler/work_reasoning_audit.py",
+      "bytes": 13991,
+      "sha256": "ec3b869db00067a60f689f133301401c0b10250f4af3f3665e26e797028bbebc"
+    },
+    {
       "path": "src/rizzler/work_repair.py",
       "bytes": 19129,
       "sha256": "73d0781ff62976dd543cb5b248e5838dccc59e2fd301e6a1bc7c1ce3534f3695"
@@ -569,8 +574,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 58177,
-      "sha256": "71b9d5f575fbf2ca80b938ca7b2abc10dfec15441375fa7a5c5c6fafe0ce0a6b"
+      "bytes": 60235,
+      "sha256": "f666d828637dc34f599fa25ae9997748a54fa541e4d732b2060faeae4c01935c"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -774,8 +779,8 @@
     },
     {
       "path": "tests/test_v26_context_fabric.py",
-      "bytes": 8062,
-      "sha256": "b150fe8f026228aaffc84376483e87299a867980b60cd4e9833539f42db4e636"
+      "bytes": 9437,
+      "sha256": "bed8e9c6b305d79835dd25ade176361cd4f570095873c4ff7c461add75260b4b"
     },
     {
       "path": "tests/test_v26_editorial_strategy.py",
@@ -786,6 +791,11 @@
       "path": "tests/test_v26_outcome_phases.py",
       "bytes": 5636,
       "sha256": "86ea9806149763073fe236abf7bf67801421c9a55148e15c4adfb9ba5d3527f7"
+    },
+    {
+      "path": "tests/test_v26_reasoning_audit.py",
+      "bytes": 3623,
+      "sha256": "b5280621976bb5df90f81e151e563d6aa4206cf98a07867f61ebc36ff0bc7db0"
     },
     {
       "path": "web/app.js",
