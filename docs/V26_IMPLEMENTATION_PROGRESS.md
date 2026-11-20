@@ -74,6 +74,20 @@ opt-in until the real provider, document, database and adversarial gates pass.
 - tests/test_v26_visual_strategy.py covers true chart encoding, negative
   balances, duplication, schema privilege and editable source-value checks.
 
+### Phase D continued — Distinct editable presentation layouts
+- work_presentation_layout.py: PowerPoint's existing LLM-selected
+  takeaway/comparison/process/evidence/metrics/decision slide kinds now
+  select distinct, native-editable layout families rather than uniformly
+  repeating pale information cards on every page.
+- Layouts use title/message/evidence hierarchy, contextual comparisons,
+  connected process steps, contrast-aware decision panels and real
+  bound numeric charts where the source supports them. No invented data.
+- work_studio.py dispatches only under opt-in V26 artifact strategy; V25
+  legacy formatting and checkpoints remain functional when flag is off.
+- tests/test_v26_presentation_layout.py creates real PPTX files for all
+  six slide families, checks native editability and verifies actual
+  visual chart series independently against source data.
+
 ### Phase E first tranche — Actual multimodal rendered-page quality critic
 - work_visual_critic.py: independently rasterize every qualified PPTX, DOCX or
   PDF page through real LibreOffice/PyMuPDF, producing bounded PNG input to
