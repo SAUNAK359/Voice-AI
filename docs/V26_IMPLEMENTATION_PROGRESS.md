@@ -34,6 +34,18 @@ opt-in until the real provider, document, database and adversarial gates pass.
 - work_specialists.py: after source convergence, reconstruct or rehydrate
   the authorized context graph and share role-aware slices.
 
+### Phase C initial — Source-bound numerical reasoning
+- work_reasoning_audit.py: Gemini selects whether a particular uploaded
+  dataset needs a two-measure analysis and the exact source columns.
+- The verifier computes group differences and total arithmetic from input
+  bytes using Decimal, without trusting model-generated numeric results.
+- Unsupported causal identification is rejected; uniformity, direction,
+  totals and confounder overlap are explicit machine-checkable predicates.
+- The independently executed receipt is committed to role-scoped PCCF,
+  including units, source digest and essential methodological limitations.
+- tests/test_v26_reasoning_audit.py exercises the exact four-row misleading
+  deficit, region/time confounding and nonfinite/bogus input fixtures.
+
 ### Phase C / D initial — Editorial relevance and PowerPoint source coverage
 - work_editorial_director.py: model-selected source sections with a complete
   inclusion/exclusion ledger, permitted citations and separate critic verdict.
