@@ -28,6 +28,9 @@ opt-in until the real provider, document, database and adversarial gates pass.
   views with declared omissions and hard-fact preservation.
 - Transitive dependency invalidation and no fabricated promotion of V25
   report text to independently verified facts.
+- Context budget separates mandatory critical metrics and epistemic caveats
+  from optional detail; omitted nodes remain exactly retrievable by ID.
+  Large synthetic test graphs exercise this instead of silently truncating.
 - WorkStore: fenced, per-job immutable-authorization graph persistence,
   checksum verification, owner isolation and source-revision-aware replay.
   Database tables use DDL compatible with the existing PostgreSQL adapter.
