@@ -21,14 +21,25 @@ MAX_SLIDES = 36
 
 def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
                         sources: tuple[str, ...], *,
-                        min_slides: int = 3, max_slides: int = MAX_SLIDES) -> dict:
+                        min_slides: int = 3, max_slides: int = MAX_SLIDES,
+                        allow_editorial: bool = False) -> dict:
     """Reject hallucinated citations, omitted sections or empty slide content."""
     if not isinstance(document, dict) or not {
             "schema_version", "slides"}.issubset(document) or (
-            set(document) - {"schema_version", "slides", "sections_covered"}):
+            set(document) - ({"schema_version", "slides", "sections_covered",
+                              "editorial_plan"} if allow_editorial else
+                             {"schema_version", "slides", "sections_covered"})):
         raise ValueError("Invalid presentation blueprint envelope")
     if document["schema_version"] != 1 or not isinstance(document["slides"], list):
         raise ValueError("Unsupported presentation blueprint")
+    editorial_plan=document.get("editorial_plan") if allow_editorial else None
+    required=set(range(len(sections)))
+    if editorial_plan is not None:
+        from .work_editorial_director import validate_editorial_plan
+        validate_editorial_plan(
+            editorial_plan,sections=sections,required_sources=sources)
+        required=set(editorial_plan["selected_section_ids"])
+        min_slides=1
     slides = document["slides"]
     if not (1 <= min_slides <= max_slides <= MAX_SLIDES and
             min_slides <= len(slides) <= max_slides):
@@ -61,12 +72,15 @@ def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
         output.append({"title": _display_text(title), "message": _display_text(message),
                        "kind":kind, "bullets":[_display_text(x) for x in bullets],
                        "section_ids":section_ids, "source_urls":list(dict.fromkeys(citations))})
-    if used != set(range(len(sections))):
-        raise ValueError("Presentation omits required content coverage")
+    if used != required:
+        raise ValueError("Presentation omits required selected insights or adds excluded sections")
     if "sections_covered" in document and document["sections_covered"] != sorted(used):
         raise ValueError("Presentation section coverage checksum disagrees")
-    return {"schema_version":1,"slides":output,
-            "sections_covered":sorted(used)}
+    verified={"schema_version":1,"slides":output,
+              "sections_covered":sorted(used)}
+    if editorial_plan is not None:
+        verified["editorial_plan"]=editorial_plan
+    return verified
 
 
 async def create_storyboard(objective: str, ir, *, model: str, api_key: str,
