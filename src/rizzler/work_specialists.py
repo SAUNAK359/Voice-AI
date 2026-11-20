@@ -353,6 +353,13 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                     requirements=goal.get("requirements") or [],
                     unknowns=goal.get("unknowns") or [],
                     dataset_summary=context.get("summary"))
+                previous=store.knowledge_checkpoint(owner,jid)
+                if previous is not None and (
+                        previous["context_revision"]==graph_v2["context_revision"]):
+                    graph_v2=previous
+                else:
+                    store.save_knowledge_checkpoint(
+                        jid,worker_id,fence,graph_v2)
                 context["work_graph"]=graph_v2
                 context["_v26_ir_sha"]=new_ir.sha256
                 store.publish_cognition(
