@@ -97,6 +97,29 @@ class ProofCarryingContextTests(unittest.TestCase):
         self.assertEqual(
             affected_dependents(graph,{"source:a"}),["fact:a","insight:a"])
 
+    def test_derived_math_receipts_survive_context_transfer_with_caveats(self):
+        from rizzler.work_reasoning_audit import execute_comparison
+        table=(["quarter","imports","exports","region"],[
+            ["Q1","125","95","North"],["Q2","140","105","North"],
+            ["Q3","160","117","South"],["Q4","175","133","South"]])
+        plan={"schema_version":2,"category_column":"quarter",
+              "first_measure":"imports","second_measure":"exports",
+              "aggregation":"sum","measurement_unit":"unspecified_by_source",
+              "analytical_question":"What was the difference across quarters?",
+              "confounder_columns":["region"]}
+        proof=execute_comparison(plan,table)
+        ir=compile_ir("Data study",
+            "# Findings\\nSynthetic data supports descriptive analysis.",
+            [])
+        graph=migrate_v1(ir,owner="tenant_1",job_id="job_123",
+            objective="Analyze the synthetic data",deliverables=["pptx"],
+            comparison_receipt=proof)
+        view=context_view(graph,owner="tenant_1",job_id="job_123",
+                          specialist="powerpoint",max_bytes=14000)
+        nodes={x["id"]:x for x in view["nodes"]}
+        self.assertEqual(nodes["metric:comparison_total_difference"]["data"]["value"],-150)
+        self.assertTrue(any(x["kind"]=="uncertainty" for x in view["nodes"]))
+
     def test_tampered_content_fails_canonical_digest_validation(self):
         graph=self.setup_graph()
         invalid=copy.deepcopy(graph)
