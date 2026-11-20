@@ -169,8 +169,8 @@
     },
     {
       "path": "docs/V26_IMPLEMENTATION_PROGRESS.md",
-      "bytes": 6751,
-      "sha256": "42419fb9ce56d81018e5c3d707196914d247c57751f6a6da500e69644d1f1fb2"
+      "bytes": 7662,
+      "sha256": "545a71bf1b69d6e76c557bfe348093de8d19548412deb924b5951407a75d9c35"
     },
     {
       "path": "docs/voice-pipeline.md",
@@ -228,6 +228,11 @@
       "sha256": "1e3ceb2b86fd22ab77481f3e7f0bf1308aeb82a263a0711438ad0fcc8e5889c3"
     },
     {
+      "path": "notebooks/Rizzler_V26_Real_Gemini_Qualification_Kaggle.ipynb",
+      "bytes": 5856,
+      "sha256": "05b399b2b70f9e41037997ba2c48e2f42001e24134aaf3f777961b28df7dff2d"
+    },
+    {
       "path": "notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb",
       "bytes": 312269,
       "sha256": "87b9541c3125108228d69aff3f8680cf2255db0da9ec3b40665bae08ac8e85d4"
@@ -271,6 +276,11 @@
       "path": "scripts/qualify_v25_live.py",
       "bytes": 16213,
       "sha256": "b547d4e3b7809a8b0a91a017af64705c727a058d4646d756dd7c8cf474d04f83"
+    },
+    {
+      "path": "scripts/qualify_v26_live.py",
+      "bytes": 6064,
+      "sha256": "0a46d7eedd93aef7b57f9b1d3ff52fcd4f30f568e7fcd2dc907486b667a14b4e"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -791,6 +801,11 @@
       "path": "tests/test_v26_editorial_strategy.py",
       "bytes": 5892,
       "sha256": "7f1ba2372a6a8614c6ddd7d037e6a98a71723f29406b4641ca07a60b14448bc0"
+    },
+    {
+      "path": "tests/test_v26_live_qualification.py",
+      "bytes": 3018,
+      "sha256": "457591ed59a4b6d1d4b8745708508c432e259af29942e3b4a2951eed85ac1056"
     },
     {
       "path": "tests/test_v26_outcome_phases.py",
