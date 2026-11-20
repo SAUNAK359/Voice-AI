@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import importlib.util
 from tempfile import TemporaryDirectory
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
@@ -57,6 +58,8 @@ def planned():
 
 
 class EditableChartQualificationTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("pptx") is not None,
+                         "Install the work extra to test native PowerPoint chart rendering")
     def test_two_semantically_distinct_charts_render_source_accurate_values(self):
         ir={"schema_version":1,"slides":[
             slide("Imports and exports by quarter",0),
