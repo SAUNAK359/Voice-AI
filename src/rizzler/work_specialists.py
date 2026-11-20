@@ -831,6 +831,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             studio_blueprint=None
             editor_blueprint=None
             document_ir=ir
+            from .v26_flags import enabled as v26_enabled
             scoped_objective=(payload["objective"]+
                 ("\n"+context.get("goal_brief",""))[:1900]+
                 specialist_brief+recovery_hint)
