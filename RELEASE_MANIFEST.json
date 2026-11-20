@@ -24,8 +24,8 @@
     },
     {
       "path": ".github/workflows/app-ci.yml",
-      "bytes": 3909,
-      "sha256": "6035a7970753461020325ceba28cf454d949cdc7603d699752583e1b7991ac01"
+      "bytes": 3941,
+      "sha256": "b7b16abf879af3976cbc9fff054424ab091c6367655b0b7c307e68c235940728"
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -169,8 +169,8 @@
     },
     {
       "path": "docs/V26_IMPLEMENTATION_PROGRESS.md",
-      "bytes": 7662,
-      "sha256": "545a71bf1b69d6e76c557bfe348093de8d19548412deb924b5951407a75d9c35"
+      "bytes": 8707,
+      "sha256": "52780d04bd35dfaa6700be939fc83d6bb01a14e7663e3f9a91fd79df0f3b5bae"
     },
     {
       "path": "docs/voice-pipeline.md",
@@ -279,8 +279,8 @@
     },
     {
       "path": "scripts/qualify_v26_live.py",
-      "bytes": 6064,
-      "sha256": "0a46d7eedd93aef7b57f9b1d3ff52fcd4f30f568e7fcd2dc907486b667a14b4e"
+      "bytes": 6134,
+      "sha256": "0874f88671d8948c660a479c927ae56abe4ca91c865c97709a51aee94769f56a"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -484,8 +484,8 @@
     },
     {
       "path": "src/rizzler/work_context_fabric.py",
-      "bytes": 21431,
-      "sha256": "5c962aa66df4b48f4d8b97cbcaef4d891c19f940496430bdf4548202f58efac5"
+      "bytes": 21841,
+      "sha256": "ecb517ecf48df98d6f5ae47188fb233f3b3f60fd5c35e051e0d914727257a1e0"
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
@@ -499,8 +499,8 @@
     },
     {
       "path": "src/rizzler/work_diagnostics.py",
-      "bytes": 3957,
-      "sha256": "6a265e60ff715b4ea5c2aba18488d168565b693cbef911253ac8bff41d5e7551"
+      "bytes": 4215,
+      "sha256": "1e82731dfab54402b4a32c7639f94807f91d5e1724a01c75219b160133e7c9f0"
     },
     {
       "path": "src/rizzler/work_editor.py",
@@ -584,8 +584,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 62554,
-      "sha256": "27d37209d6c3263e2058c6f472eecb0c8ae4e1f36a2af209131ab36bb774985d"
+      "bytes": 63784,
+      "sha256": "9d6131f2e0ea0dad08cb0e520749a7891704b587e99af5c7125273b29fad5d7c"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -601,6 +601,11 @@
       "path": "src/rizzler/work_studio.py",
       "bytes": 19417,
       "sha256": "a49e4e30b5494869a86e36b1cc807c7d587292bc2e5ed27c967c06c9c92e5c46"
+    },
+    {
+      "path": "src/rizzler/work_visual_critic.py",
+      "bytes": 10820,
+      "sha256": "70c9c8cf583adc06693b7b6b62ca3e72ff07096e3008a31cdf50d0bb2a6d8b84"
     },
     {
       "path": "src/rizzler/work_visual_strategy.py",
@@ -816,6 +821,11 @@
       "path": "tests/test_v26_reasoning_audit.py",
       "bytes": 3623,
       "sha256": "b5280621976bb5df90f81e151e563d6aa4206cf98a07867f61ebc36ff0bc7db0"
+    },
+    {
+      "path": "tests/test_v26_visual_critic.py",
+      "bytes": 3436,
+      "sha256": "4aae495f5706c1396b06d22e3d9bc4c6089a8b76c7ac8b42029f3975d05eabeb"
     },
     {
       "path": "tests/test_v26_visual_strategy.py",
