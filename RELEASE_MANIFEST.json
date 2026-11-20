@@ -163,6 +163,11 @@
       "sha256": "0280b1bacf5e45640a6441d166b50c9b0fca7cf8a81268cba48ecbef4c8fa3f7"
     },
     {
+      "path": "docs/V25_AUTONOMOUS_EXECUTION_AND_RECOVERY.md",
+      "bytes": 3783,
+      "sha256": "b5c9270cf0206643849a043cfcdcc9860f7767a8c8ff8843ba988f043a59aa9a"
+    },
+    {
       "path": "docs/voice-pipeline.md",
       "bytes": 6313,
       "sha256": "d09f1bbf3fee24559faf3a73ada4f62627e3ad4263e00413315a7097469ff291"
@@ -529,8 +534,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 55273,
-      "sha256": "cd494ab4ce5233be686c2c73c1c0ee001434d0fd7fe201395d12c620dc8c731e"
+      "bytes": 55485,
+      "sha256": "eed7af667ea0d5311fa346d5821f5d6f0e2a897d62c2e2b9130a8ae32d48f086"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -726,6 +731,11 @@
       "path": "tests/test_v25_critical_artifact_quality.py",
       "bytes": 3049,
       "sha256": "a1770151f0ea58c79147dc66161cdebd4d5d2b8927c9bf975550b39ec1744aff"
+    },
+    {
+      "path": "tests/test_v25_work_recovery_integration.py",
+      "bytes": 5981,
+      "sha256": "519da28920c1d667ea4442d5891c251aa5d264702bae701915ceb1328da02cb1"
     },
     {
       "path": "web/app.js",
