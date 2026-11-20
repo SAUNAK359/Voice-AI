@@ -14,6 +14,28 @@ _FORMULA = re.compile(
     r"=(COUNT|AVERAGE|MIN|MAX)\(Data!([A-Z]{1,3})2:\2([1-9][0-9]*)\)\Z")
 
 
+class SpreadsheetRecalculationUnavailable(RuntimeError):
+    """The independent Calc execution engine could not evaluate the workbook."""
+
+
+def _missing_system_calc_component() -> bool:
+    """Diagnose minimal Debian Colab/Kaggle images without assuming OS type.
+
+    An unknown package-manager state is NOT proof that a custom LibreOffice
+    installation is unusable. This hint is consulted only after conversion
+    actually failed.
+    """
+    if shutil.which("dpkg-query") is None:
+        return False
+    try:
+        probe = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Status}", "libreoffice-calc"],
+            capture_output=True, timeout=5, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode != 0 or b"install ok installed" not in probe.stdout
+
+
 def _close(a, b):
     return (isinstance(a, (int, float)) and not isinstance(a, bool)
             and isinstance(b, (int, float)) and not isinstance(b, bool)
@@ -121,7 +143,8 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
     if require_recalculation:
         binary = shutil.which("libreoffice") or shutil.which("soffice")
         if not binary:
-            raise RuntimeError("Strict artifact QA requires LibreOffice Calc")
+            raise SpreadsheetRecalculationUnavailable(
+                "Strict artifact QA requires LibreOffice Calc")
         with tempfile.TemporaryDirectory(prefix="rizzler-calc-") as temp:
             root = Path(temp)
             out = root/"out"
@@ -133,10 +156,17 @@ def verify_workbook(path: Path, *, dataset_summary: dict | None = None,
                      "--convert-to", "xlsx", "--outdir", str(out), str(path)],
                     capture_output=True, timeout=60, check=False)
             except subprocess.TimeoutExpired as exc:
-                raise RuntimeError("Spreadsheet recalculation exceeded time budget") from exc
+                raise SpreadsheetRecalculationUnavailable(
+                    "Spreadsheet recalculation exceeded time budget") from exc
             target = out/path.name
             if process.returncode or not target.is_file():
-                raise RuntimeError("Independent spreadsheet recalculation failed")
+                if _missing_system_calc_component():
+                    raise SpreadsheetRecalculationUnavailable(
+                        "Independent LibreOffice Calc component is missing; "
+                        "install libreoffice-calc to qualify XLSX")
+                raise SpreadsheetRecalculationUnavailable(
+                    "Independent LibreOffice spreadsheet conversion failed; "
+                    "the workbook was NOT qualified")
             recalc = load_workbook(target, read_only=True, data_only=True)
             try:
                 computed = list(recalc["Checks"].iter_rows(
