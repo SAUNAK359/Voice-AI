@@ -263,6 +263,11 @@
       "sha256": "fd482c814ba6e108f92b139c3a564477f140d5e1bc0ceec93d0e64f20021e0c3"
     },
     {
+      "path": "scripts/qualify_v25_live.py",
+      "bytes": 16213,
+      "sha256": "b547d4e3b7809a8b0a91a017af64705c727a058d4646d756dd7c8cf474d04f83"
+    },
+    {
       "path": "scripts/scan_secrets.py",
       "bytes": 1875,
       "sha256": "d8893d855566da5481021246267ac7a1882daccb001069905b55b0d34d826f27"
@@ -724,8 +729,8 @@
     },
     {
       "path": "tests/test_v25_autonomous_execution.py",
-      "bytes": 9031,
-      "sha256": "ebc5260baaaa803438a838ee4e530021065cc9b4497c5b4e40e1ca342da08313"
+      "bytes": 9592,
+      "sha256": "6261145dfc4a3d4f14c697c999c76f62f40daec964ed0d87a9f764b1d509d887"
     },
     {
       "path": "tests/test_v25_critical_artifact_quality.py",
