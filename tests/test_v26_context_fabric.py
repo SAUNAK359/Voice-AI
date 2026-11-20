@@ -112,5 +112,48 @@ class ProofCarryingContextTests(unittest.TestCase):
                 goal_digest="b"*64,nodes=[a,b])
 
 
+class DurableKnowledgeCheckpointTests(unittest.TestCase):
+    def test_fenced_owner_scoped_replay_and_source_revision(self):
+        from tempfile import TemporaryDirectory
+        from rizzler.work_store import WorkStore,Missing
+        with TemporaryDirectory() as root:
+            store=WorkStore(root)
+            job=store.submit(
+                "tenant_1","Produce a source-grounded report",
+                ["md"],"v26_knowledge_0001",[])
+            worker="v26_worker"
+            claim=store.claim(worker)
+            self.assertEqual(claim["id"],job["id"])
+            ir=compile_ir("Knowledge test",
+                "# Findings\\nInitial source-dependent content is a narrative candidate.",
+                [])
+            first=migrate_v1(ir,owner="tenant_1",job_id=job["id"],
+                objective="Produce a source-grounded report",deliverables=["md"])
+            digest=store.save_knowledge_checkpoint(
+                job["id"],worker,claim["fence"],first)
+            self.assertEqual(len(digest),64)
+            self.assertEqual(
+                store.knowledge_checkpoint("tenant_1",job["id"]),first)
+            with self.assertRaises(Missing):
+                store.knowledge_checkpoint("tenant_2",job["id"])
+            updated_ir=compile_ir("Knowledge test",
+                "# Findings\\nCorrected source-dependent content is a narrative candidate.",
+                [])
+            revised=migrate_v1(updated_ir,owner="tenant_1",job_id=job["id"],
+                objective="Produce a source-grounded report",deliverables=["md"])
+            self.assertEqual(first["immutable_goal_digest"],
+                             revised["immutable_goal_digest"])
+            store.save_knowledge_checkpoint(
+                job["id"],worker,claim["fence"],revised)
+            self.assertNotEqual(first["context_revision"],
+                                store.knowledge_checkpoint("tenant_1",job["id"])["context_revision"])
+            unauthorized=migrate_v1(
+                updated_ir,owner="tenant_1",job_id=job["id"],
+                objective="Change the original requested scope",deliverables=["md"])
+            with self.assertRaises(ValueError):
+                store.save_knowledge_checkpoint(
+                    job["id"],worker,claim["fence"],unauthorized)
+
+
 if __name__=="__main__":
     unittest.main()
