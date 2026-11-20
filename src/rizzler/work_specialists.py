@@ -937,6 +937,26 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     from .work_excel_studio import inspect_workbook_plan
                     report["analytical_studies"]=await asyncio.to_thread(
                         inspect_workbook_plan,working,excel_blueprint)
+                from .v26_flags import enabled as v26_visual_enabled
+                if (v26_visual_enabled("RIZZLER_V26_VISUAL_CRITIC")
+                        and kind in ("pptx","docx","pdf")):
+                    if not strict:
+                        raise ValueError(
+                            "V26 real pixel critic requires strict render QA")
+                    from .work_visual_critic import inspect_actual_visual
+                    from .config import Settings
+                    cfg=Settings.from_env()
+                    report["multimodal_visual_review"]=await inspect_actual_visual(
+                        path=working,kind=kind,
+                        objective=payload["objective"],
+                        model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                    store.publish_cognition(
+                        jid,worker_id,fence,"visual_critic","verification",{
+                            "artifact_kind":kind,
+                            "reviewed_pages":
+                                report["multimodal_visual_review"]["pages"],
+                            "status":"pixel_review_passed",
+                            "limitations":"Model judgement is not certified human review"})
                 if (feature_enabled("RIZZLER_CANDIDATE_QUALITY") and
                         kind in ("pptx","docx","xlsx","pdf")):
                     from .config import Settings
