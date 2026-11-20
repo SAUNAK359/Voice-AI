@@ -289,7 +289,7 @@ def make_bundle(out: Path,source_sha: str) -> Path:
                 continue
             relative=path.relative_to(out)
             if (any(x.startswith(".") for x in relative.parts) or
-                    "private_workstore" in relative.parts or
+                    any(part in ("private_workstore","private_slots") for part in relative.parts) or
                     path.suffix.lower() in (".sqlite3",".db",".key",".env")):
                 continue
             if path.stat().st_size>20_000_000:
