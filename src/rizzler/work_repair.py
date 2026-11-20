@@ -229,7 +229,7 @@ def apply_storyboard_patch(original: dict, proposed: dict, *,
             if _has_placeholder(replacement):
                 raise ValueError("Patch introduced filler")
             if _numbers(previous)!=_numbers(replacement):
-                raise ValueError("Patch changed exact quantitative claims")
+                raise ValueError("Patch changed numerical facts or quantitative claims")
             old_urls=set(re.findall(r"https?://[^\s\])]+",previous if isinstance(previous,str) else ""))
             new_urls=set(re.findall(r"https?://[^\s\])]+",replacement))
             if not old_urls <= new_urls:
@@ -239,7 +239,7 @@ def apply_storyboard_patch(original: dict, proposed: dict, *,
         else:
             before[field]=replacement
     if seen!=allowed:
-        raise ValueError("Patch omitted a diagnosed field correction")
+        raise ValueError("Patch left a diagnosed field uncorrected")
 
     missing=next((x["section_ids"] for x in diagnostics
                   if x["field"]=="missing_sections"),[])
