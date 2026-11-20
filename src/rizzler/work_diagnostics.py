@@ -48,6 +48,11 @@ def failure_code(exc: BaseException) -> str:
     from .work_semantic_quality import CandidateQualityIssue
     if isinstance(error, CandidateQualityIssue):
         return "candidate_quality_revision_required"
+    from .work_visual_critic import VisualReviewFailure, VisualReviewIncomplete
+    if isinstance(error, VisualReviewFailure):
+        return "visual_critical_issue"
+    if isinstance(error, VisualReviewIncomplete):
+        return "visual_review_incomplete"
     from .work_formula import SpreadsheetRecalculationUnavailable
     if isinstance(error, SpreadsheetRecalculationUnavailable):
         return "spreadsheet_recalculation_unavailable"
