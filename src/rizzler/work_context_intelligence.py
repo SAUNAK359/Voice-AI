@@ -69,6 +69,7 @@ def snapshot_context(payload: dict, context: dict, *, focus: tuple[str, ...]) ->
         "sections_total": len(sections),
         "approved_sources": source_urls,
         "dataset": dataset,
+        "research_evidence": context.get("research_evidence"),
         "artifact_ir_sha256": ir.sha256,
         "prior_gap_status": context.get("context_gaps", [])[-6:],
         "user_clarifications": context.get("user_answers", [])[-9:],
@@ -543,6 +544,7 @@ def context_brief(context: dict, *, max_chars: int = 2200) -> str:
         "requirements": package["requirements"][:8],
         "approved_source_urls": package["approved_sources"][:16],
         "dataset": package["dataset"],
+        "research_evidence": package.get("research_evidence"),
         "artifact_ir_sha256": package["artifact_ir_sha256"],
     }
     return ("\n\nAuthoritative, independently reviewed context "
