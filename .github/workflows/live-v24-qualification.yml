@@ -1,0 +1,84 @@
+name: Rizzler V24 Paid Gemini Live Qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Optional Gemini API model ID (blank uses repository config)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rizzler-v24-live-qualification
+  cancel-in-progress: false
+
+jobs:
+  qualification:
+    name: Real Gemini research, SQL, and artifact QA
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      RIZZLER_QUALIFICATION_ROOT: ${{ github.workspace }}/live-qualification
+      RIZZLER_QUALIFICATION_REPO: ${{ github.workspace }}
+      RIZZLER_QUALIFICATION_EXPECTED_SHA: ${{ github.sha }}
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require API authorization
+        shell: bash
+        run: |
+          if [[ -z "$GEMINI_API_KEY" ]]; then
+            echo "::error::Set the GitHub Actions secret GEMINI_API_KEY before running paid live qualification."
+            exit 1
+          fi
+      - name: Use explicit model when supplied
+        if: ${{ inputs.model != '' }}
+        env:
+          REQUESTED_MODEL: ${{ inputs.model }}
+        run: echo "RIZZLER_GEMINI_MODEL=$REQUESTED_MODEL" >> "$GITHUB_ENV"
+      - name: Install notebook runtime and strict visual renderers
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-writer libreoffice-impress libreoffice-calc
+          python -m pip install -q "nbconvert>=7,<9" "ipykernel>=6,<8"
+      - name: Execute pinned paid Gemini scenarios
+        run: |
+          python -m jupyter nbconvert --to notebook --execute \
+            --ExecutePreprocessor.timeout=2400 \
+            --ExecutePreprocessor.kernel_name=python3 \
+            notebooks/Rizzler_V24_Real_Gemini_Qualification_Kaggle.ipynb \
+            --output executed_v24.ipynb
+      - name: Verify real qualification verdict
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          path=Path(os.environ["RIZZLER_QUALIFICATION_ROOT"])/"rizzler_v24_evidence"/"qualification.json"
+          if not path.is_file():
+              raise SystemExit("No qualification verdict was produced")
+          result=json.loads(path.read_text(encoding="utf-8"))
+          print({k:v for k,v in result.items() if k!="source_sha"})
+          if result.get("passed") is not True:
+              raise SystemExit("NOT QUALIFIED: one or more live work scenarios failed")
+          PY
+      - name: Upload sanitized success and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rizzler-v24-live-evidence-${{ github.run_id }}
+          path: |
+            ${{ github.workspace }}/live-qualification/rizzler_v24_evidence/*.json
+            ${{ github.workspace }}/live-qualification/rizzler_v24_evidence/*.log
+            ${{ github.workspace }}/live-qualification/rizzler_v24_evidence/source_sha.txt
+            ${{ github.workspace }}/live-qualification/Rizzler_V24_Qualification_*.zip
+          if-no-files-found: warn
+          retention-days: 7

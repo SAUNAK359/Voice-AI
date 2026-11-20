@@ -61,8 +61,31 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
             objective, formats=data.get("objective"),data.get("deliverables")
             uploads=data.get("uploads",[])
             if not isinstance(objective,str):raise ValueError("Objective must be text")
-            return store.submit(who,objective,formats,
-                req.headers.get("idempotency-key",""),uploads)
+            effective_formats=list(formats) if isinstance(formats,list) else formats
+            requested_formats=None
+            from .v23_flags import enabled as capability_enabled
+            if capability_enabled("RIZZLER_COGNITIVE_PLANNER"):
+                # Key retries identify the same original user request even
+                # if a later Gemini classification chooses different tools.
+                if isinstance(effective_formats,list):
+                    requested_formats=list(effective_formats)
+                from .config import Settings
+                from .task_planning import propose_semantic_scope
+                cfg=Settings.from_env()
+                if cfg.gemini_api_key and isinstance(effective_formats,list):
+                    scope=await propose_semantic_scope(
+                        objective,effective_formats,uploads,cfg)
+                    expanded=list(effective_formats)
+                    if scope["research"] and "research" not in expanded:
+                        expanded.append("research")
+                    if scope["analysis"] and "data_analysis" not in expanded:
+                        expanded.append("data_analysis")
+                    if expanded!=effective_formats:
+                        requested_formats=effective_formats
+                        effective_formats=expanded
+            return store.submit(who,objective,effective_formats,
+                req.headers.get("idempotency-key",""),uploads,
+                requested_formats=requested_formats)
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError) as exc:
             raise HTTPException(status_code=400,detail="Invalid job request") from None
         except Conflict:
@@ -78,6 +101,34 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
     def job(req: Request,jid: str):
         try:return store.get(owner(req),jid)
         except Missing:raise HTTPException(status_code=404,detail="Job not found")
+
+    @api.get("/jobs/{jid}/questions")
+    def missing_information(req: Request, jid: str):
+        who=owner(req)
+        try:
+            return {"job_id":jid,"questions":store.questions(who,jid)}
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+
+    @api.post("/jobs/{jid}/answers")
+    async def provide_information(req: Request, jid: str):
+        who=owner(req)
+        same_origin(req)
+        try:
+            raw=await req.body()
+            if len(raw)>32000:
+                raise ValueError("Clarification payload exceeds limit")
+            data=json.loads(raw)
+            if not isinstance(data,dict) or set(data)!={"answers"}:
+                raise ValueError("Expected answers array")
+            updated=store.answer_questions(who,jid,data["answers"])
+            return {"job":updated,"questions":store.questions(who,jid)}
+        except Missing:
+            raise HTTPException(status_code=404,detail="Job not found") from None
+        except Conflict:
+            raise HTTPException(status_code=409,detail="Job not awaiting input") from None
+        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError):
+            raise HTTPException(status_code=400,detail="Invalid clarification answer") from None
 
     @api.get("/jobs/{jid}/plan")
     def job_plan(req: Request, jid: str):

@@ -162,12 +162,13 @@ def test_invalid_config_and_structured_error_classification():
     assert classify_error(ResponseError(403)) == "authentication"
     assert classify_error(ValueError("sensitive request")) == "unknown"
 
-def test_no_thinking_mode_by_default_and_adaptive_budget():
+def test_thinking_enabled_by_default_and_adaptive_budget():
     llm = FakeLLM(config(), [["Answer"]])
     collect(llm, "Explain why this architecture scales")
     assert llm.calls[0][1] == "deep"
     assert route("Explain why this architecture scales").output_tokens == 900
-    assert config().gemini_enable_thinking is False
+    assert config().gemini_enable_thinking is True
+    assert config(gemini_enable_thinking=False).gemini_enable_thinking is False
 
 def test_thought_parts_never_become_spoken_tokens():
     class ThoughtLLM(FakeLLM):

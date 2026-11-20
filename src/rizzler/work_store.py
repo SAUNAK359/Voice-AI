@@ -18,7 +18,7 @@ from pathlib import Path
 from .contracts import Handoff, ArtifactReceipt, FILE_FORMATS
 
 KEY_RE = re.compile(r"^[A-Za-z0-9_-]{8,96}$")
-STAGES = {"planning", "research", "analysis", "rendering", "validating"}
+STAGES = {"planning", "research", "analysis", "rendering", "validating", "awaiting_input"}
 TERMINAL = {"completed", "failed", "cancelled"}
 
 
@@ -100,6 +100,31 @@ class WorkStore:
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS cognitive_cursor
               ON cognitive_events(owner,job_id,seq);
+            CREATE TABLE IF NOT EXISTS job_questions(
+              job_id TEXT NOT NULL, owner TEXT NOT NULL,
+              question_id TEXT NOT NULL, prompt TEXT NOT NULL,
+              status TEXT NOT NULL, answer TEXT NOT NULL DEFAULT '',
+              at REAL NOT NULL, answered REAL NOT NULL DEFAULT 0,
+              PRIMARY KEY(job_id,question_id),
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS questions_owner
+              ON job_questions(owner,job_id,status);
+            CREATE TABLE IF NOT EXISTS context_checkpoints(
+              job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              base_sha256 TEXT NOT NULL, revision TEXT NOT NULL,
+              payload_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL,
+              updated REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS context_checkpoints_owner
+              ON context_checkpoints(owner,job_id);
+            CREATE TABLE IF NOT EXISTS knowledge_checkpoints(
+              job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              goal_digest TEXT NOT NULL, revision TEXT NOT NULL,
+              payload_json TEXT NOT NULL, payload_sha256 TEXT NOT NULL,
+              updated REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS knowledge_checkpoints_owner
+              ON knowledge_checkpoints(owner,job_id);
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
@@ -132,7 +157,8 @@ class WorkStore:
                   (jid, stage, message[:180], time.time()))
 
     def submit(self, owner: str, objective: str, formats: list[str],
-               idem: str, uploads: list[str] | None = None) -> dict:
+               idem: str, uploads: list[str] | None = None, *,
+               requested_formats: list[str] | None = None) -> dict:
         if not isinstance(idem, str) or not KEY_RE.fullmatch(idem):
             raise ValueError("Idempotency-Key must be 8-96 safe characters")
         if not isinstance(formats, list) or not all(isinstance(f, str) for f in formats):
@@ -141,6 +167,12 @@ class WorkStore:
                 deliverables=tuple(formats)).validate()
         if not isinstance(uploads, list) or len(uploads) > 4 or len(set(uploads)) != len(uploads):
             raise ValueError("Invalid upload references")
+        if requested_formats is not None:
+            if (not isinstance(requested_formats,list) or
+                    not set(requested_formats) <= set(formats) or
+                    not set(formats)-set(requested_formats) <= {
+                        "research","data_analysis"}):
+                raise ValueError("Semantic plan expanded requested output permissions")
         payload = {"objective": objective, "deliverables": formats, "uploads": uploads}
         # Snapshot runtime policy into the immutable job envelope; a restart
         # or feature flag change must not silently alter the approved DAG.
@@ -155,7 +187,14 @@ class WorkStore:
         graph = execution_graph(payload)
         plan_json = json.dumps(graph, sort_keys=True, separators=(",", ":"))
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+        # Idempotency belongs to the USER'S request. LLM scope may differ
+        # across repeated calls without making an otherwise identical task
+        # conflict or silently replacing a previously accepted plan.
+        declared = {"objective":objective,
+                    "deliverables":requested_formats,
+                    "uploads":uploads} if requested_formats is not None else payload
+        fingerprint = hashlib.sha256(json.dumps(
+            declared,sort_keys=True,separators=(",", ":")).encode()).hexdigest()
         jid, t = secrets.token_hex(16), time.time()
         with self._tx() as c:
             existing = c.execute("SELECT * FROM jobs WHERE owner=? AND idem=?",
@@ -240,7 +279,7 @@ class WorkStore:
             row = c.execute("SELECT * FROM jobs WHERE owner=? AND id=?", (owner, jid)).fetchone()
             if row is None:
                 raise Missing("Job not found")
-            if row["status"] == "queued":
+            if row["status"] in ("queued","awaiting_input"):
                 c.execute("UPDATE jobs SET status='cancelled',stage='cancelled',updated=? WHERE id=?",
                           (time.time(), jid))
                 self._settle_agents(c, jid, "cancelled")
@@ -454,6 +493,273 @@ class WorkStore:
                                "sha256":row["payload_sha256"],"at":row["at"]})
             return events
 
+    def save_knowledge_checkpoint(self, jid: str, worker: str,
+                                  fence: int, graph: dict) -> str:
+        """Persist a canonical owner-scoped PCCF v2 snapshot under the lease.
+
+        This is separate from V25 source-convergence deltas; source changes
+        may replace the graph, but no model can silently alter the original
+        authorized goal digest. A transaction fences every write.
+        """
+        from .work_context_fabric import validate_fabric
+        validate_fabric(graph)
+        if graph["job_id"] != jid:
+            raise ValueError("Context knowledge job ID mismatch")
+        raw=json.dumps(graph,sort_keys=True,separators=(",",":"),
+                       ensure_ascii=False,allow_nan=False)
+        if len(raw.encode("utf-8"))>2_000_000:
+            raise ValueError("Context graph storage budget exceeded")
+        digest=hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        with self._tx() as c:
+            active=self._active(c,jid,worker,fence)
+            if active["owner"]!=graph["owner_scope"]:
+                raise Missing("Knowledge owner does not match fenced job")
+            previous=c.execute(
+                "SELECT goal_digest FROM knowledge_checkpoints "
+                "WHERE job_id=? AND owner=?",(jid,active["owner"])).fetchone()
+            if previous and previous["goal_digest"]!=graph["immutable_goal_digest"]:
+                raise ValueError("Immutable user outcome cannot change via context replay")
+            c.execute("""INSERT INTO knowledge_checkpoints(
+              job_id,owner,goal_digest,revision,payload_json,payload_sha256,updated)
+              VALUES(?,?,?,?,?,?,?)
+              ON CONFLICT(job_id) DO UPDATE SET
+              revision=excluded.revision,
+              payload_json=excluded.payload_json,
+              payload_sha256=excluded.payload_sha256,
+              updated=excluded.updated""",
+              (jid,active["owner"],graph["immutable_goal_digest"],
+               graph["context_revision"],raw,digest,time.time()))
+        return digest
+
+    def knowledge_checkpoint(self, owner: str, jid: str) -> dict | None:
+        """Verify canonical bytes and owner scope on every context retrieval."""
+        from .work_context_fabric import validate_fabric
+        with self._tx() as c:
+            parent=c.execute(
+                "SELECT id FROM jobs WHERE id=? AND owner=?",(jid,owner)).fetchone()
+            if parent is None:
+                raise Missing("Job not found")
+            row=c.execute("""SELECT payload_json,payload_sha256,revision
+                 FROM knowledge_checkpoints
+                 WHERE job_id=? AND owner=?""",(jid,owner)).fetchone()
+            if row is None:
+                return None
+            raw=row["payload_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=row["payload_sha256"]:
+                raise ValueError("Persisted knowledge content digest mismatched")
+            graph=json.loads(raw)
+            validate_fabric(graph)
+            if (graph["owner_scope"]!=owner or graph["job_id"]!=jid
+                    or graph["context_revision"]!=row["revision"]):
+                raise ValueError("Persisted knowledge identity or revision mismatch")
+            return graph
+
+    def save_context_checkpoint(self, jid: str, worker: str, fence: int,
+                                base_sha256: str, snapshot: dict) -> str:
+        """Fenced, owner-scoped, hash-checked recovery of real evidence deltas.
+
+        Not an LLM transcript. A later worker may replay only results obtained
+        under the same immutable source-stage baseline.
+        """
+        if (not isinstance(base_sha256, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", base_sha256)
+                or not isinstance(snapshot, dict)
+                or set(snapshot) != {"schema_version", "revision", "status",
+                                     "deltas", "seen"}
+                or snapshot["schema_version"] != 1
+                or snapshot["status"] not in ("investigating", "ready", "blocked")
+                or not isinstance(snapshot["deltas"], list)
+                or len(snapshot["deltas"]) > 12
+                or not isinstance(snapshot["seen"], list)
+                or len(snapshot["seen"]) > 20):
+            raise ValueError("Invalid recoverable context checkpoint")
+        raw=json.dumps(snapshot, sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=False, allow_nan=False)
+        if len(raw.encode("utf-8")) > 190_000:
+            raise ValueError("Context evidence checkpoint exceeds storage budget")
+        digest=hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        if not isinstance(snapshot["revision"],str) or not re.fullmatch(
+                r"[0-9a-f]{64}", snapshot["revision"]):
+            raise ValueError("Context revision digest missing")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            c.execute("""INSERT INTO context_checkpoints(
+              job_id,owner,base_sha256,revision,payload_json,payload_sha256,updated)
+              VALUES(?,?,?,?,?,?,?)
+              ON CONFLICT(job_id) DO UPDATE SET
+              base_sha256=excluded.base_sha256,
+              revision=excluded.revision,
+              payload_json=excluded.payload_json,
+              payload_sha256=excluded.payload_sha256,
+              updated=excluded.updated""",
+              (jid,row["owner"],base_sha256,snapshot["revision"],raw,digest,time.time()))
+        return digest
+
+    def context_checkpoint(self, owner: str, jid: str,
+                           base_sha256: str) -> dict | None:
+        """Return validated context iff the original source-stage inputs match."""
+        if not isinstance(base_sha256,str) or not re.fullmatch(
+                r"[0-9a-f]{64}",base_sha256):
+            raise ValueError("Invalid source baseline digest")
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE id=? AND owner=?",
+                         (jid,owner)).fetchone() is None:
+                raise Missing("Job not found")
+            row=c.execute("""SELECT base_sha256,revision,payload_json,payload_sha256
+                FROM context_checkpoints WHERE job_id=? AND owner=?""",
+                (jid,owner)).fetchone()
+            if row is None:
+                return None
+            raw=row["payload_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=row["payload_sha256"]:
+                raise ValueError("Context recovery record failed integrity verification")
+            if row["base_sha256"]!=base_sha256:
+                # An invalidated upstream input cannot reuse old conclusions.
+                return None
+            snapshot=json.loads(raw)
+            if (not isinstance(snapshot,dict)
+                    or snapshot.get("revision")!=row["revision"]
+                    or snapshot.get("schema_version")!=1):
+                raise ValueError("Context recovery record schema or revision mismatch")
+            return snapshot
+
+    def reopen_agents(self, jid: str, worker: str, fence: int,
+                      names: list[str]) -> list[str]:
+        """Invalidate selected committed downstream checkpoints atomically.
+
+        The original job DAG and identity are immutable. We never re-authorize
+        new agents; the next executor re-runs only these already approved nodes.
+        """
+        from .work_agents import SPECS, plan
+        if (not isinstance(names,list) or len(names)>12 or
+                len(set(names))!=len(names) or
+                any(not isinstance(n,str) or n not in SPECS for n in names)):
+            raise ValueError("Invalid downstream checkpoint invalidation")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            payload=json.loads(row["payload"])
+            approved={s.name for s in plan(payload)}
+            if not set(names)<=approved:
+                raise ValueError("Cannot reopen an unauthorized agent")
+            changed=[]
+            for name in names:
+                step=c.execute("""SELECT status FROM agent_steps
+                    WHERE job_id=? AND agent=?""",(jid,name)).fetchone()
+                if step is None:
+                    raise ValueError("Missing authorized agent checkpoint")
+                if step["status"]=="running":
+                    raise ValueError("Cannot invalidate an actively running specialist")
+                if step["status"]!="queued":
+                    c.execute("""UPDATE agent_steps SET status='queued',attempt=0,
+                        started=0,finished=0,deadline=0,updated=?,result_json='',
+                        result_sha256='',qa_json='',error_code=''
+                        WHERE job_id=? AND agent=?""",
+                        (time.time(),jid,name))
+                    changed.append(name)
+            if changed:
+                self._event(c,jid,"planning","Evidence changed; impacted specialists reopened")
+            return changed
+
+    def questions(self, owner: str, jid: str) -> list[dict]:
+        """Read the owner's pending and answered clarification questions."""
+        with self._tx() as c:
+            if c.execute("SELECT id FROM jobs WHERE id=? AND owner=?",
+                         (jid,owner)).fetchone() is None:
+                raise Missing("Job not found")
+            rows=c.execute("""SELECT question_id,prompt,status,answer,at,answered
+                FROM job_questions WHERE job_id=? AND owner=?
+                ORDER BY at,question_id""",(jid,owner)).fetchall()
+            return [{"id":row["question_id"],"question":row["prompt"],
+                     "status":row["status"],"answer":row["answer"],
+                     "asked_at":row["at"],"answered_at":row["answered"]}
+                    for row in rows]
+
+    def pause_for_input(self, jid: str, worker: str, fence: int,
+                        requests: list[dict]) -> None:
+        """Pause without treating user-dependent work as failed or completed."""
+        if not isinstance(requests,list) or not 1<=len(requests)<=3:
+            raise ValueError("Invalid number of user questions")
+        for item in requests:
+            if (not isinstance(item,dict)
+                    or item.get("recipient")!="user"
+                    or item.get("blocking") is not True
+                    or not isinstance(item.get("question"),str)
+                    or not 16<=len(item["question"].strip())<=650):
+                raise ValueError("Invalid task clarification")
+        with self._tx() as c:
+            row=self._active(c,jid,worker,fence)
+            old=c.execute("SELECT COUNT(*) FROM job_questions WHERE job_id=?",
+                          (jid,)).fetchone()[0]
+            if old+len(requests)>9:
+                raise ValueError("Clarification rounds exceeded")
+            added=0
+            for item in requests:
+                question=item["question"].strip()
+                qid=hashlib.sha256(question.encode()).hexdigest()[:24]
+                previous=c.execute("""SELECT status FROM job_questions
+                    WHERE job_id=? AND question_id=?""",(jid,qid)).fetchone()
+                if previous and previous["status"]=="answered":
+                    raise ValueError("Already answered question was not resolved")
+                if previous is None:
+                    c.execute("""INSERT INTO job_questions(
+                        job_id,owner,question_id,prompt,status,at)
+                        VALUES(?,?,?,?,?,?)""",
+                        (jid,row["owner"],qid,question,"pending",time.time()))
+                    added+=1
+            if not added:
+                raise ValueError("No additional clarification is actionable")
+            c.execute("""UPDATE jobs SET status='awaiting_input',
+                stage='awaiting_input',lease_owner=NULL,lease_until=0,
+                updated=? WHERE id=?""",(time.time(),jid))
+            self._event(c,jid,"awaiting_input","User clarification needed to continue")
+
+    def answer_questions(self, owner: str, jid: str,
+                         answers: list[dict]) -> dict:
+        """Durably record explicit user answers and requeue the same job."""
+        if not isinstance(answers,list) or not 1<=len(answers)<=9:
+            raise ValueError("Invalid clarification answer count")
+        ids=set()
+        for answer in answers:
+            if (not isinstance(answer,dict) or set(answer)!={"id","answer"}
+                    or not isinstance(answer["id"],str)
+                    or not re.fullmatch(r"[0-9a-f]{24}",answer["id"])
+                    or answer["id"] in ids
+                    or not isinstance(answer["answer"],str)
+                    or not 1<=len(answer["answer"].strip())<=4000):
+                raise ValueError("Malformed clarification answer")
+            ids.add(answer["id"])
+        with self._tx() as c:
+            row=c.execute("SELECT * FROM jobs WHERE id=? AND owner=?",
+                          (jid,owner)).fetchone()
+            if row is None:
+                raise Missing("Job not found")
+            if row["status"]!="awaiting_input" or row["cancel_requested"]:
+                raise Conflict("Job is not awaiting clarification")
+            for answer in answers:
+                changed=c.execute("""UPDATE job_questions
+                    SET status='answered',answer=?,answered=?
+                    WHERE job_id=? AND owner=? AND question_id=? AND status='pending'""",
+                    (answer["answer"].strip(),time.time(),
+                     jid,owner,answer["id"]))
+                if changed.rowcount!=1:
+                    raise ValueError("Unknown or already answered clarification")
+            pending=c.execute("""SELECT COUNT(*) FROM job_questions
+                WHERE job_id=? AND status='pending'""",(jid,)).fetchone()[0]
+            if not pending:
+                from .work_agents import plan
+                approved={s.name for s in plan(json.loads(row["payload"]))}
+                for name in approved-{"research","sql_analytics"}:
+                    c.execute("""UPDATE agent_steps SET status='queued',
+                        started=0,finished=0,deadline=0,updated=?,
+                        result_json='',result_sha256='',qa_json='',error_code=''
+                        WHERE job_id=? AND agent=?""",
+                        (time.time(),jid,name))
+                c.execute("""UPDATE jobs SET status='queued',stage='accepted',
+                    attempts=0,updated=? WHERE id=?""",(time.time(),jid))
+                self._event(c,jid,"queued","Clarification received; resumable job requeued")
+            return self._view(c.execute(
+                "SELECT * FROM jobs WHERE id=?",(jid,)).fetchone())
+
     def agent_steps(self, owner: str, jid: str) -> list[dict]:
         """Owner-scoped durable per-agent statuses and SLA evidence."""
         with self._tx() as c:
@@ -624,10 +930,27 @@ class WorkStore:
 
     @staticmethod
     def _diagnostic(c, jid: str, owner: str, record: dict):
-        allowed = {"stage","code","exception_type","exception_module",
-                   "locations","fingerprint"}
-        if not isinstance(record, dict) or set(record) != allowed:
+        required = {"stage","code","exception_type","exception_module",
+                    "locations","fingerprint"}
+        research_fields = {"research_reason","research_failure_categories"}
+        if (not isinstance(record, dict)
+                or not required <= set(record)
+                or not set(record) <= required | research_fields
+                or set(record).intersection(research_fields) not in
+                   (set(), research_fields)):
             raise ValueError("Invalid safe diagnostic contract")
+        if research_fields <= set(record):
+            from .work_research_errors import SAFE_REASONS
+            reason=record["research_reason"]
+            counts=record["research_failure_categories"]
+            if (reason not in SAFE_REASONS
+                    or record["code"] != "research_" + reason
+                    or not isinstance(counts,dict)
+                    or len(counts)>len(SAFE_REASONS)
+                    or any(name not in SAFE_REASONS or
+                           type(value) is not int or not 0<=value<=1000
+                           for name,value in counts.items())):
+                raise ValueError("Unsafe research diagnostic extension")
         raw=json.dumps(record,sort_keys=True,separators=(",",":"))
         if len(raw)>2600:
             raise ValueError("Diagnostic record too large")

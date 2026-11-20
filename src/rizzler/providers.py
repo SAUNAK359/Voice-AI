@@ -96,10 +96,27 @@ class GeminiLLM:
                       max_output_tokens=plan.output_tokens, system_instruction=self.SYSTEM)
         if self.settings.gemini_enable_thinking:
             config['thinking_config'] = types.ThinkingConfig(thinking_level=plan.thinking_level)
-        stream = await self._client.aio.models.generate_content_stream(
-            model=model, contents=contents, config=types.GenerateContentConfig(**config))
-        async for chunk in stream:
-            yield chunk
+        emitted = False
+        try:
+            stream = await self._client.aio.models.generate_content_stream(
+                model=model, contents=contents, config=types.GenerateContentConfig(**config))
+            async for chunk in stream:
+                emitted = True
+                yield chunk
+        except Exception as exc:
+            from .gemini_native import unsupported_native_configuration
+            # Keep adaptive thinking active where supported. A model-specific
+            # 400 unsupported thinking config may retry the identical turn
+            # without that optional parameter, but never replay partial speech
+            # or swallow provider outages and authentication errors.
+            if (not config.get("thinking_config") or emitted or
+                    not unsupported_native_configuration(exc)):
+                raise
+            config.pop("thinking_config")
+            stream = await self._client.aio.models.generate_content_stream(
+                model=model, contents=contents, config=types.GenerateContentConfig(**config))
+            async for chunk in stream:
+                yield chunk
 
     async def check_models(self) -> dict[str, bool]:
         """Optional live preflight; false means not confirmed, not necessarily nonexistent."""

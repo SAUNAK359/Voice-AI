@@ -14,7 +14,9 @@ function err(x){$('work-error').textContent=x?.message||String(x)}
 async function refresh(){try{const data=await call('/jobs');const pane=$('jobs');pane.replaceChildren();
  for(const item of data.jobs){const row=el('p'),btn=el('button',item.status+' · '+item.id.slice(0,8)+' · '+item.stage);
  btn.onclick=()=>details(item.id);row.append(btn);pane.append(row)}}catch(e){err(e)}}
-async function details(id){selectedJob=id;try{const [job,ev,art,agentData]=await Promise.all([
+async function details(id){
+ if(selectedJob===id&&document.activeElement?.tagName==="TEXTAREA"&&document.activeElement?.closest?.("#job-detail"))return;
+ selectedJob=id;try{const [job,ev,art,agentData]=await Promise.all([
  call('/jobs/'+id),call('/jobs/'+id+'/events'),call('/jobs/'+id+'/artifacts'),call('/jobs/'+id+'/agents')]);
  if(selectedJob!==id)return;
  const pane=$('job-detail');pane.replaceChildren(el('h3',job.status+' · '+job.stage));
@@ -27,6 +29,29 @@ async function details(id){selectedJob=id;try{const [job,ev,art,agentData]=await
    pane.append(row);
  }
  for(const e of ev.events)pane.append(el('p',new Date(e.at*1000).toLocaleString()+' · '+e.stage+' · '+e.message));
+ if(job.status==='awaiting_input'){
+  const result=await call('/jobs/'+id+'/questions');
+  const pending=(result.questions||[]).filter(q=>q.status==='pending');
+  const area=el('section');area.append(el('h4','Information needed to continue'));
+  area.append(el('p','Rizzler needs these answers before it can finish the work.'));
+  const inputs=[];
+  for(const q of pending){
+   const label=el('label',q.question),input=el('textarea');
+   input.rows=3;input.maxLength=4000;input.placeholder='Enter the information you want Rizzler to use';
+   inputs.push({id:q.id,input});area.append(label,input);
+  }
+  const send=el('button','Submit answers and resume');
+  send.onclick=async()=>{try{
+   const answers=inputs.filter(x=>x.input.value.trim())
+     .map(x=>({id:x.id,answer:x.input.value.trim()}));
+   if(!answers.length)throw Error('Enter at least one clarification answer');
+   await call('/jobs/'+id+'/answers',{method:'POST',
+     headers:{'content-type':'application/json'},
+     body:JSON.stringify({answers})});
+   await details(id);
+  }catch(e){err(e)}};
+  area.append(send);pane.append(area);
+ }
  if(job.status==='completed')pane.append(el('p',job.result.slice(0,1500)));
  if(job.status==='completed'){
   const quality=await call('/jobs/'+id+'/quality');

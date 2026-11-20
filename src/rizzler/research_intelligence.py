@@ -137,6 +137,27 @@ def validate_focus(data: dict, claims: list[dict]) -> dict:
             "selected_ids": items, "missing_aspects": missing}
 
 
+def project_focus_decision(decision: dict, claims: list[dict]
+                           ) -> tuple[list[dict], dict]:
+    """Apply an already-validated model coverage verdict without losing facts.
+
+    No provider SDK needed: this pure stage is independently regression
+    tested by the minimal CI and cannot introduce new source identifiers.
+    """
+    validated = validate_focus(decision, claims)
+    selected = set(validated["selected_ids"])
+    relevant = [item for item in claims if item["id"] in selected]
+    status = ("answers_question" if validated["answers_question"]
+              else "partial_answer" if relevant else "unanswered_objective")
+    return relevant, {
+        "status": status,
+        "answers_question": validated["answers_question"],
+        "missing_aspects": validated["missing_aspects"],
+        "selected": len(relevant),
+        "reviewed": len(claims),
+    }
+
+
 async def focus_claims(objective: str, claims: list[dict], *, client, model: str
                        ) -> tuple[list[dict], dict]:
     """Judge whether source-supported findings answer the user's actual ask.
@@ -162,7 +183,14 @@ async def focus_claims(objective: str, claims: list[dict], *, client, model: str
         "definitions. If they ask how something works, explanatory findings "
         "may be the direct answer. Ignore superficial thematic overlap. "
         "Never mark the objective fully answered when its essential "
-        "requested information is absent. Return ONLY JSON with exactly "
+        "requested information is absent. Separate source-factual questions "
+        "from output-format instructions: a source cannot itself prove that "
+        "the requested slides or documents have already been delivered. "
+        "When some independently verified claims address a required part "
+        "of the question, SELECT their IDs even if the full task is not "
+        "answered, set answers_question=false, and identify the remaining "
+        "factual gaps precisely. Partial evidence must never be described "
+        "as full coverage. Return ONLY JSON with exactly "
         "{\"answers_question\":boolean,\"selected_ids\":[string],"
         "\"missing_aspects\":[string]}. Select IDs ONLY from the supplied "
         "independently quote-validated claims. Each missing aspect must "
@@ -182,14 +210,24 @@ async def focus_claims(objective: str, claims: list[dict], *, client, model: str
                     temperature=0.1, max_output_tokens=1500))
             decision = validate_focus(
                 decode_model_json(getattr(response, "text", "") or ""), claims)
-            selected = {x for x in decision["selected_ids"]}
-            relevant = [x for x in claims if x["id"] in selected]
-            return (relevant if decision["answers_question"] else []), {
-                "status": "answers_question" if decision["answers_question"]
-                          else "unanswered_objective",
-                "missing_aspects": decision["missing_aspects"],
-                "selected": len(relevant),
-                "reviewed": len(claims)}
+            relevant, report = project_focus_decision(decision, claims)
+            if not relevant and not decision["answers_question"] and attempt == 0:
+                # A broad user request can include required documents as well
+                # as factual research. Re-review ONLY source-backed factual
+                # claims, not whether the artifact itself has been delivered.
+                # Still allow a genuine zero-selection result on retry.
+                prompt += (
+                    "\nYour previous assessment selected no factual "
+                    "observations. Re-evaluate every validated claim against "
+                    "the domain facts the user actually asked to investigate. "
+                    "If a claim establishes even a PART of those facts, select "
+                    "its existing ID while retaining answers_question=false "
+                    "and listing specific missing factual aspects. Do not "
+                    "include merely related or unsupported claims.")
+                continue
+            # Leave all facts and missing aspects in the validated pure
+            # projection so the supervisor, not a fallback guess, converges.
+            return relevant, report
         except ValueError:
             continue
     return [], {"status": "focus_contract_invalid", "missing_aspects": []}

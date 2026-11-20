@@ -33,6 +33,29 @@ def failure_code(exc: BaseException) -> str:
             return "provider_authorization"
         if status == 400:
             return "provider_invalid_request"
+    from .work_research_errors import ResearchQualificationError
+    if isinstance(error, ResearchQualificationError):
+        return "research_" + error.reason
+    from .work_repair import StoryboardQualificationError
+    if isinstance(error, StoryboardQualificationError):
+        return "powerpoint_" + error.reason
+    from .work_execution_recovery import RecoveryExhausted
+    if isinstance(error, RecoveryExhausted):
+        return "supervised_recovery_exhausted"
+    from .work_incremental_studio import ComponentPlanError
+    if isinstance(error, ComponentPlanError):
+        return "incremental_component_plan_invalid"
+    from .work_semantic_quality import CandidateQualityIssue
+    if isinstance(error, CandidateQualityIssue):
+        return "candidate_quality_revision_required"
+    from .work_visual_critic import VisualReviewFailure, VisualReviewIncomplete
+    if isinstance(error, VisualReviewFailure):
+        return "visual_critical_issue"
+    if isinstance(error, VisualReviewIncomplete):
+        return "visual_review_incomplete"
+    from .work_formula import SpreadsheetRecalculationUnavailable
+    if isinstance(error, SpreadsheetRecalculationUnavailable):
+        return "spreadsheet_recalculation_unavailable"
     if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
         return "deadline_exceeded"
     if isinstance(error, (ConnectionError, OSError)):
@@ -62,7 +85,12 @@ def failure_record(exc: BaseException, stage: str) -> dict:
            for f in frames[-4:]]
     typ = type(error).__name__[:90]
     module = type(error).__module__[:100]
+    from .work_research_errors import ResearchQualificationError
+    research = ({"research_reason": error.reason,
+                 "research_failure_categories": error.counts}
+                if isinstance(error, ResearchQualificationError) else {})
     return {"stage": stage, "code": failure_code(exc),
+            **research,
             "exception_type": typ, "exception_module": module,
             "locations": src,
             "fingerprint": hashlib.sha256(

@@ -11,8 +11,10 @@ from rizzler.v23_flags import enabled,FEATURES
 
 
 class V23FeatureProfileTests(unittest.TestCase):
-    def test_default_is_baseline_and_full_enables_all(self):
+    def test_default_is_full_and_explicit_off_remains_possible(self):
         with patch.dict("os.environ",{},clear=True):
+            self.assertTrue(all(enabled(key) for key in FEATURES))
+        with patch.dict("os.environ",{"RIZZLER_V23_MODE":"off"},clear=True):
             self.assertFalse(any(enabled(key) for key in FEATURES))
         with patch.dict("os.environ",{"RIZZLER_V23_MODE":"full"},clear=True):
             self.assertTrue(all(enabled(key) for key in FEATURES))
