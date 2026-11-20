@@ -113,7 +113,7 @@ def storyboard_diagnostics(document: dict, *, sections=None, sources=None) -> li
     if sections is not None:
         missing=sorted(set(range(len(sections))) - used)
         if missing:
-            if len(slides)+len(missing) > MAX_SLIDES:
+            if len(slides)+((len(missing)+5)//6) > MAX_SLIDES:
                 raise StoryboardQualificationError("missing_section_coverage")
             issues.append({"field":"missing_sections", "section_ids":missing,
                            "error":"source_coverage_incomplete"})
@@ -155,7 +155,7 @@ def _new_slide_is_source_anchored(slide: dict, *, section_ids,
         raise ValueError("Added slide title is invalid")
     if not isinstance(slide["message"],str) or not 15<=len(slide["message"].strip())<=320:
         raise ValueError("Added slide message is invalid")
-    if slide["kind"] not in TYPES:
+    if not isinstance(slide["kind"],str) or slide["kind"] not in TYPES:
         raise ValueError("Added slide layout is unsupported")
     ids=slide["section_ids"]
     if (not isinstance(ids,list) or not 1<=len(ids)<=8 or
@@ -178,6 +178,10 @@ def _new_slide_is_source_anchored(slide: dict, *, section_ids,
         raise ValueError("Cannot add a slide from an empty report section")
     if any(_normal(bullet) not in source_text for bullet in bullets):
         raise ValueError("Added slide bullets are not actual source-IR excerpts")
+    for id_ in ids:
+        body = _normal(sections[id_][1])
+        if not any(_normal(bullet) in body for bullet in bullets):
+            raise ValueError("Added slide does not cite actual content of each referenced section")
     original_numbers=set(_numbers(backing))
     for field in ("title","message"):
         if _has_placeholder(slide[field]) or not set(_numbers(slide[field])) <= original_numbers:
