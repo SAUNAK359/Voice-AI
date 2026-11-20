@@ -387,5 +387,9 @@ def migrate_v1(ir,*,owner: str,job_id: str,objective: str,
                         data={"statement":unknown,
                               "impact":"requires explicit disclosure"},
                         dependencies=("goal:original",),status="unknown"))
+    # The immutable outcome hash excludes changing source/checkpoint bytes.
+    # A source revision may replace the graph without rewriting authorization.
+    authorization={"original_objective":objective,
+                   "authorized_formats":list(deliverables)}
     return create_fabric(owner=owner,job_id=job_id,
-        goal_digest=_sha(goal_data),nodes=out)
+        goal_digest=_sha(authorization),nodes=out)
