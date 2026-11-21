@@ -917,6 +917,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
 
         async def build_format_plan():
             nonlocal excel_blueprint,studio_blueprint,editor_blueprint,document_ir
+            # Word/PDF can reach this branch without taking the Excel/PPT paths.
+            # The model settings must exist independently of format routing.
+            from .config import Settings
             excel_blueprint=None
             studio_blueprint=None
             editor_blueprint=None
