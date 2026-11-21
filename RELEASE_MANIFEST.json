@@ -309,13 +309,13 @@
     },
     {
       "path": "scripts/qualify_v26_live.py",
-      "bytes": 6931,
-      "sha256": "21b1ca599b734bf1b852f8037cd1df1632adb24878b07bb17d851ef4066aa2fc"
+      "bytes": 6972,
+      "sha256": "482f720b5071204b41f4b1681d3094123b0e228973f500333d554756521498e2"
     },
     {
       "path": "scripts/qualify_v26_stream_paid.py",
-      "bytes": 7184,
-      "sha256": "3a1067f241d9a36d6ca7f528a544de2c082bd0190c25995f25a769648dcb4b2b"
+      "bytes": 8154,
+      "sha256": "70b6159e1bca45ceb79406687b68a300f6202e0cbd100ca5a28471b22cc6f7b5"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -534,8 +534,8 @@
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 32016,
-      "sha256": "3775f43e79fa8bf4bd676075e3dc32b7376e83c27088bad1a860b0df30189697"
+      "bytes": 34859,
+      "sha256": "239ee05e3e176aac0056132045ac6ad647ac06475e7acd88b2de4f1875d804c6"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -871,6 +871,11 @@
       "path": "tests/test_v25_work_recovery_integration.py",
       "bytes": 5981,
       "sha256": "519da28920c1d667ea4442d5891c251aa5d264702bae701915ceb1328da02cb1"
+    },
+    {
+      "path": "tests/test_v26_context_brief_runtime.py",
+      "sha256": "7ddd4e10e3002412b60dc354aa67858aa7b701c5bf44364bd33dea5080cfc22b",
+      "bytes": 3890
     },
     {
       "path": "tests/test_v26_context_fabric.py",
