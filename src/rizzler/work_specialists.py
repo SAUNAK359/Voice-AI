@@ -77,7 +77,11 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         if saved is not None:
             result = _valid_cached(spec, saved, checkpoint, formats)
         else:
-            store.agent_begin(jid, worker_id, fence, spec.name, spec.sla_seconds)
+            from .v26_flags import enabled as v26_agent_enabled
+            stage_target=(960 if spec.name=="sql_analytics"
+                          and v26_agent_enabled("RIZZLER_V26_STREAM_ANALYTICS")
+                          else spec.sla_seconds)
+            store.agent_begin(jid, worker_id, fence, spec.name, stage_target)
             try:
                 # Only curated, trusted specialist playbooks are loaded.
                 read_skill(spec.name) if spec.name in (
