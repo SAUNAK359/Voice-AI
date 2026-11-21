@@ -14,6 +14,28 @@ from .contracts import ArtifactReceipt
 
 def verify_artifact(path: Path, kind: str, max_bytes: int=50_000_000) -> ArtifactReceipt:
     path=Path(path)
+    if kind=="csv":
+        from .v26_flags import enabled as v26_enabled
+        if v26_enabled("RIZZLER_V26_STREAM_ANALYTICS"):
+            from .work_large_uploads import HARD_LIMIT, sha256_file
+            if (not path.is_file() or path.is_symlink() or
+                    not 10<=path.stat().st_size<=HARD_LIMIT):
+                raise ValueError("Streamed CSV artifact exceeds verified size policy")
+            rows=0
+            columns=None
+            with path.open("r",encoding="utf-8-sig",newline="") as handle:
+                for record in csv.reader(handle,strict=True):
+                    rows+=1
+                    if rows>5_000_001 or (columns is not None and len(record)!=columns):
+                        raise ValueError("CSV artifact rows or columns invalid")
+                    if columns is None:
+                        columns=len(record)
+                        if not 1<=columns<=50:
+                            raise ValueError("CSV artifact header malformed")
+            if rows<2:
+                raise ValueError("CSV artifact has no data rows")
+            return ArtifactReceipt(kind=kind,name=path.name,sha256=sha256_file(path),
+                                   byte_size=path.stat().st_size,verified=True).validate()
     if not path.is_file() or path.stat().st_size < 10 or path.stat().st_size > max_bytes:
         raise ValueError('Missing, empty or oversized artifact')
     data=path.read_bytes()
