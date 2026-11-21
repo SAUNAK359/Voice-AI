@@ -258,7 +258,7 @@ class Phase1ActualWorkStoreIntegration(unittest.IsolatedAsyncioTestCase):
             raise AssertionError("Research is not authorized for this job")
 
         flags={**FLAGS,"RIZZLER_V23_MODE":"off",
-               "RIZZLER_ARTIFACT_QA":"off",
+               "RIZZLER_ARTIFACT_QA":"structural",
                "RIZZLER_MEMORY_ENABLED":"0",
                "GEMINI_API_KEY":""}
         with TemporaryDirectory() as root, patch.dict(
