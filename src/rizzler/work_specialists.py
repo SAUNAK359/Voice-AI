@@ -839,6 +839,55 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 context.get("_phase1_handoffs",{}).get("quality"),
                 context["work_graph"],payload=payload,owner=owner,
                 job_id=jid,specialist="quality")
+        if v26_enabled("RIZZLER_V26_NATIVE_OUTCOME_QA"):
+            if not foundation_enabled():
+                raise ValueError("Native outcome coverage requires full V26 context")
+            from .work_outcome_coverage import (
+                inspect_native_coverage,reconcile_coverage,
+                OutcomeCoverageError)
+            from .config import Settings
+            goal=context.get("goal_contract")
+            if not isinstance(goal,dict):
+                raise OutcomeCoverageError("Missing approved user-outcome contract")
+            cfg=Settings.from_env()
+            native=[r for r in receipts.values() if r.kind in ("pptx","docx")]
+            if not native:
+                raise OutcomeCoverageError("Native outcome gate requires a PPTX or DOCX")
+            coverage={}
+            async def inspect_native(receipt):
+                try:
+                    result=await inspect_native_coverage(
+                        checkpoint/receipt.name,receipt.kind,goal,
+                        model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                except OutcomeCoverageError as exc:
+                    store.publish_cognition(
+                        jid,worker_id,fence,"native_outcome_auditor","gap",{
+                            "artifact_kind":receipt.kind,
+                            "status":"native_coverage_review_rejected",
+                            "category":type(exc).__name__})
+                    raise
+                return receipt.kind,result
+            assessed=await asyncio.gather(
+                *(inspect_native(receipt) for receipt in native))
+            coverage=dict(assessed)
+            consolidated=reconcile_coverage(coverage,goal)
+            detailed_qa["native_outcome_coverage"]=consolidated
+            if not consolidated["passed"]:
+                store.publish_cognition(
+                    jid,worker_id,fence,"native_outcome_auditor","gap",{
+                        "status":"critical_user_obligation_missing",
+                        "uncovered_count":len(
+                            consolidated["uncovered_critical_requirements"]),
+                        "uncovered_ids":consolidated[
+                            "uncovered_critical_requirements"][:8]})
+                raise OutcomeCoverageError(
+                    "Native artifacts do not demonstrate all critical "
+                    "substantive user requirements")
+            store.publish_cognition(
+                jid,worker_id,fence,"native_outcome_auditor","verification",{
+                    "status":"source_visible_outcome_coverage_verified",
+                    "covered_count":len(consolidated["requirements_covered"]),
+                    "artifact_kinds":consolidated["artifact_kinds"]})
         if v26_enabled("RIZZLER_V26_CROSS_ARTIFACT_QA"):
             from .v26_flags import foundation_enabled
             if not foundation_enabled():
