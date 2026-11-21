@@ -615,9 +615,23 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             document_ir = context["artifact_ir"]
             if studio is not None:
                 from .work_studio import validate_storyboard, inspect_storyboard
+                editorial_selection=(preflight or {}).get("editorial_selection")
+                from .work_editorial_director import validate_editorial_plan
+                if editorial_selection is not None:
+                    validate_editorial_plan(
+                        editorial_selection,
+                        section_count=len(context["artifact_ir"].sections),
+                        required_goals=[
+                            req["id"] for req in
+                            (context.get("goal_contract") or {}).get("requirements",[])
+                            if req.get("kind") not in ("deliverable","quality")
+                            and req.get("priority",0)>=4])
                 valid_storyboard = validate_storyboard(
                     studio, context["artifact_ir"].sections,
-                    context["artifact_ir"].sources)
+                    context["artifact_ir"].sources,
+                    required_section_ids=(
+                        frozenset(editorial_selection["selected_section_ids"])
+                        if editorial_selection is not None else None))
                 studio_qa = await asyncio.to_thread(
                     inspect_storyboard, checkpoint / receipt.name, valid_storyboard)
                 if not studio_qa["passed"]:
@@ -699,7 +713,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         # The immutable IR remains authoritative. This bounded, versioned
         # brief informs each format-specialist without adding tool privileges.
         from .work_context_intelligence import context_brief
-        specialist_brief = context_brief(context)
+        specialist_brief = context_brief(context,recipient=name)
         # The original ArtifactIR and source receipts are immutable. A
         # failure can replan THIS format without losing successful siblings.
         from .work_execution_recovery import (
@@ -725,6 +739,7 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         excel_blueprint=None
         studio_blueprint=None
         editor_blueprint=None
+        editorial_selection=None
         document_ir=ir
         repairs=0
         need_plan=True
@@ -737,10 +752,11 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                                     "component_planner","verification",event)
 
         async def build_format_plan():
-            nonlocal excel_blueprint,studio_blueprint,editor_blueprint,document_ir
+            nonlocal excel_blueprint,studio_blueprint,editor_blueprint,document_ir,editorial_selection
             excel_blueprint=None
             studio_blueprint=None
             editor_blueprint=None
+            editorial_selection=None
             document_ir=ir
             scoped_objective=(payload["objective"]+
                 ("\n"+context.get("goal_brief",""))[:1900]+
@@ -756,17 +772,40 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             if kind=="pptx" and feature_enabled("RIZZLER_COGNITIVE_STUDIO"):
                 from .config import Settings
                 cfg=Settings.from_env()
+                selected_ir=ir
+                if feature_enabled("RIZZLER_V26_EDITORIAL_DIRECTOR"):
+                    from .work_editorial_director import (
+                        create_editorial_plan,project_selected_ir)
+                    editorial_selection=await create_editorial_plan(
+                        payload["objective"],ir,
+                        goal_contract=context.get("goal_contract"),
+                        model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                    selected_ir=project_selected_ir(ir,editorial_selection)
+                    store.publish_cognition(jid,worker_id,fence,
+                        "editorial_director","state",{
+                            "selected_count":len(editorial_selection["selected_section_ids"]),
+                            "excluded_count":len(editorial_selection["excluded_section_ids"]),
+                            "status":"source_scoped_editorial_plan"})
                 if feature_enabled("RIZZLER_COMPONENT_PLANNING"):
                     from .work_incremental_studio import create_incremental_storyboard
                     studio_blueprint=await create_incremental_storyboard(
-                        scoped_objective,ir,model=cfg.gemini_model,
+                        scoped_objective,selected_ir,model=cfg.gemini_model,
                         api_key=cfg.gemini_api_key,checkpoint=checkpoint,
                         progress=record_component_event)
                 else:
                     from .work_studio import create_storyboard
                     studio_blueprint=await create_storyboard(
-                        scoped_objective,ir,model=cfg.gemini_model,
+                        scoped_objective,selected_ir,model=cfg.gemini_model,
                         api_key=cfg.gemini_api_key)
+                if editorial_selection is not None:
+                    from .work_editorial_director import restore_original_section_ids
+                    from .work_studio import validate_storyboard
+                    studio_blueprint=restore_original_section_ids(
+                        studio_blueprint,editorial_selection)
+                    studio_blueprint=validate_storyboard(
+                        studio_blueprint,ir.sections,ir.sources,
+                        required_section_ids=frozenset(
+                            editorial_selection["selected_section_ids"]))
             if kind in ("docx","pdf") and feature_enabled("RIZZLER_REPORT_STUDIO"):
                 from .work_editor import create_report_plan,report_text
                 cfg=Settings.from_env()
@@ -948,6 +987,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             inspections[kind]["semantic_review"] = semantic_review
         if studio_blueprint is not None:
             inspections[kind]["studio_blueprint"] = studio_blueprint
+            if editorial_selection is not None:
+                inspections[kind]["editorial_selection"] = editorial_selection
         if editor_blueprint is not None:
             inspections[kind]["editor_blueprint"] = editor_blueprint
         if excel_blueprint is not None:
