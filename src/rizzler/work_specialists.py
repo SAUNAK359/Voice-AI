@@ -57,6 +57,36 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
+        # A checkpoint is reusable only within the immutable user job and
+        # current, validated evidence graph. Do not trust model context fields
+        # to define owner, output scope or revision.
+        from .v26_flags import foundation_enabled as handoff_enabled
+        if handoff_enabled() and spec.name in (
+                "research","sql_analytics","orchestrator"):
+            from .work_phase1_protocol import validate_upstream_handoff
+            authority=validate_upstream_handoff(
+                payload=payload,owner=owner,job_id=jid,
+                specialist=spec.name)
+            context.setdefault("_phase1_upstream",{})[spec.name]=authority
+            store.publish_cognition(jid,worker_id,fence,
+                "context_handoff","verification",{
+                    "specialist":spec.name,"stage":"source",
+                    "immutable_goal_digest":authority["immutable_goal_digest"]})
+        if handoff_enabled() and spec.name in (
+                "powerpoint","word","excel","pdf_visual","quality"):
+            from .work_phase1_protocol import validate_task_handoff
+            authoritative=context.get("work_graph")
+            if not isinstance(authoritative,dict):
+                raise ValueError("Specialist has no authenticated proof-carrying context")
+            handoff=validate_task_handoff(
+                authoritative,payload=payload,owner=owner,
+                job_id=jid,specialist=spec.name)
+            context.setdefault("_phase1_handoffs",{})[spec.name]=handoff
+            store.publish_cognition(jid,worker_id,fence,"context_handoff",
+                "verification",{"specialist":spec.name,
+                    "revision":handoff["context_revision"],
+                    "handoff_sha256":handoff["handoff_sha256"],
+                    "critical_metric_count":len(handoff["critical_metric_ids"])})
         # Other specialists' committed findings are visible before this task
         # starts. Only verified summaries are shared, never raw model traces.
         latest = store.cognitive_events(owner, jid, limit=100)
@@ -66,18 +96,25 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         # Resume must never deliver a file built from older evidence.
         if (saved is not None and spec.name in (
                 "powerpoint", "word", "excel", "pdf_visual", "quality")
-                and context.get("context_package") is not None
-                and (saved.get("context_revision") !=
-                     context["context_package"]["revision"]
-                     or (spec.name != "quality" and
-                         saved.get("artifact_ir_sha256") !=
-                         context["artifact_ir"].sha256))):
+                and ((spec.name in context.get("_phase1_handoffs",{})
+                      and saved.get("phase1_handoff_sha256") !=
+                      context["_phase1_handoffs"][spec.name]["handoff_sha256"])
+                     or (context.get("context_package") is not None
+                         and (saved.get("context_revision") !=
+                              context["context_package"]["revision"]
+                              or (spec.name != "quality" and
+                                  saved.get("artifact_ir_sha256") !=
+                                  context["artifact_ir"].sha256))))):
             store.reopen_agents(jid,worker_id,fence,[spec.name])
             saved = None
         if saved is not None:
             result = _valid_cached(spec, saved, checkpoint, formats)
         else:
-            store.agent_begin(jid, worker_id, fence, spec.name, spec.sla_seconds)
+            from .v26_flags import enabled as v26_agent_enabled
+            stage_target=(960 if spec.name=="sql_analytics"
+                          and v26_agent_enabled("RIZZLER_V26_STREAM_ANALYTICS")
+                          else spec.sla_seconds)
+            store.agent_begin(jid, worker_id, fence, spec.name, stage_target)
             try:
                 # Only curated, trusted specialist playbooks are loaded.
                 read_skill(spec.name) if spec.name in (
@@ -89,7 +126,15 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                          payload, store, owner, composer, researcher,
                          jid, worker_id, fence, attempt),
                          timeout=spec.sla_seconds * (
-                             6 if (
+                             16 if (
+                                 spec.name=="sql_analytics" and
+                                 __import__("rizzler.v26_flags",fromlist=["enabled"]).enabled(
+                                     "RIZZLER_V26_STREAM_ANALYTICS"))
+                             else 8 if (
+                                 spec.name=="quality" and
+                                 __import__("rizzler.v26_flags",fromlist=["enabled"]).enabled(
+                                     "RIZZLER_V26_CROSS_ARTIFACT_QA"))
+                             else 6 if (
                                  spec.name=="powerpoint" and
                                  feature_enabled("RIZZLER_COMPONENT_PLANNING"))
                              else 4 if (
@@ -342,7 +387,8 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         if (v26_enabled("RIZZLER_V26_DOMAIN_METHODS")
                 and renderers.intersection(wave)
                 and payload.get("uploads")
-                and not context.get("_v26_method_attempted")):
+                and not context.get("_v26_method_attempted")
+                and not v26_enabled("RIZZLER_V26_STREAM_ANALYTICS")):
             if not foundation_enabled():
                 raise ValueError("V26 domain methods require complete context foundation")
             from .config import Settings
@@ -374,7 +420,8 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                         "method":"source_bound_two_series",
                         "status":"not_relevant_to_user_goal"})
             context["_v26_method_attempted"]=True
-        if foundation_enabled() and renderers.intersection(wave):
+        if foundation_enabled() and (renderers.intersection(wave) or
+                                     "quality" in wave):
             # Build the owner-scoped proof fabric AFTER context convergence.
             # A source delta regenerates ArtifactIR and invalidates earlier views.
             from .work_context_fabric import migrate_v1
@@ -389,6 +436,12 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                     unknowns=goal.get("unknowns") or [],
                     dataset_summary=context.get("summary"),
                     comparison_receipt=context.get("v26_comparison_receipt"))
+                if any(
+                        token["immutable_goal_digest"] !=
+                        graph_v2["immutable_goal_digest"]
+                        for token in context.get("_phase1_upstream",{}).values()):
+                    raise ValueError(
+                        "Source specialist authority disagrees with generated context")
                 previous=store.knowledge_checkpoint(owner,jid)
                 if previous is not None and (
                         previous["context_revision"]==graph_v2["context_revision"]):
@@ -477,6 +530,38 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         if len(uploads) != 1:
             raise ValueError("SQL analysis requires exactly one uploaded dataset")
         source = store.upload(owner, uploads[0])
+        from .v26_flags import enabled as v26_analytics_enabled
+        if v26_analytics_enabled("RIZZLER_V26_STREAM_ANALYTICS"):
+            from .work_stream_analytics import analyze_streaming_sql
+            if feature_enabled("RIZZLER_SQL_EXPLORATION"):
+                from .config import Settings
+                from .work_sql_exploration import explore_dataset
+                cfg=Settings.from_env()
+                if cfg.gemini_api_key:
+                    try:
+                        deep=await explore_dataset(
+                            source,payload["objective"]+
+                            ("\n"+context.get("goal_brief",""))[:2500],
+                            model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                        if deep.get("analysis_receipts",{}).get("verified_queries",0):
+                            return deep
+                        store.publish_cognition(jid,worker_id,fence,
+                            "sql_analytics","gap",{
+                                "status":"streamed_sql_experiments_unavailable",
+                                "category":str(deep.get("exploration_status","unknown"))[:80]})
+                    except Exception as exc:
+                        store.publish_cognition(jid,worker_id,fence,
+                            "sql_analytics","gap",{
+                                "status":"streamed_sql_experiments_unavailable",
+                                "category":type(exc).__name__})
+            result=await asyncio.to_thread(analyze_streaming_sql,source)
+            store.publish_cognition(jid,worker_id,fence,"sql_analytics",
+                "verification",{"status":"full_source_verified",
+                    "source_sha256":result["summary"]["source_sha256"],
+                    "source_rows":result["summary"]["rows"],
+                    "execution":result["execution"],
+                    "limitations":"Professional interpretation still requires domain review"})
+            return result
         if feature_enabled("RIZZLER_SQL_EXPLORATION"):
             from .config import Settings
             from .work_sql_exploration import explore_dataset
@@ -724,7 +809,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     raise ValueError("Format-specific edited document failed semantic QA")
             structural_qa = await asyncio.to_thread(
                 inspect_artifact, checkpoint / receipt.name, receipt.kind,
-                dataset_rows=context["summary"]["rows"] if context["summary"] else None,
+                dataset_rows=(context["summary"]["rows"] if
+                    context["summary"] and not context["summary"].get("streaming") else None),
                 bundle_receipts=bundle,
                 artifact_ir=None if studio is not None else document_ir,
                 dataset_summary=context["summary"],
@@ -746,7 +832,89 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             raise ValueError("Analysis lineage missing independent SQL")
         if not context["text"] and not context["summary"]:
             raise ValueError("No substantive evidence to publish")
+        from .v26_flags import enabled as v26_enabled, foundation_enabled
+        if foundation_enabled():
+            from .work_phase1_protocol import assert_current_handoff
+            assert_current_handoff(
+                context.get("_phase1_handoffs",{}).get("quality"),
+                context["work_graph"],payload=payload,owner=owner,
+                job_id=jid,specialist="quality")
+        if v26_enabled("RIZZLER_V26_CROSS_ARTIFACT_QA"):
+            from .v26_flags import foundation_enabled
+            if not foundation_enabled():
+                raise ValueError("V26 cross-artifact QA needs full proof context")
+            from .work_consistency import (
+                audit_artifact_claims,reconcile_claim_reports,
+                ConsistencyViolation)
+            from .config import Settings
+            graph=context.get("work_graph")
+            if not isinstance(graph,dict):
+                raise ConsistencyViolation("No accepted owner-scoped V26 context")
+            cfg=Settings.from_env()
+            # WorkContext.receipts is keyed by format, so iterating the map
+            # returns strings. Audit the verified receipt objects, never keys.
+            supported=[r for r in receipts.values() if r.kind in (
+                "pptx","docx","pdf","xlsx")]
+            sem=asyncio.Semaphore(2)
+            async def audit_receipt(receipt):
+                async with sem:
+                    try:
+                        review=await audit_artifact_claims(
+                            checkpoint/receipt.name,receipt.kind,graph,
+                            model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                    except ConsistencyViolation as exc:
+                        from .work_consistency import claim_audit_failure_category
+                        category=claim_audit_failure_category(exc)
+                        store.publish_cognition(
+                            jid,worker_id,fence,"cross_artifact_auditor","gap",{
+                                "status":"source_bound_audit_rejected",
+                                "artifact_kind":receipt.kind,
+                                "category":category})
+                        store.publish_cognition(
+                            jid,worker_id,fence,"failure_origin","gap",{
+                                "specialist":"quality",
+                                "artifact_kind":receipt.kind,
+                                "stage":"cross_artifact_audit",
+                                "error_code":"cross_artifact_metric_consistency_failed",
+                                "reason":category,
+                                "source_revision":graph["context_revision"]})
+                        raise
+                    return receipt.kind,review
+            checked=await asyncio.gather(
+                *(audit_receipt(receipt) for receipt in supported))
+            reports=dict(checked)
+            consistency=reconcile_claim_reports(reports)
+            if not consistency["passed"]:
+                store.publish_cognition(
+                    jid,worker_id,fence,"cross_artifact_auditor","gap",{
+                        "status":"critical_numeric_claim_missing",
+                        "missing_metric_count":
+                            len(consistency["missing_required_metrics"]),
+                        "missing_metric_fingerprints":[
+                            __import__("hashlib").sha256(
+                                key.encode("utf-8")).hexdigest()[:16]
+                            for key in consistency["missing_required_metrics"][:24]]})
+                store.publish_cognition(
+                    jid,worker_id,fence,"failure_origin","gap",{
+                        "specialist":"quality",
+                        "stage":"cross_artifact_reconciliation",
+                        "error_code":"cross_artifact_metric_consistency_failed",
+                        "reason":"unobserved_critical_metric",
+                        "source_revision":graph["context_revision"]})
+                raise ConsistencyViolation(
+                    "Critical source-computed metrics are absent from all output artifacts")
+            detailed_qa["cross_artifact_consistency"]=consistency
+            store.publish_cognition(
+                jid,worker_id,fence,"cross_artifact_auditor","verification",{
+                    "status":"source_bound_metric_reconciled",
+                    "verified_metric_count":
+                        len(consistency["verified_metric_appearances"])})
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
+                "phase1_handoff_sha256":(
+                    context.get("_phase1_handoffs",{}).get(
+                        "quality") or {}).get("handoff_sha256"),
+                "context_graph_revision":(
+                    context.get("work_graph") or {}).get("context_revision"),
                 "context_revision": (context.get("context_package") or {}).get("revision"),
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
@@ -773,13 +941,17 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
         table = None
-        if payload.get("uploads"):
+        from .v26_flags import enabled as v26_stream_enabled
+        streaming = v26_stream_enabled("RIZZLER_V26_STREAM_ANALYTICS") and bool(
+            (context.get("summary") or {}).get("streaming"))
+        if payload.get("uploads") and not streaming:
             from .work_skills import read_dataset
             table = await asyncio.to_thread(read_dataset,
                                              store.upload(owner, payload["uploads"][0]))
         working = attempt / (kind + "." + kind)
         ir = context["artifact_ir"]
-        dataset_rows = context["summary"]["rows"] if context["summary"] else None
+        dataset_rows = (context["summary"]["rows"] if
+            context["summary"] and not streaming else None)
         studio_blueprint = None
         editor_blueprint = None
         # The immutable IR remains authoritative. This bounded, versioned
@@ -827,6 +999,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
 
         async def build_format_plan():
             nonlocal excel_blueprint,studio_blueprint,editor_blueprint,document_ir
+            # Word/PDF can reach this branch without taking the Excel/PPT paths.
+            # The model settings must exist independently of format routing.
+            from .config import Settings
             excel_blueprint=None
             studio_blueprint=None
             editor_blueprint=None
@@ -896,7 +1071,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     await build_format_plan()
                     need_plan=False
                 phase="render_quality"
-                if studio_blueprint is not None:
+                if streaming and kind == "xlsx":
+                    from .work_stream_analytics import render_profile_workbook
+                    await asyncio.to_thread(
+                        render_profile_workbook,working,context["summary"],
+                        document_ir.title,document_ir.sections,list(document_ir.sources))
+                elif streaming and kind == "csv":
+                    import shutil
+                    source_path=store.upload(owner,payload["uploads"][0])
+                    if source_path.suffix.lower()!=".csv":
+                        raise ValueError("XLSX-to-CSV conversion is not qualified for streamed sources")
+                    await asyncio.to_thread(shutil.copyfile,source_path,working)
+                elif studio_blueprint is not None:
                     from .work_studio import render_storyboard
                     await asyncio.to_thread(
                         render_storyboard,working,studio_blueprint,
@@ -1002,18 +1188,44 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     need_plan=False
                     continue
                 if attempt_no>=3:
+                    diagnostic=recovery_diagnostic(
+                        exc,stage=phase,kind=kind,attempt=attempt_no)
+                    store.publish_cognition(
+                        jid,worker_id,fence,"recovery_controller","gap",{
+                            "kind":kind,"stage":phase,
+                            "error_code":diagnostic["error_code"],
+                            "status":"recovery_budget_exhausted",
+                            "attempt":attempt_no+1})
                     raise RecoveryExhausted(
                         "Artifact failed validation after supervised repair budget") from exc
                 from .config import Settings
                 cfg=Settings.from_env()
                 diagnostic=recovery_diagnostic(
                     exc,stage=phase,kind=kind,attempt=attempt_no)
+                # Preserve the FIRST planning/render failure before any
+                # model retry or evidence backdelegation can replace it.
+                # Emit only typed categories; no private source text.
+                store.publish_cognition(jid,worker_id,fence,
+                    "failure_origin","gap",{
+                        "specialist":name,"artifact_kind":kind,
+                        "stage":phase,"attempt":attempt_no+1,
+                        "error_code":diagnostic["error_code"],
+                        "error_type":diagnostic["error_type"],
+                        "context_revision":(
+                            (context.get("work_graph") or {}).get(
+                                "context_revision"))})
+                from .v26_flags import enabled as recovery_v26_enabled
+                recovery_requirements=(
+                    (context.get("goal_contract") or {}).get("requirements") or []
+                    if recovery_v26_enabled("RIZZLER_V26_OUTCOME_PHASES")
+                    else None)
                 try:
                     decision=await select_recovery(
                         objective=payload["objective"],kind=kind,
                         specialist=name,diagnostic=diagnostic,
                         history=history,ir=ir,model=cfg.gemini_model,
-                        api_key=cfg.gemini_api_key,permitted=permitted)
+                        api_key=cfg.gemini_api_key,permitted=permitted,
+                        requirements=recovery_requirements)
                     enforce_bounded_recovery(
                         history,decision,max_attempts=3)
                 except Exception as decision_error:
@@ -1036,7 +1248,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                         "action":action,"attempt":len(history)})
                 if action=="backdelegate":
                     raise_verified_backdelegation(
-                        decision,specialist=name,permitted=permitted)
+                        decision,specialist=name,permitted=permitted,
+                        requirements=recovery_requirements)
                 if action=="abort":
                     raise RecoveryExhausted(
                         "Format specialist refused unsafe recovery") from exc
@@ -1091,6 +1304,13 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             inspections[kind]["editor_blueprint"] = editor_blueprint
         if excel_blueprint is not None:
             inspections[kind]["excel_blueprint"] = excel_blueprint
+        from .v26_flags import foundation_enabled as handoff_enabled
+        if handoff_enabled():
+            from .work_phase1_protocol import assert_current_handoff
+            assert_current_handoff(
+                context.get("_phase1_handoffs",{}).get(name),
+                context["work_graph"],payload=payload,owner=owner,
+                job_id=jid,specialist=name)
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published specialist artifact failed checksum")
@@ -1108,11 +1328,23 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     {"name": r.name, "sha256": r.sha256, "bytes": r.byte_size}
                     for r in contents]}, indent=2))
         receipt = verify_artifact(working, "zip")
+        from .v26_flags import foundation_enabled as handoff_enabled
+        if handoff_enabled():
+            from .work_phase1_protocol import assert_current_handoff
+            assert_current_handoff(
+                context.get("_phase1_handoffs",{}).get(name),
+                context["work_graph"],payload=payload,owner=owner,
+                job_id=jid,specialist=name)
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published archive failed checksum")
         receipts.append(receipt)
     return {"receipts": [asdict(r) for r in receipts],
             "inspections": inspections, "agent": name, "requested": requested,
+            "phase1_handoff_sha256":(
+                context.get("_phase1_handoffs",{}).get(
+                    name) or {}).get("handoff_sha256"),
+            "context_graph_revision":(
+                context.get("work_graph") or {}).get("context_revision"),
             "context_revision": (context.get("context_package") or {}).get("revision"),
             "artifact_ir_sha256": context["artifact_ir"].sha256}

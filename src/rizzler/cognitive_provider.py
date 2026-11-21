@@ -20,11 +20,15 @@ class ProviderBusy(RuntimeError):
 
 
 def _transient(exc: BaseException) -> bool:
+    # A locally configured request-rate window can reject a queued stage even
+    # when the upstream provider is healthy. It is transient; re-admit within
+    # the caller's bounded attempt budget, never fabricate a result.
+    if isinstance(exc, ProviderBusy):
+        return True
     if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
         return True
-    status = getattr(exc, "status_code", None)
-    if status is None:
-        status = getattr(exc, "code", None)
+    from .work_diagnostics import provider_http_status
+    status = provider_http_status(exc)
     if isinstance(status, int):
         return status in (408, 429, 500, 502, 503, 504)
     message = str(exc).lower()

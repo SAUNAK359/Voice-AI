@@ -29,14 +29,25 @@ V26_FLAGS={
     "RIZZLER_V26_DOMAIN_METHODS":"1",
     "RIZZLER_V26_ARTIFACT_STRATEGY":"1",
     "RIZZLER_V26_VISUAL_CRITIC":"1",
+    "RIZZLER_V26_CROSS_ARTIFACT_QA":"1",
 }
 TESTS=[
+    "test_v26_phase1_protocol.py",
     "test_v26_outcome_phases.py",
     "test_v26_context_fabric.py",
+    "test_v26_context_brief_runtime.py",
+    "test_v26_provider_word_regression.py",
+    "test_v26_stream_paid_submission.py",
     "test_v26_editorial_strategy.py",
     "test_v26_reasoning_audit.py",
     "test_v26_visual_strategy.py",
     "test_v26_visual_critic.py",
+    "test_v26_stream_analytics.py",
+    "test_v26_cross_artifact_consistency.py",
+    "test_v26_presentation_layout.py",
+    "test_v26_final_release_gate.py",
+    "test_v26_large_uploads.py",
+    "test_v26_live_qualification.py",
     "test_v25_work_recovery_integration.py",
     "test_v24_storyboard_recovery.py",
 ]
@@ -136,6 +147,16 @@ def main():
             from qualify_v25_live import run_paid
             paid=asyncio.run(run_paid(repo,out,secrets.token_hex(7)))
             report["paid"]=paid
+            if paid.get("preflight",{}).get("passed") is True:
+                from qualify_v26_stream_paid import run_streamed_paid
+                report["streamed_paid"]=asyncio.run(run_streamed_paid(out))
+            else:
+                # Do not spend further tokens or mislabel expected provider
+                # failures as an independent Work Agent implementation defect.
+                report["streamed_paid"]={
+                    "passed":False,"status":"BLOCKED_BY_PROVIDER_PREFLIGHT",
+                    "live_gemini_required":True,
+                    "failure_code":paid.get("preflight",{}).get("failure_code","unknown")}
         else:
             report["blocking_error"]="missing_kaggle_GEMINI_API_KEY"
     except Exception as exc:
@@ -145,8 +166,14 @@ def main():
         paid.get("preflight",{}).get("passed") and
         paid.get("research",{}).get("passed") and
         paid.get("analytical",{}).get("passed"))
-    report["passed"]=report["offline_passed"] and report["live_passed"]
+    report["streamed_paid_passed"]=bool(report.get("streamed_paid",{}).get("passed"))
+    report["passed"]=bool(report["offline_passed"] and report["live_passed"] and report["streamed_paid_passed"])
     report["release_status"]="CANDIDATE_SMOKE_TEST_ONLY" if report["passed"] else "NOT_READY"
+    report["required_release_gates"]=[f"G{i:02d}" for i in range(18)]
+    report["production_signoff"]="NOT_RUN"
+    report["large_file_200mb_network"]="NOT_RUN"
+    report["cross_domain_benchmark_120_plus"]="NOT_RUN"
+    report["blind_human_review"]="NOT_RUN"
     save(out/"V26_QUALIFICATION.json",report)
     zip_path=package(out,sha)
     print("VERDICT:",report["release_status"],flush=True)

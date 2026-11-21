@@ -229,7 +229,32 @@ async def run_paid(source: Path,out: Path,run_id: str) -> dict:
         finally:
             client.close()
     except Exception as exc:
+        from rizzler.work_diagnostics import failure_code, provider_http_status
         preflight["failure_category"]=type(exc).__name__
+        preflight["failure_code"]=failure_code(exc)
+        status=provider_http_status(exc)
+        if status is not None:
+            preflight["http_status"]=status
+        # A model name may be documented but absent from this API project's
+        # entitled model list. Query names only, never exception messages.
+        try:
+            discover=genai.Client(api_key=cfg.gemini_api_key)
+            try:
+                choices=[]
+                for n,item in enumerate(discover.models.list()):
+                    if n>=400:
+                        break
+                    name=str(getattr(item,"name","") or "")
+                    if name:
+                        choices.append(name.removeprefix("models/"))
+                preflight["model_list_accessible"]=True
+                preflight["selected_model_listed"]=cfg.gemini_model in choices
+                preflight["available_model_count_examined"]=len(choices)
+            finally:
+                discover.close()
+        except Exception as listing_exc:
+            preflight["model_list_accessible"]=False
+            preflight["model_list_error_category"]=type(listing_exc).__name__
     json_save(out/"gemini_preflight.json",preflight)
     if not preflight["passed"]:
         print("Gemini preflight NOT QUALIFIED; live Work tasks not submitted")

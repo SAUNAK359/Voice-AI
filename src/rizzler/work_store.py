@@ -35,8 +35,10 @@ class StaleLease(Exception):
 
 
 class WorkStore:
-    def __init__(self, root: str | Path, upload_scanner=None, object_store=None):
+    def __init__(self, root: str | Path, upload_scanner=None, object_store=None,
+                 upload_scanner_file=None):
         self.upload_scanner, self.objects = upload_scanner, object_store
+        self.upload_scanner_file = upload_scanner_file
         self.root = Path(root).expanduser().resolve()
         if not self.root.is_absolute():
             raise ValueError("Work root must be absolute")
@@ -360,12 +362,12 @@ class WorkStore:
             target.mkdir(parents=True, exist_ok=True, mode=0o700)
             for receipt in receipts:
                 p = storage / (receipt.kind + "." + receipt.kind)
-                if not p.is_file() or p.stat().st_size != receipt.byte_size or hashlib.sha256(p.read_bytes()).hexdigest()!=receipt.sha256:
+                if not p.is_file() or p.stat().st_size != receipt.byte_size or __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(p)!=receipt.sha256:
                     raise ValueError("Artifact bytes do not match receipt")
                 import shutil
                 temp = target / (receipt.name + "." + secrets.token_hex(8) + ".tmp")
                 shutil.copyfile(p, temp)
-                if hashlib.sha256(temp.read_bytes()).hexdigest()!=receipt.sha256:
+                if __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(temp)!=receipt.sha256:
                     temp.unlink(missing_ok=True)
                     raise ValueError("Artifact publish checksum mismatch")
                 temp.replace(target / receipt.name)
@@ -808,7 +810,7 @@ class WorkStore:
         if root not in candidate.parents or source.is_symlink() or not source.is_file():
             raise ValueError("Invalid isolated artifact staging path")
         if (source.stat().st_size != receipt.byte_size or
-                hashlib.sha256(source.read_bytes()).hexdigest() != receipt.sha256):
+                __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(source) != receipt.sha256):
             raise ValueError("Specialist staging checksum mismatch")
         with self._tx() as c:
             row = self._active(c, jid, worker, fence)
@@ -933,12 +935,23 @@ class WorkStore:
         required = {"stage","code","exception_type","exception_module",
                     "locations","fingerprint"}
         research_fields = {"research_reason","research_failure_categories"}
+        safe_provider_fields = {"http_status"}
         if (not isinstance(record, dict)
                 or not required <= set(record)
-                or not set(record) <= required | research_fields
+                or not set(record) <= required | research_fields | safe_provider_fields
                 or set(record).intersection(research_fields) not in
                    (set(), research_fields)):
             raise ValueError("Invalid safe diagnostic contract")
+        if "http_status" in record:
+            status = record["http_status"]
+            if type(status) is not int or not 100 <= status <= 599:
+                raise ValueError("Diagnostic HTTP status must be bounded integer")
+            expected = (
+                "provider_transient" if status in (408,429,500,502,503,504) else
+                "provider_authorization" if status in (401,403) else
+                "provider_invalid_request" if status==400 else None)
+            if expected is not None and record["code"] != expected:
+                raise ValueError("Diagnostic status contradicts failure category")
         if research_fields <= set(record):
             from .work_research_errors import SAFE_REASONS
             reason=record["research_reason"]
@@ -1029,7 +1042,7 @@ class WorkStore:
                     raise Missing("Artifact unavailable") from None
             if (not p.is_file() or
                     p.stat().st_size!=row["size"] or
-                    hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
+                    __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(p)!=row["sha256"]):
                 raise Missing("Artifact integrity check failed")
             return p,dict(row)
 
@@ -1082,6 +1095,74 @@ class WorkStore:
                       (uid,owner,name,hashlib.sha256(data).hexdigest(),len(data),time.time()))
         return {"id":uid,"name":name,"bytes":len(data)}
 
+    def prepare_upload_staging(self) -> Path:
+        """Reserve an unpredictable private staging name; API creates it exclusively."""
+        directory=self.root/"upload_staging"
+        if directory.is_symlink():
+            raise ValueError("Unsafe staging directory")
+        directory.mkdir(mode=0o700,parents=True,exist_ok=True)
+        if directory.is_symlink():
+            raise ValueError("Unsafe staging directory")
+        return directory/(secrets.token_hex(24)+".part")
+
+    def register_upload_file(self,owner,name,source:Path,*,expected_sha256:str):
+        """Atomically admit an already-streamed source under the owner's scope."""
+        from .security import safe_upload_name, validate_session_id
+        from .work_large_uploads import (
+            DIGEST_RE,OWNER_TOTAL_LIMIT,sha256_file,upload_limit,
+            validate_uploaded_file)
+        from .upload_scan import ScanUnavailable
+        validate_session_id(owner)
+        safe_upload_name(name)
+        stage=Path(source)
+        directory=(self.root/"upload_staging").resolve()
+        if (not stage.is_file() or stage.is_symlink() or
+                stage.resolve().parent!=directory):
+            raise ValueError("Upload not in isolated staging directory")
+        if not isinstance(expected_sha256,str) or not DIGEST_RE.fullmatch(expected_sha256):
+            raise ValueError("Invalid stream digest")
+        size=validate_uploaded_file(stage,name,maximum=upload_limit())
+        if sha256_file(stage)!=expected_sha256:
+            raise ValueError("Upload changed between receipt and validation")
+        # A byte-only scanner must never be bypassed for large disk uploads.
+        if self.upload_scanner is not None and self.upload_scanner_file is None:
+            raise ScanUnavailable("File-based malware scanner required")
+        if self.upload_scanner_file is not None:
+            self.upload_scanner_file(stage)
+        if stage.stat().st_size!=size or sha256_file(stage)!=expected_sha256:
+            raise ValueError("Upload changed during malware scan")
+        directory=self.root/"uploads"/owner
+        directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+        if directory.is_symlink():
+            raise ValueError("Unsafe owner upload directory")
+        uid=secrets.token_hex(16)
+        final=directory/(uid+Path(name).suffix.lower())
+        moved=False
+        try:
+            with self._tx() as c:
+                row=c.execute(
+                    "SELECT count(*),COALESCE(sum(size),0) FROM uploads WHERE owner=?",
+                    (owner,)).fetchone()
+                if row[0]>=30 or row[1]+size>OWNER_TOTAL_LIMIT:
+                    raise Conflict("Upload quota exceeded")
+                if final.exists() or final.is_symlink():
+                    raise Conflict("Upload path already exists")
+                stage.replace(final)
+                moved=True
+                final.chmod(0o600)
+                if self.objects is not None:
+                    self.objects.put(f"uploads/{owner}/{final.name}",
+                        final,expected_sha256,size)
+                c.execute("INSERT INTO uploads VALUES(?,?,?,?,?,?)",
+                          (uid,owner,name,expected_sha256,size,time.time()))
+        except BaseException:
+            if moved:
+                final.unlink(missing_ok=True)
+            raise
+        return {"id":uid,"name":name,"bytes":size,
+                "sha256":expected_sha256,
+                "analysis_row_limit":10000}
+
     def upload(self,owner,uid):
         with self._tx() as c:
             row=c.execute("SELECT * FROM uploads WHERE id=? AND owner=?",(uid,owner)).fetchone()
@@ -1097,7 +1178,7 @@ class WorkStore:
                     raise Missing("Upload unavailable") from None
             if (not p.is_file() or
                     p.stat().st_size!=row["size"] or
-                    hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
+                    __import__("rizzler.work_large_uploads",fromlist=["sha256_file"]).sha256_file(p)!=row["sha256"]):
                 raise Missing("Upload corrupted")
             return p
 
