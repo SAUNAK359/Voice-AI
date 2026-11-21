@@ -1087,6 +1087,8 @@ class WorkStore:
     def prepare_upload_staging(self) -> Path:
         """Reserve an unpredictable private staging name; API creates it exclusively."""
         directory=self.root/"upload_staging"
+        if directory.is_symlink():
+            raise ValueError("Unsafe staging directory")
         directory.mkdir(mode=0o700,parents=True,exist_ok=True)
         if directory.is_symlink():
             raise ValueError("Unsafe staging directory")
@@ -1165,7 +1167,7 @@ class WorkStore:
                     raise Missing("Upload unavailable") from None
             if (not p.is_file() or
                     p.stat().st_size!=row["size"] or
-                    hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
+                    __import__("rizzler.work_large_uploads",fromlist=["sha256_file"]).sha256_file(p)!=row["sha256"]):
                 raise Missing("Upload corrupted")
             return p
 
