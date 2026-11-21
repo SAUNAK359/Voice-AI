@@ -52,6 +52,38 @@ class ProviderStatusTests(unittest.TestCase):
                 self.assertNotIn("PRIVATE",str(record))
                 self.assertNotIn("PROMPT",str(record))
                 self.assertNotIn("response",record)
+    def test_http_diagnostics_survive_actual_fenced_workstore_persistence(self):
+        from tempfile import TemporaryDirectory
+        from rizzler.work_store import WorkStore
+        with TemporaryDirectory() as temp:
+            owner="v26_provider_owner"
+            store=WorkStore(temp)
+            job=store.submit(owner,"Produce a professional source-grounded report",
+                             ["pptx"],"v26_status_0001",[])
+            claim=store.claim("v26_worker")
+            self.assertEqual(claim["id"],job["id"])
+            error=type("ProviderClientError",(Exception,),{
+                "response":type("Response",(),{"status_code":400})()})(
+                "PRIVATE PROVIDER ERROR BODY")
+            diagnosis=failure_record(error,"powerpoint")
+            store.agent_error(claim["id"],"v26_worker",claim["fence"],
+                              "powerpoint",code=failure_code(error),
+                              diagnosis=diagnosis)
+            observations=store.diagnostics(owner,claim["id"])
+            self.assertEqual(len(observations),1)
+            self.assertEqual(observations[0]["http_status"],400)
+            self.assertEqual(observations[0]["code"],"provider_invalid_request")
+            self.assertNotIn("PRIVATE",str(observations))
+            # The persistent schema rejects free-form provider messages.
+            bad=dict(diagnosis)
+            bad["provider_message"]="PRIVATE SENSITIVE CONTENT"
+            with store._tx() as tx, self.assertRaises(ValueError):
+                store._diagnostic(tx,claim["id"],owner,bad)
+            wrong=dict(diagnosis)
+            wrong["http_status"]=503
+            with store._tx() as tx, self.assertRaises(ValueError):
+                store._diagnostic(tx,claim["id"],owner,wrong)
+
     def test_non_numeric_fields_do_not_leak_or_bypass_retry_policy(self):
         error=type("ClientError",(Exception,),{"code":"SECRET HTTP 503 with PII"})(
             "Private contents")
