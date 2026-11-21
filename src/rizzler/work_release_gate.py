@@ -180,13 +180,15 @@ def evaluate_release(evidence_root: Path,*,source_sha: str,
     all_passed=not blocked and not pending
     signoff=_verify_external_signoff(
         root,source_sha,verification_key=operator_verification_key,
-        supported_scope=supported_scope) if all_passed else False
+        supported_scope=supported_scope) if staging and not blocked else False
     if blocked or not first_four:
         status="NOT_READY"
     elif all_passed and signoff:
         status="PRODUCTION_QUALIFIED_FOR_DECLARED_SCOPE"
+    elif staging and signoff:
+        status="STAGING_QUALIFIED"
     elif staging and not blocked:
-        status="STAGING_QUALIFIED" if signoff else "CANDIDATE"
+        status="CANDIDATE"
     else:
         status="CANDIDATE"
     return {
