@@ -28,7 +28,7 @@ The manifest is recomputed against the persisted user job and graph. A changed s
 2. Context convergence produces a source-scoped, revised PCCF graph.
 3. Each renderer and the final Quality Agent checks their handoff against the **same** graph and user permission envelope.
 4. On planning or rendering failure, a sanitized `failure_origin` event records specialist, stage, attempt, typed error and graph revision **before** any LLM-led retry.
-5. The recovery LLM selects replan, rerender, authorized source request or abort; no action grants a new permission or changes source truth.
+5. The recovery LLM selects replan, rerender, authorized source request or abort. The runtime enforces failure ownership: malformed plans and contract/schema violations belong to the format planner; only typed missing-source evidence permits upstream backdelegation. No action grants permission or changes source truth.
 6. A source request is checked against the same typed source-obligation validator at recovery selection, feedback, context convergence and escalation; stale/output-only/malformed requests are rejected.
 7. Source changes invalidate downstream checkpoints. A resumed specialist must verify the latest handoff digest and content-addressed output receipt.
 8. Final output QA verifies the exact source-graph revision and actual artifact bytes. Numeric audit rejection and unobserved critical metrics emit bounded, privacy-safe cause events without raw model text or user data.
