@@ -22,8 +22,37 @@ MAX_METRICS=40
 NUMERIC=re.compile(r"(?<![\w.])-?\d+(?:,\d{3})*(?:\.\d+)?%?(?![\w.])")
 
 
+AUDIT_REASONS = frozenset({
+    "invalid_json_or_schema","unauthorized_metric_id","unobserved_excerpt",
+    "numeric_mismatch","unit_or_period_mismatch","nonfinite_value",
+    "missing_numeric_token","contradictory_observation","other_contract_rejection",
+})
+
+
 class ConsistencyViolation(ValueError):
-    """Quantitative claims across output artifacts do not reconcile."""
+    """Fail-closed quantitative gate with a non-sensitive diagnostic reason."""
+
+    def __init__(self, message: str, *, reason: str | None = None):
+        super().__init__(message)
+        if reason is not None:
+            if reason not in AUDIT_REASONS:
+                raise ValueError("Unapproved quantitative audit reason")
+            self.reason = reason
+
+
+def claim_audit_failure_category(exc: BaseException) -> str:
+    """Map only fixed validator messages, never provider/user text, to safe codes."""
+    if not isinstance(exc, ConsistencyViolation):
+        return "invalid_json_or_schema"
+    return {
+        "Model invented a critical metric identity": "unauthorized_metric_id",
+        "No observable artifact evidence for model claim": "unobserved_excerpt",
+        "Reported metric disagrees with verified source": "numeric_mismatch",
+        "Metric units or reporting scope drifted": "unit_or_period_mismatch",
+        "Claimed number is absent from cited artifact text": "missing_numeric_token",
+        "Contradictory duplicate metric observation": "contradictory_observation",
+        "Nonfinite quantitative claim": "nonfinite_value",
+    }.get(str(exc), "other_contract_rejection")
 
 
 def _number(value) -> Decimal:
@@ -208,22 +237,27 @@ async def audit_artifact_claims(path: Path,kind: str,graph: dict,
         "guess missing units, periods or currencies. No private reasoning. "
         "Return JSON EXACTLY: "
         '{"schema_version":1,"artifact_kind":"'+kind+
-        '","claims":[{"metric_id":"metric:comparison_total_first",'
-        '"value":"600","unit":"unspecified","period":"observed",'
-        '"observed_excerpt":"verbatim observed artifact excerpt"}],'
-        '"assessment":"brief reviewer coverage statement"}. '
-        "Only use the actual approved metric IDs and numerical values; do "
+        '","claims":[],"assessment":"Reviewer states which visible claims match the catalog."}. '
+        "The empty claims array is ONLY for artifacts lacking observable "
+        "catalog metrics; otherwise include complete objects with exactly "
+        "metric_id, value, unit, period and observed_excerpt. "
+        "Use approved catalog IDs and values, NEVER example IDs. Do "
         "not infer metrics from an unrelated number. "
         "\nCanonical checked metric catalog:\n"+
         json.dumps(list(catalog.values()),ensure_ascii=False)[:9000]+
         "\nActual inspected file content:\n"+source_text)
     try:
+        previous_reason = None
         for attempt in range(2):
             response=await generate_with_recovery(
                 client,role="work",model=model,timeout=85,
                 contents=prompt+(
-                    "\nPrior JSON invalid. Return only observable, source-exact "
-                    "claims; no unsupported IDs or quoted lines."
+                    "\nPrevious audit rejected by the validator ("+
+                    str(previous_reason or "invalid_json_or_schema")+
+                    "). Return only observable source-exact claims with "
+                    "approved IDs; never guess values, units or excerpts. "
+                    "If no canonical metric is visibly present, return "
+                    "claims:[], not a fabricated metric."
                     if attempt else ""),
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -234,9 +268,11 @@ async def audit_artifact_claims(path: Path,kind: str,graph: dict,
                 return validate_claim_report(
                     data,catalog=catalog,source_text=source_text,kind=kind)
             except (ValueError,TypeError,KeyError) as exc:
+                previous_reason=claim_audit_failure_category(exc)
                 if attempt:
                     raise ConsistencyViolation(
-                        "Model could not provide a trustworthy claim audit") from exc
+                        "Model could not provide a trustworthy claim audit",
+                        reason=previous_reason) from exc
     finally:
         if owned:
             await client.aio.aclose()
