@@ -564,13 +564,13 @@
     },
     {
       "path": "src/rizzler/work_execution_recovery.py",
-      "bytes": 8892,
-      "sha256": "089a02f89173ef4461c52eeb7ab7a5902602fd5dbb6676631c6bb44fa9c5e7c0"
+      "bytes": 10801,
+      "sha256": "91c628d3bbb001c1a6513e57a410a8c310c70e8bca455345187651113e785adf"
     },
     {
       "path": "src/rizzler/work_feedback.py",
-      "bytes": 13487,
-      "sha256": "86c4e0f4c6b318fcd36c262e662225a6f5c89e71288b54a5db149065590e8f20"
+      "bytes": 14833,
+      "sha256": "5371dffc27e0e63ba0af1e4410ac25ea35dcb82e7cb73bb58f94d21362d545ab"
     },
     {
       "path": "src/rizzler/work_formula.py",
@@ -654,8 +654,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 71273,
-      "sha256": "5707b01daf9ab93329e6d3aa5847b4f40834c7f86a0cf701046ee9e3568ada29"
+      "bytes": 71692,
+      "sha256": "a6a331706165179722398895a29e05c8384a52a1b30ef1f116abaef41afbde0f"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -909,8 +909,8 @@
     },
     {
       "path": "tests/test_v26_outcome_phases.py",
-      "bytes": 5636,
-      "sha256": "86ea9806149763073fe236abf7bf67801421c9a55148e15c4adfb9ba5d3527f7"
+      "bytes": 10837,
+      "sha256": "11a5dce6a78157dcf63268414190a3ded17eb73a603350fe274fb67805db2312"
     },
     {
       "path": "tests/test_v26_presentation_layout.py",
