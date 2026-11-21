@@ -32,6 +32,7 @@ V26_FLAGS={
     "RIZZLER_V26_CROSS_ARTIFACT_QA":"1",
 }
 TESTS=[
+    "test_v26_phase1_protocol.py",
     "test_v26_outcome_phases.py",
     "test_v26_context_fabric.py",
     "test_v26_context_brief_runtime.py",
