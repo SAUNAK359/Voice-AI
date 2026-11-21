@@ -13,6 +13,8 @@
 
 `work_phase1_protocol.py` defines the same source request contract for upstream and downstream producers. Every V26 backdelegation has an explicitly approved source-obligation ID, authorized recipient, bounded question and reason, and a boolean blocking state. Output-only quality, visualization, or deliverable requirements cannot be represented as missing source facts. Requests without valid references fail closed instead of automatically acquiring a fabricated or guessed ID.
 
+Research, SQL and orchestration run before the full proof graph exists. They are bound to an upstream source-authority receipt whose immutable goal digest is reconciled with the eventual PCCF graph. The source agents cannot independently redefine the user goal or authorized formats.
+
 Each output specialist receives an authoritative, immutable handoff manifest:
 - authenticated owner and job scope;
 - approved goal digest and unchanged user-authorized output formats;
