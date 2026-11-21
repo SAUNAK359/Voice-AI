@@ -57,16 +57,17 @@ class StreamIngestionTests(unittest.TestCase):
             path=Path(temp)/"large.part"
             size,digest=asyncio.run(spool_request(chunks(),path,maximum=HARD_LIMIT))
             self.assertGreater(size,8_000_000)
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),digest)
+            from rizzler.work_large_uploads import sha256_file
+            self.assertEqual(sha256_file(path),digest)
 
     def test_overlimit_stream_is_unlinked_before_registration(self):
         async def chunks():
-            yield b"x"*300
-            yield b"x"*300
+            yield b"x"*5_000_000
+            yield b"y"*4_000_001
         with TemporaryDirectory() as temp:
             path=Path(temp)/"over.part"
             with self.assertRaises(UploadTooLarge):
-                asyncio.run(spool_request(chunks(),path,maximum=8_000_000-1))
+                asyncio.run(spool_request(chunks(),path,maximum=8_000_000))
             self.assertFalse(path.exists())
 
     def test_exact_cap_rejects_oversized_disk_file_without_reading(self):
