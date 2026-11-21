@@ -362,12 +362,12 @@ class WorkStore:
             target.mkdir(parents=True, exist_ok=True, mode=0o700)
             for receipt in receipts:
                 p = storage / (receipt.kind + "." + receipt.kind)
-                if not p.is_file() or p.stat().st_size != receipt.byte_size or hashlib.sha256(p.read_bytes()).hexdigest()!=receipt.sha256:
+                if not p.is_file() or p.stat().st_size != receipt.byte_size or __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(p)!=receipt.sha256:
                     raise ValueError("Artifact bytes do not match receipt")
                 import shutil
                 temp = target / (receipt.name + "." + secrets.token_hex(8) + ".tmp")
                 shutil.copyfile(p, temp)
-                if hashlib.sha256(temp.read_bytes()).hexdigest()!=receipt.sha256:
+                if __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(temp)!=receipt.sha256:
                     temp.unlink(missing_ok=True)
                     raise ValueError("Artifact publish checksum mismatch")
                 temp.replace(target / receipt.name)
@@ -810,7 +810,7 @@ class WorkStore:
         if root not in candidate.parents or source.is_symlink() or not source.is_file():
             raise ValueError("Invalid isolated artifact staging path")
         if (source.stat().st_size != receipt.byte_size or
-                hashlib.sha256(source.read_bytes()).hexdigest() != receipt.sha256):
+                __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(source) != receipt.sha256):
             raise ValueError("Specialist staging checksum mismatch")
         with self._tx() as c:
             row = self._active(c, jid, worker, fence)
@@ -1031,7 +1031,7 @@ class WorkStore:
                     raise Missing("Artifact unavailable") from None
             if (not p.is_file() or
                     p.stat().st_size!=row["size"] or
-                    hashlib.sha256(p.read_bytes()).hexdigest()!=row["sha256"]):
+                    __import__('rizzler.work_large_uploads',fromlist=['sha256_file']).sha256_file(p)!=row["sha256"]):
                 raise Missing("Artifact integrity check failed")
             return p,dict(row)
 
