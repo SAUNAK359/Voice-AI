@@ -35,6 +35,10 @@ class V26LiveQualificationContractTests(unittest.TestCase):
         self.assertIn("RIZZLER_V26_CROSS_ARTIFACT_QA",code)
         self.assertIn("test_v26_stream_paid_submission.py",code)
         self.assertIn("BLOCKED_BY_PROVIDER_PREFLIGHT",code)
+        streamed=(ROOT/"scripts"/"qualify_v26_stream_paid.py").read_text()
+        self.assertIn('report["safe_review_events"]',streamed)
+        self.assertIn('"recovery_controller","cross_artifact_auditor"',streamed)
+        self.assertNotIn('event["payload"].get("prompt")',streamed)
         self.assertIn("paid.get(\"preflight\",{}).get(\"passed\") is True",code)
         for required in ("test_v26_cross_artifact_consistency.py",
                          "test_v26_final_release_gate.py",
