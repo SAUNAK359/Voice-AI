@@ -119,5 +119,96 @@ class OutcomePhaseSafetyTests(unittest.TestCase):
             self.assertFalse(foundation_enabled())
 
 
+
+    def test_recovery_contract_replays_real_missing_id_fails_before_dispatch(self):
+        from rizzler.work_execution_recovery import validate_recovery_decision
+        decision={
+            "action":"backdelegate",
+            "reason":"Independent source verification of observed quarterly units is required.",
+            "request":{
+                "recipient":"sql_analytics",
+                "question":"Verify actual synthetic quarterly import and export source units.",
+                "reason":"The downstream chart cannot assert unsupported currency units.",
+                "blocking":True}}
+        with patch.dict("os.environ",FLAGS,clear=True):
+            with self.assertRaises(ValueError):
+                validate_recovery_decision(
+                    decision,kind="pptx",permitted=frozenset({"sql_analytics"}),
+                    requirements=REQS)
+            corrected={**decision,"request":{**decision["request"],
+                                               "requirement_id":"g1"}}
+            approved=validate_recovery_decision(
+                corrected,kind="pptx",permitted=frozenset({"sql_analytics"}),
+                requirements=REQS)
+            self.assertEqual(approved["request"]["requirement_id"],"g1")
+            with self.assertRaises(ValueError):
+                validate_recovery_decision(
+                    {**decision,"request":{**decision["request"],
+                                            "requirement_id":"g2"}},
+                    kind="pptx",permitted=frozenset({"sql_analytics"}),
+                    requirements=REQS)
+            with self.assertRaises(ValueError):
+                validate_recovery_decision(
+                    {**decision,"request":{**decision["request"],
+                                            "requirement_id":"nonexistent"}},
+                    kind="pptx",permitted=frozenset({"sql_analytics"}),
+                    requirements=REQS)
+            with self.assertRaises(ValueError):
+                validate_recovery_decision(
+                    corrected,kind="pptx",permitted=frozenset(),
+                    requirements=REQS)
+            # Legacy unflagged task remains backwards-compatible.
+            legacy=validate_recovery_decision(
+                decision,kind="pptx",permitted=frozenset({"sql_analytics"}))
+            self.assertEqual(legacy["request"],decision["request"])
+
+    def test_backdelegation_requires_bound_source_before_emitting_gap(self):
+        from rizzler.work_execution_recovery import (
+            validate_recovery_decision,raise_verified_backdelegation)
+        from rizzler.work_feedback import EvidenceGap
+        request={"recipient":"sql_analytics",
+                 "question":"Check the source units and time scope in the dataset.",
+                 "reason":"A PowerPoint visualization requires independent definitions.",
+                 "blocking":True,"requirement_id":"g1"}
+        decision={"action":"backdelegate",
+                  "reason":"The chart's source definitions must be verified.",
+                  "request":request}
+        with patch.dict("os.environ",FLAGS,clear=True):
+            validate_recovery_decision(
+                decision,kind="pptx",permitted=frozenset({"sql_analytics"}),
+                requirements=REQS)
+            with self.assertRaises(EvidenceGap) as captured:
+                raise_verified_backdelegation(
+                    decision,specialist="powerpoint",
+                    permitted=frozenset({"sql_analytics"}),requirements=REQS)
+            self.assertEqual(captured.exception.requests,[request])
+            with self.assertRaises(ValueError):
+                raise_verified_backdelegation(
+                    {**decision,"request":{**request,"requirement_id":"g3"}},
+                    specialist="powerpoint",
+                    permitted=frozenset({"sql_analytics"}),requirements=REQS)
+
+    def test_rendered_review_passes_same_v26_schema_as_context_supervisor(self):
+        from rizzler.work_feedback import validate_specialist_feedback
+        request={"recipient":"research",
+                 "question":"Verify original support for the stated numerical period.",
+                 "reason":"Period evidence is necessary for accurate chart attribution.",
+                 "blocking":True,"requirement_id":"g1"}
+        raw={"specialist":"powerpoint","readiness":"needs_evidence",
+             "requests":[request],
+             "assessment":"Specific source verification is needed before publishing."}
+        with patch.dict("os.environ",FLAGS,clear=True):
+            reviewed=validate_specialist_feedback(
+                raw,specialist="powerpoint",
+                permitted=frozenset({"research"}),requirements=REQS)
+            self.assertEqual(validate_evidence_request(
+                reviewed["requests"][0],REQS),request)
+            invalid={**raw,"requests":[{k:v for k,v in request.items()
+                                        if k!="requirement_id"}]}
+            with self.assertRaises(ValueError):
+                validate_specialist_feedback(
+                    invalid,specialist="powerpoint",
+                    permitted=frozenset({"research"}),requirements=REQS)
+
 if __name__=="__main__":
     unittest.main()
