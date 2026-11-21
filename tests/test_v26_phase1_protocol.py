@@ -22,7 +22,8 @@ from rizzler.work_context_fabric import (
 from rizzler.work_phase1_protocol import (
     validate_task_handoff, assert_current_handoff,
     validate_source_request,source_obligations,
-    HandoffContractError)
+    HandoffContractError,immutable_task_digest,
+    validate_upstream_handoff)
 from rizzler.work_execution_recovery import (
     validate_recovery_decision,raise_verified_backdelegation)
 from rizzler.work_feedback import EvidenceGap,validate_specialist_feedback
@@ -69,6 +70,29 @@ class Phase1CrossAgentContractTests(unittest.TestCase):
             "reason":"Source-defined units must be correct before publishing a chart.",
             "blocking":True,
             "requirement_id":"g1"}
+
+    def test_upstream_and_downstream_share_the_same_goal_authority(self):
+        self.assertEqual(immutable_task_digest(self.payload),
+                         self.graph["immutable_goal_digest"])
+        for specialist in ("orchestrator",):
+            packet=validate_upstream_handoff(
+                payload=self.payload,owner=self.owner,
+                job_id=self.job_id,specialist=specialist)
+            self.assertEqual(packet["immutable_goal_digest"],
+                             self.graph["immutable_goal_digest"])
+            self.assertEqual(packet["owner_scope"],self.owner)
+        with self.assertRaises(HandoffContractError):
+            validate_upstream_handoff(
+                payload=self.payload,owner=self.owner,
+                job_id=self.job_id,specialist="research")
+        with self.assertRaises(HandoffContractError):
+            validate_upstream_handoff(
+                payload=self.payload,owner=self.owner,
+                job_id=self.job_id,specialist="unapproved")
+        with self.assertRaises(HandoffContractError):
+            validate_upstream_handoff(
+                payload={**self.payload,"deliverables":[]},
+                owner=self.owner,job_id=self.job_id,specialist="orchestrator")
 
     def test_same_proof_and_immutable_scope_reaches_every_output_specialist(self):
         validate_fabric(self.graph)
@@ -287,11 +311,18 @@ class Phase1ActualWorkStoreIntegration(unittest.IsolatedAsyncioTestCase):
             handoffs=[x for x in events if x["agent"]=="context_handoff"]
             self.assertEqual(
                 {x["payload"]["specialist"] for x in handoffs},
-                {"pdf_visual","quality"})
+                {"orchestrator","pdf_visual","quality"})
+            render_handoffs=[x for x in handoffs
+                             if x["payload"]["specialist"]!="orchestrator"]
             self.assertEqual(
-                len({x["payload"]["revision"] for x in handoffs}),1)
-            for record in handoffs:
+                len({x["payload"]["revision"] for x in render_handoffs}),1)
+            for record in render_handoffs:
                 self.assertEqual(len(record["payload"]["handoff_sha256"]),64)
+            upstream=next(x["payload"] for x in handoffs
+                          if x["payload"]["specialist"]=="orchestrator")
+            graph=store.knowledge_checkpoint(owner,job["id"])
+            self.assertEqual(upstream["immutable_goal_digest"],
+                             graph["immutable_goal_digest"])
             completed=store.agent_steps(owner,job["id"])
             for row in completed:
                 self.assertEqual(row["status"],"completed")
