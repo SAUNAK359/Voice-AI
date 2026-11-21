@@ -189,8 +189,8 @@
     },
     {
       "path": "docs/V26_PHASE1_ARCHITECTURAL_P0.md",
-      "bytes": 5033,
-      "sha256": "6406e17c43097df9a60d75d19780d6dc740da49ec3bc6b8cf436bb0f6b4b9e6b"
+      "bytes": 5212,
+      "sha256": "0328619ae450b742789c5acacb01c54b2b9623a6f95eea72bea5e6ae18cbe214"
     },
     {
       "path": "docs/V26_STREAMED_INGESTION_ROLLOUT.md",
@@ -569,8 +569,8 @@
     },
     {
       "path": "src/rizzler/work_execution_recovery.py",
-      "bytes": 11271,
-      "sha256": "9cb2a7122af336b19a19e4301d31d540cecc0a2efdb3d7da404e621df6f67266"
+      "bytes": 12801,
+      "sha256": "f70500a465af88e9da6fc2490eedac3705917da046dbb464a12828b05203defb"
     },
     {
       "path": "src/rizzler/work_feedback.py",
@@ -924,8 +924,8 @@
     },
     {
       "path": "tests/test_v26_phase1_protocol.py",
-      "bytes": 9561,
-      "sha256": "6baf4059f603ad88ae5f6ce96665beb1f0b7de870cd2d690bb0986854dabf1da"
+      "bytes": 11300,
+      "sha256": "c51ae3dada28dd6bf1d52bd03e577a1471f516e633d70ca97da2474b81dfb3bd"
     },
     {
       "path": "tests/test_v26_presentation_layout.py",
