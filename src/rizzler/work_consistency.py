@@ -246,10 +246,11 @@ def reconcile_claim_reports(reports: dict[str,dict]) -> dict:
             raise ConsistencyViolation("Unverified artifact claim report")
         for key in report.get("verified_ids",[]):
             checked.setdefault(key,[]).append(kind)
-    return {"passed":True,
+    missing=sorted(set().union(
+        *(set(item.get("unobserved_critical_ids",[]))
+          for item in reports.values()))-set(checked))
+    return {"passed":not missing,
             "verified_metric_appearances":checked,
-            "missing_required_metrics":sorted(set().union(
-                *(set(item.get("unobserved_critical_ids",[]))
-                  for item in reports.values()))-set(checked)),
+            "missing_required_metrics":missing,
             "limitations":"Cross-format consistency is bounded by the actual "
                 "source-backed metrics that were extracted and verified."}
