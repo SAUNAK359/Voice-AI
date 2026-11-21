@@ -57,8 +57,9 @@ def validate_recovery_decision(raw: object, *, kind: str,
                 or request["blocking"] is not True):
             raise ValueError("Unapproved backdelegated research or SQL request")
         if source_ids is not None:
-            from .work_outcome_phases import validate_evidence_request
-            validate_evidence_request(request,requirements)
+            from .work_phase1_protocol import validate_source_request
+            validate_source_request(
+                request,requirements=requirements,permitted=permitted)
     elif request is not None:
         raise ValueError("Nondelegating recovery cannot request new access")
     return raw
@@ -209,8 +210,9 @@ def raise_verified_backdelegation(decision: dict, *, specialist: str,
         # General context feedback may discard output-only asks, but a
         # post-failure recovery backdelegation MUST reject them explicitly.
         # A dropped request cannot be promoted to an authorized EvidenceGap.
-        from .work_outcome_phases import validate_evidence_request
-        validate_evidence_request(request,requirements)
+        from .work_phase1_protocol import validate_source_request
+        validate_source_request(
+            request,requirements=requirements,permitted=permitted)
     validate_specialist_feedback(
         {"specialist":specialist,"readiness":"needs_evidence",
          "requests":[request],
