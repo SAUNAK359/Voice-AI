@@ -62,6 +62,17 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         # to define owner, output scope or revision.
         from .v26_flags import foundation_enabled as handoff_enabled
         if handoff_enabled() and spec.name in (
+                "research","sql_analytics","orchestrator"):
+            from .work_phase1_protocol import validate_upstream_handoff
+            authority=validate_upstream_handoff(
+                payload=payload,owner=owner,job_id=jid,
+                specialist=spec.name)
+            context.setdefault("_phase1_upstream",{})[spec.name]=authority
+            store.publish_cognition(jid,worker_id,fence,
+                "context_handoff","verification",{
+                    "specialist":spec.name,"stage":"source",
+                    "immutable_goal_digest":authority["immutable_goal_digest"]})
+        if handoff_enabled() and spec.name in (
                 "powerpoint","word","excel","pdf_visual","quality"):
             from .work_phase1_protocol import validate_task_handoff
             authoritative=context.get("work_graph")
@@ -425,6 +436,12 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                     unknowns=goal.get("unknowns") or [],
                     dataset_summary=context.get("summary"),
                     comparison_receipt=context.get("v26_comparison_receipt"))
+                if any(
+                        token["immutable_goal_digest"] !=
+                        graph_v2["immutable_goal_digest"]
+                        for token in context.get("_phase1_upstream",{}).values()):
+                    raise ValueError(
+                        "Source specialist authority disagrees with generated context")
                 previous=store.knowledge_checkpoint(owner,jid)
                 if previous is not None and (
                         previous["context_revision"]==graph_v2["context_revision"]):
