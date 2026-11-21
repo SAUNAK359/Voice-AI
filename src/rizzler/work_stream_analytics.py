@@ -272,3 +272,97 @@ def verify_profile_workbook(path: Path, summary: dict):
         wb.close()
     return {"verified_full_source_metrics": len(expected_rows),
             "coverage": "full_source_derived_profile_not_raw_rows"}
+
+
+def render_profile_workbook(path: Path, summary: dict, title: str,
+                            sections, sources: list[str]):
+    """Native editable profile; label that it is NOT all raw rows.
+
+    Every displayed metric is source-calculated. No automatically-generated
+    formulas are claimed to recalculate after a source edit.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from .work_skills import csv_escape
+
+    header, records = summarized_artifact_table(summary)
+    wb = Workbook()
+    overview = wb.active
+    overview.title = "Summary"
+    overview.append(["RIZZLER | FULL-SOURCE ANALYTICAL PROFILE"])
+    overview.append([None])
+    for heading, body in sections:
+        overview.append([csv_escape(heading), csv_escape(body)])
+    overview.append(["Scope notice", "Data sheet contains source-derived aggregates only, NOT original rows."])
+    overview.append(["Original row count", summary["rows"]])
+    overview.append(["Source digest (SHA-256)", summary["source_sha256"]])
+    overview.append(["Source coverage", summary["source_coverage"]])
+    overview.append(["Limitations", "; ".join(summary["limitations"])])
+    data = wb.create_sheet("Data")
+    data.append(header)
+    for row in records:
+        data.append([csv_escape(row[0]), int(row[1]), float(row[2]),
+                     float(row[3]), float(row[4])])
+    data.freeze_panes = "B2"
+    data.auto_filter.ref = data.dimensions
+    if sources:
+        sheet = wb.create_sheet("Sources")
+        for source in sources:
+            sheet.append([csv_escape(source)])
+    receipt = wb.create_sheet("Evidence")
+    for row in (
+        ("Record type", "full_source_derived_profile"),
+        ("Original file SHA-256", summary["source_sha256"]),
+        ("Original byte count", summary["source_bytes"]),
+        ("Full source rows", summary["rows"]),
+        ("Full source columns", summary["columns"]),
+        ("Profile rows", len(records)),
+        ("Distinct count status", "bounded fingerprints, not independently exact"),
+        ("Live recalculation", "not supported: source data not embedded"),
+    ):
+        receipt.append(row)
+    for sheet in wb:
+        sheet.sheet_view.showGridLines = False
+        sheet.column_dimensions["A"].width = 40
+        sheet.column_dimensions["B"].width = 65 if sheet.title == "Summary" else 27
+        for cell in sheet[1]:
+            cell.font = Font(color="FFFFFF", bold=True)
+            cell.fill = PatternFill("solid", fgColor="19324C")
+            cell.alignment = Alignment(wrap_text=True)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+    wb.close()
+
+
+def verify_profile_workbook(path: Path, summary: dict):
+    """Reopen published numeric cells and reconcile with the full source."""
+    from openpyxl import load_workbook
+    from .work_skills import csv_escape
+    header, expected_rows = summarized_artifact_table(summary)
+    workbook = load_workbook(path, read_only=True, data_only=False)
+    try:
+        if not {"Summary", "Data", "Evidence"}.issubset(workbook.sheetnames):
+            raise ValueError("Profile workbook missing required traceable sheets")
+        data = workbook["Data"]
+        rows = list(data.iter_rows(values_only=True))
+        if not rows or list(rows[0]) != header or len(rows) - 1 != len(expected_rows):
+            raise ValueError("Profile workbook schema or metric count mismatch")
+        for observed, expected in zip(rows[1:], expected_rows):
+            if observed[0] != csv_escape(expected[0]):
+                raise ValueError("Profile metric identity changed")
+            for column in range(1, 5):
+                if observed[column] is None or Decimal(str(observed[column])) != Decimal(expected[column]):
+                    raise ValueError("Profile metric value disagrees with source oracle")
+        evidence = dict(workbook["Evidence"].values)
+        if (evidence.get("Original file SHA-256") != summary["source_sha256"] or
+                evidence.get("Full source rows") != summary["rows"] or
+                evidence.get("Full source columns") != summary["columns"] or
+                evidence.get("Record type") != "full_source_derived_profile"):
+            raise ValueError("Profile workbook provenance does not reconcile")
+    finally:
+        workbook.close()
+    return {"passed": True, "verified_full_source_metrics": len(expected_rows),
+            "source_sha256": summary["source_sha256"],
+            "scope": "full_source_derived_profile_not_original_rows"}
