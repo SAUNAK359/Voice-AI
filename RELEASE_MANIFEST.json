@@ -249,8 +249,8 @@
     },
     {
       "path": "notebooks/Rizzler_V26_Real_Gemini_Qualification_Kaggle.ipynb",
-      "bytes": 11285,
-      "sha256": "9bf183b3043d496f9d8bd934a015f7e1a980e4974c14aa619bf4bd66e79a43b3"
+      "bytes": 12755,
+      "sha256": "f3ba877461bb10a942a75a7a74693ffdca0aec54d820f3a990b3a95d0fa38d7a"
     },
     {
       "path": "notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb",
@@ -299,8 +299,8 @@
     },
     {
       "path": "scripts/qualify_v25_live.py",
-      "bytes": 16213,
-      "sha256": "b547d4e3b7809a8b0a91a017af64705c727a058d4646d756dd7c8cf474d04f83"
+      "bytes": 17449,
+      "sha256": "107b39135a3e0e875bf661dd7e5e33adc9a58dd5dda97ac2d2f364b94f4e6a28"
     },
     {
       "path": "scripts/qualify_v26_large_data.py",
@@ -309,13 +309,13 @@
     },
     {
       "path": "scripts/qualify_v26_live.py",
-      "bytes": 7016,
-      "sha256": "1c0129ee8457d2a08fe84154572662a09c08bc13bd4cf750c8710f6eb6a75505"
+      "bytes": 7561,
+      "sha256": "7f574159236975b67d80a3779aea0dc147ee44f986c39cb3d4fa9d802242e653"
     },
     {
       "path": "scripts/qualify_v26_stream_paid.py",
-      "bytes": 8217,
-      "sha256": "e5290c70d9036826bc7ce74ce9292ea5ba6605b33f637b5270005e068d17704d"
+      "bytes": 8683,
+      "sha256": "ac326d3a8fcebd2dc3bb860438d4bfbb69bfe762a0016fed813d9266a674b798"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -904,8 +904,8 @@
     },
     {
       "path": "tests/test_v26_live_qualification.py",
-      "bytes": 3853,
-      "sha256": "7135aeb7ba44e0568270122926918b9bd0fb39cedffaba216ebf715b8051e30a"
+      "bytes": 4059,
+      "sha256": "fa100f970d654e22945254c1b385524ee8021baf531b69eb222fe25cad79c99d"
     },
     {
       "path": "tests/test_v26_outcome_phases.py",
@@ -931,6 +931,11 @@
       "path": "tests/test_v26_stream_analytics.py",
       "bytes": 7453,
       "sha256": "1f5a65bbc510c996edc9f0a5e2df5ec7e99d0c321b5aeaf71bd553ea0af844e6"
+    },
+    {
+      "path": "tests/test_v26_stream_paid_submission.py",
+      "sha256": "c85b6c7271fb01eb28264722e27ed7440e8f0f3770336cf836c6cb76fa9a3e14",
+      "bytes": 2808
     },
     {
       "path": "tests/test_v26_visual_critic.py",
