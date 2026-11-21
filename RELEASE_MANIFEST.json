@@ -299,8 +299,8 @@
     },
     {
       "path": "scripts/qualify_v26_large_data.py",
-      "bytes": 4776,
-      "sha256": "275f0f7d88d3ee4ff71580765af46b8b14ef38893efae1803a1c8f65f378431d"
+      "bytes": 5164,
+      "sha256": "43217cf7cd346fab8eabab8976a151c33757ec48b1e7d2006023c7bfb3a5b800"
     },
     {
       "path": "scripts/qualify_v26_live.py",
@@ -644,8 +644,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 69630,
-      "sha256": "326ba37efa432893e669f94f555173922cba7a31c37f3750ab0cf0cd46f6af25"
+      "bytes": 69879,
+      "sha256": "092bf15c6ec9dc836f7a372a4baa2d8c20224940bf17fe5713f174f21abaec0b"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
