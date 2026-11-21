@@ -269,13 +269,25 @@ async def explore_dataset(source, objective: str, *, model: str,
     from .work_sql import analyze_sql
     from .work_agents import read_skill
     from .cognitive_provider import generate_with_recovery
+    from .v26_flags import enabled as v26_enabled
     from google import genai
     from google.genai import types
-    header,rows=await asyncio.to_thread(read_dataset,source)
-    base=await asyncio.to_thread(analyze_sql,source)
-    profile=dataset_intelligence(header,rows)
+    streamed=v26_enabled("RIZZLER_V26_STREAM_ANALYTICS")
+    if streamed:
+        from .work_stream_analytics import StreamingSQLDataset
+        sandbox=await asyncio.to_thread(StreamingSQLDataset,source)
+        base={"summary":sandbox.summary,
+              "source_columns":sandbox.header,
+              "column_aliases":[f"c{i}" for i in range(len(sandbox.header))],
+              "sql_verified_metrics":{},
+              "execution":"sqlite_disk_streaming_full_source"}
+        profile=sandbox.profile
+    else:
+        header,rows=await asyncio.to_thread(read_dataset,source)
+        base=await asyncio.to_thread(analyze_sql,source)
+        profile=dataset_intelligence(header,rows)
+        sandbox=SQLResearchSandbox(header,rows)
     client=genai.Client(api_key=api_key)
-    sandbox=SQLResearchSandbox(header,rows)
     skill=read_skill("sql_analytics")[:6500]
     queries=[]
     waves_run=0
@@ -343,7 +355,8 @@ async def explore_dataset(source, objective: str, *, model: str,
             gaps=plan["next_gaps"]
             for step in plan["queries"][:MAX_QUERIES-len(queries)]:
                 try:
-                    outcome=sandbox.query(step["sql"])
+                    outcome=(await asyncio.to_thread(sandbox.query,step["sql"])
+                             if streamed else sandbox.query(step["sql"]))
                     queries.append({**step,"status":"ok","result":outcome})
                 except (ValueError,sqlite3.Error) as exc:
                     queries.append({**step,"status":"rejected",
@@ -398,5 +411,5 @@ async def explore_dataset(source, objective: str, *, model: str,
                 "source":"owner_uploaded_dataset_only"}}
         return result
     finally:
-        sandbox.close()
+        await asyncio.to_thread(sandbox.close) if streamed else sandbox.close()
         await client.aio.aclose()
