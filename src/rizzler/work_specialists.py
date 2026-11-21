@@ -54,7 +54,8 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
     context = {"objective": payload["objective"], "sources": [], "text": None,
                "summary": None, "sql_exploration": None, "sql_queries": [],
                "goal_contract": None, "goal_brief": "", "goal_review": None,
-               "receipts": {}, "uploaded": [], "preflight": {}}
+               "receipts": {}, "uploaded": [], "preflight": {},
+               "owner_scope":owner,"job_scope":jid}
 
     async def run_agent(spec):
         # Other specialists' committed findings are visible before this task
