@@ -32,6 +32,7 @@ class V26LiveQualificationContractTests(unittest.TestCase):
         self.assertIn('report["streamed_paid_passed"]',code)
         self.assertIn('report["offline_passed"] and report["live_passed"] and report["streamed_paid_passed"]',code)
         self.assertIn("from qualify_v26_stream_paid import run_streamed_paid",code)
+        self.assertIn("RIZZLER_V26_CROSS_ARTIFACT_QA",code)
         for required in ("test_v26_cross_artifact_consistency.py",
                          "test_v26_final_release_gate.py",
                          "test_v26_large_uploads.py",
@@ -59,7 +60,12 @@ class V26LiveQualificationContractTests(unittest.TestCase):
                 "libreoffice-writer","libreoffice-impress","libreoffice-calc"):
             self.assertIn(required,joined)
         self.assertIn("qualify_v26_live.py",joined)
-        self.assertIn("Rizzler_V26_Qualification_",joined)
+        self.assertIn("Rizzler_V26_Audit_",joined)
+        self.assertIn("feature/v26-final-integration-gates",joined)
+        self.assertNotIn("feature/v24-context-convergence-and-safe-repair",joined)
+        self.assertIn("verify_release.py",joined)
+        self.assertIn("qualify_v26_large_data.py",joined)
+        self.assertIn("evaluate_v26_release.py",joined)
         self.assertNotIn("AIza",joined)
 
     def test_diagnostics_bundle_does_not_export_private_workstore(self):
