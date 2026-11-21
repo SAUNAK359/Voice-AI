@@ -805,7 +805,9 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             if not isinstance(graph,dict):
                 raise ConsistencyViolation("No accepted owner-scoped V26 context")
             cfg=Settings.from_env()
-            supported=[r for r in receipts if r.kind in (
+            # WorkContext.receipts is keyed by format, so iterating the map
+            # returns strings. Audit the verified receipt objects, never keys.
+            supported=[r for r in receipts.values() if r.kind in (
                 "pptx","docx","pdf","xlsx")]
             sem=asyncio.Semaphore(2)
             async def audit_receipt(receipt):
