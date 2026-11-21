@@ -130,6 +130,25 @@ class StreamedAnalyticsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify_profile_workbook(workbook,summary)
 
+    def test_private_sql_groups_and_string_aggregation_are_rejected(self):
+        with TemporaryDirectory() as temp:
+            source=Path(temp)/"data.csv"
+            source.write_text(
+                "category,value\\nA,1\\nA,2\\nB,3\\nB,4\\nB,5\\n",encoding="utf-8")
+            sandbox=StreamingSQLDataset(source)
+            try:
+                with self.assertRaises((ValueError,__import__("sqlite3").DatabaseError)):
+                    sandbox.query(
+                        "SELECT c0, COUNT(*) AS group_count FROM dataset GROUP BY c0")
+                with self.assertRaises((ValueError,__import__("sqlite3").DatabaseError)):
+                    sandbox.query(
+                        "SELECT GROUP_CONCAT(c0),COUNT(*) FROM dataset")
+                allowed=sandbox.query(
+                    "SELECT COUNT(*) AS observations FROM dataset")
+                self.assertEqual(allowed["rows"],[[5]])
+            finally:
+                sandbox.close()
+
     def test_bounded_number_of_rows_is_fail_closed(self):
         with TemporaryDirectory() as temp:
             source=Path(temp)/"data.csv"
