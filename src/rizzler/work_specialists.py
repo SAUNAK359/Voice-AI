@@ -847,11 +847,20 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                             model=cfg.gemini_model,api_key=cfg.gemini_api_key)
                     except ConsistencyViolation as exc:
                         from .work_consistency import claim_audit_failure_category
+                        category=claim_audit_failure_category(exc)
                         store.publish_cognition(
                             jid,worker_id,fence,"cross_artifact_auditor","gap",{
                                 "status":"source_bound_audit_rejected",
                                 "artifact_kind":receipt.kind,
-                                "category":claim_audit_failure_category(exc)})
+                                "category":category})
+                        store.publish_cognition(
+                            jid,worker_id,fence,"failure_origin","gap",{
+                                "specialist":"quality",
+                                "artifact_kind":receipt.kind,
+                                "stage":"cross_artifact_audit",
+                                "error_code":"cross_artifact_metric_consistency_failed",
+                                "reason":category,
+                                "source_revision":graph["context_revision"]})
                         raise
                     return receipt.kind,review
             checked=await asyncio.gather(
@@ -863,7 +872,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     jid,worker_id,fence,"cross_artifact_auditor","gap",{
                         "status":"critical_numeric_claim_missing",
                         "missing_metric_count":
-                            len(consistency["missing_required_metrics"])})
+                            len(consistency["missing_required_metrics"]),
+                        "missing_metric_fingerprints":[
+                            __import__("hashlib").sha256(
+                                key.encode("utf-8")).hexdigest()[:16]
+                            for key in consistency["missing_required_metrics"][:24]]})
+                store.publish_cognition(
+                    jid,worker_id,fence,"failure_origin","gap",{
+                        "specialist":"quality",
+                        "stage":"cross_artifact_reconciliation",
+                        "error_code":"cross_artifact_metric_consistency_failed",
+                        "reason":"unobserved_critical_metric",
+                        "source_revision":graph["context_revision"]})
                 raise ConsistencyViolation(
                     "Critical source-computed metrics are absent from all output artifacts")
             detailed_qa["cross_artifact_consistency"]=consistency
