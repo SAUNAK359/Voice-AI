@@ -22,11 +22,32 @@ class RecoveryExhausted(ValueError):
 
 def validate_recovery_decision(raw: object, *, kind: str,
                                permitted: frozenset[str],
-                               requirements: list[dict] | None = None) -> dict:
+                               requirements: list[dict] | None = None,
+                               diagnostic: dict | None = None) -> dict:
     if kind not in FORMATS or not isinstance(raw,dict) or set(raw)!={
             "action","reason","request"}:
         raise ValueError("Unknown recovery decision schema")
     action=raw["action"]
+    if diagnostic is not None:
+        # Incompatible schemas and malformed storyboards are defects owned
+        # by the output planner. Research cannot repair the planner contract.
+        # Conversely, only a typed evidence gap justifies source backdelegation
+        # from a failed render; never infer one from generic ValueError.
+        if (not isinstance(diagnostic,dict)
+                or diagnostic.get("kind")!=kind
+                or diagnostic.get("stage") not in ("planning","render_quality")
+                or not isinstance(diagnostic.get("error_code"),str)):
+            raise ValueError("Invalid recovery failure ownership diagnostic")
+        code=diagnostic["error_code"]
+        structural=(code in (
+            "contract_invalid","schema_invalid",
+            "incremental_component_plan_invalid")
+            or code.startswith("powerpoint_"))
+        if (action=="backdelegate" and
+                (structural or
+                 code not in ("evidence_gap","source_evidence_missing"))):
+            raise ValueError(
+                "Only typed missing source evidence may trigger backdelegation")
     if (action not in ACTIONS or
             not isinstance(raw["reason"],str)
             or not 15<=len(raw["reason"].strip())<=500):
@@ -116,6 +137,10 @@ async def select_recovery(*, objective: str, kind: str,
         "artifact_kind":kind,
         "error":diagnostic,
         "past_recovery_attempts":history,
+        "ownership_policy":"Malformed output plans and schema errors must "
+            "be repaired by replanning that format, never by upstream research. "
+            "Backdelegation is permitted ONLY for typed source evidence gaps. "
+            "If repair cannot pass, abort without inventing missing evidence.",
         "source_section_count":len(ir.sections),
         "approved_source_count":len(ir.sources),
         "source_section_titles":[x[0][:130] for x in ir.sections[:32]],
@@ -179,7 +204,7 @@ async def select_recovery(*, objective: str, kind: str,
                     getattr(response,"text","") or "",max_bytes=9000)
                 return validate_recovery_decision(
                     raw,kind=kind,permitted=permitted,
-                    requirements=requirements)
+                    requirements=requirements,diagnostic=diagnostic)
             except (ValueError,TypeError,KeyError):
                 continue
         raise RecoveryExhausted("Model failed to provide an authorized recovery action")
