@@ -85,12 +85,15 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         # Resume must never deliver a file built from older evidence.
         if (saved is not None and spec.name in (
                 "powerpoint", "word", "excel", "pdf_visual", "quality")
-                and context.get("context_package") is not None
-                and (saved.get("context_revision") !=
-                     context["context_package"]["revision"]
-                     or (spec.name != "quality" and
-                         saved.get("artifact_ir_sha256") !=
-                         context["artifact_ir"].sha256))):
+                and ((spec.name in context.get("_phase1_handoffs",{})
+                      and saved.get("phase1_handoff_sha256") !=
+                      context["_phase1_handoffs"][spec.name]["handoff_sha256"])
+                     or (context.get("context_package") is not None
+                         and (saved.get("context_revision") !=
+                              context["context_package"]["revision"]
+                              or (spec.name != "quality" and
+                                  saved.get("artifact_ir_sha256") !=
+                                  context["artifact_ir"].sha256))))):
             store.reopen_agents(jid,worker_id,fence,[spec.name])
             saved = None
         if saved is not None:
@@ -870,6 +873,11 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     "verified_metric_count":
                         len(consistency["verified_metric_appearances"])})
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
+                "phase1_handoff_sha256":(
+                    context.get("_phase1_handoffs",{}).get(
+                        "quality") or {}).get("handoff_sha256"),
+                "context_graph_revision":(
+                    context.get("work_graph") or {}).get("context_revision"),
                 "context_revision": (context.get("context_package") or {}).get("revision"),
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
                 "artifact_ir_sha256": context["artifact_ir"].sha256,
@@ -1296,5 +1304,10 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         receipts.append(receipt)
     return {"receipts": [asdict(r) for r in receipts],
             "inspections": inspections, "agent": name, "requested": requested,
+            "phase1_handoff_sha256":(
+                context.get("_phase1_handoffs",{}).get(
+                    name) or {}).get("handoff_sha256"),
+            "context_graph_revision":(
+                context.get("work_graph") or {}).get("context_revision"),
             "context_revision": (context.get("context_package") or {}).get("revision"),
             "artifact_ir_sha256": context["artifact_ir"].sha256}
