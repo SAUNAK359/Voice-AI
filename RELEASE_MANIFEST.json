@@ -884,8 +884,8 @@
     },
     {
       "path": "tests/test_v26_cross_artifact_consistency.py",
-      "bytes": 9503,
-      "sha256": "fc7ac2c379a871ad75924a754444bc7c8774621756a4a2de34b817e8bdfdbf05"
+      "bytes": 9474,
+      "sha256": "e57bc7a4b6aa620c510d96269a79d92277b167d3a3749b15d309bc26757105de"
     },
     {
       "path": "tests/test_v26_editorial_strategy.py",
