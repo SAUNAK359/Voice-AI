@@ -1131,12 +1131,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 cfg=Settings.from_env()
                 diagnostic=recovery_diagnostic(
                     exc,stage=phase,kind=kind,attempt=attempt_no)
+                from .v26_flags import enabled as recovery_v26_enabled
+                recovery_requirements=(
+                    (context.get("goal_contract") or {}).get("requirements") or []
+                    if recovery_v26_enabled("RIZZLER_V26_OUTCOME_PHASES")
+                    else None)
                 try:
                     decision=await select_recovery(
                         objective=payload["objective"],kind=kind,
                         specialist=name,diagnostic=diagnostic,
                         history=history,ir=ir,model=cfg.gemini_model,
-                        api_key=cfg.gemini_api_key,permitted=permitted)
+                        api_key=cfg.gemini_api_key,permitted=permitted,
+                        requirements=recovery_requirements)
                     enforce_bounded_recovery(
                         history,decision,max_attempts=3)
                 except Exception as decision_error:
@@ -1159,7 +1165,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                         "action":action,"attempt":len(history)})
                 if action=="backdelegate":
                     raise_verified_backdelegation(
-                        decision,specialist=name,permitted=permitted)
+                        decision,specialist=name,permitted=permitted,
+                        requirements=recovery_requirements)
                 if action=="abort":
                     raise RecoveryExhausted(
                         "Format specialist refused unsafe recovery") from exc
