@@ -406,7 +406,8 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                         "method":"source_bound_two_series",
                         "status":"not_relevant_to_user_goal"})
             context["_v26_method_attempted"]=True
-        if foundation_enabled() and renderers.intersection(wave):
+        if foundation_enabled() and (renderers.intersection(wave) or
+                                     "quality" in wave):
             # Build the owner-scoped proof fabric AFTER context convergence.
             # A source delta regenerates ArtifactIR and invalidates earlier views.
             from .work_context_fabric import migrate_v1
