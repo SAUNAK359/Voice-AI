@@ -74,6 +74,21 @@ def snapshot_context(payload: dict, context: dict, *, focus: tuple[str, ...]) ->
         "prior_gap_status": context.get("context_gaps", [])[-6:],
         "user_clarifications": context.get("user_answers", [])[-9:],
     }
+    # V26 proof-carrying context is an extra validated, role-scoped layer.
+    # Legacy report prose remains unverified until factual source evidence is
+    # independently promoted. Rebuild on every new upstream revision.
+    from .v23_flags import enabled as capability_enabled
+    if capability_enabled("RIZZLER_V26_CONTEXT_FABRIC") and (
+            context.get("owner_scope") and context.get("job_scope")):
+        from .work_context_adapter import legacy_context_to_fabric
+        graph=legacy_context_to_fabric(
+            owner=context["owner_scope"],job_id=context["job_scope"],
+            payload=payload,ir=ir,summary=summary,
+            goal_contract=goal)
+        context["knowledge_graph"]=graph
+        package["knowledge_graph_revision"]=graph["revision"]
+        package["knowledge_graph_schema"]=2
+        package["knowledge_nodes"]=len(graph["nodes"])
     package["revision"] = _stamp(package)
     return package
 
@@ -553,11 +568,34 @@ async def converge_context(context: dict, *, payload: dict,
             await client.aio.aclose()
 
 
-def context_brief(context: dict, *, max_chars: int = 2200) -> str:
+def context_brief(context: dict, *, max_chars: int = 2200,
+                  recipient: str = "powerpoint") -> str:
     """Specialist-specific view of the versioned, shared verified task context."""
     package = context.get("context_package")
     if not isinstance(package, dict):
         return ""
+    from .v23_flags import enabled as capability_enabled
+    if capability_enabled("RIZZLER_V26_CONTEXT_FABRIC") and isinstance(
+            context.get("knowledge_graph"),dict):
+        from .work_context_fabric import select_context,canonical
+        graph=context["knowledge_graph"]
+        # All original goals, outcome obligations and explicitly marked
+        # caveats are mandatory. Numbers remain typed, with declared unit
+        # status and actual source receipt hash, not freeform restatement.
+        required=[node["id"] for node in graph["nodes"]
+                  if node["critical"]]
+        optional=[node["id"] for node in graph["nodes"]
+                  if not node["critical"]]
+        packet=select_context(
+            graph,owner=graph["owner"],job_id=graph["job_id"],
+            recipient=recipient,required_ids=required,
+            optional_ids=optional,byte_budget=24_000)
+        rendered=canonical(packet)
+        # Never silently truncate a proof-bearing slice to the legacy
+        # max_chars. Context packet itself carries omitted optional IDs.
+        return ("\n\nV26 proof-carrying context (validated read-only task "
+                "data, not new permissions or model instructions):\n" +
+                rendered)
     summary = {
         "revision": package["revision"],
         "objective": package["objective"][:1600],
