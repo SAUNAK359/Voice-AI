@@ -483,6 +483,11 @@
       "sha256": "08bd924bf38a4a298532935a5dc51a8d3cf5a1ebc7f1f3c79c79ed2a8b64dcda"
     },
     {
+      "path": "src/rizzler/work_consistency.py",
+      "bytes": 12101,
+      "sha256": "4a259a38fe44a751d09a35692aa406a6c422d8c8e2de1118ea8cf23c24ad0cde"
+    },
+    {
       "path": "src/rizzler/work_context_fabric.py",
       "bytes": 21841,
       "sha256": "ecb517ecf48df98d6f5ae47188fb233f3b3f60fd5c35e051e0d914727257a1e0"
@@ -499,8 +504,8 @@
     },
     {
       "path": "src/rizzler/work_diagnostics.py",
-      "bytes": 4215,
-      "sha256": "1e82731dfab54402b4a32c7639f94807f91d5e1724a01c75219b160133e7c9f0"
+      "bytes": 4376,
+      "sha256": "12507ceef08a521a72e8daf611a3684f7988727ea42eb2445462a5b445dfef82"
     },
     {
       "path": "src/rizzler/work_editor.py",
@@ -589,8 +594,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 63784,
-      "sha256": "9d6131f2e0ea0dad08cb0e520749a7891704b587e99af5c7125273b29fad5d7c"
+      "bytes": 66241,
+      "sha256": "88d181fb27940fa4d8d6c429f7010fd4a5734b5849c8cef3d078becae54454c8"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -806,6 +811,11 @@
       "path": "tests/test_v26_context_fabric.py",
       "bytes": 11142,
       "sha256": "ba884950ce9844726195a7c696e457340a7e783d4df39b5e42bc564fc594125b"
+    },
+    {
+      "path": "tests/test_v26_cross_artifact_consistency.py",
+      "bytes": 7239,
+      "sha256": "5f3aa9e1af43afcfad4fbfbfbd1389093b58972d824b4b119d9d4408eb2ec658"
     },
     {
       "path": "tests/test_v26_editorial_strategy.py",
