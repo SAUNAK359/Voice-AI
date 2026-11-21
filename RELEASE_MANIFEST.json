@@ -924,8 +924,8 @@
     },
     {
       "path": "tests/test_v26_phase1_protocol.py",
-      "bytes": 11300,
-      "sha256": "c51ae3dada28dd6bf1d52bd03e577a1471f516e633d70ca97da2474b81dfb3bd"
+      "bytes": 14835,
+      "sha256": "122679261ba301864728c16f19c4de5d1e15b5cd87a7aebd2a770e39d6fdb5db"
     },
     {
       "path": "tests/test_v26_presentation_layout.py",
