@@ -90,6 +90,25 @@ async def run_streamed_paid(out: Path) -> dict:
         # or the private WorkStore. This makes failed CI triage actionable.
         stages=store.agent_steps("v26_stream_owner",job["id"])
         diagnostics=store.diagnostics("v26_stream_owner",job["id"])
+        # Reopen only curated cognitive status fields; export no content,
+        # prompts, source excerpts or complete private event payloads.
+        scoped_events=store.cognitive_events(
+            "v26_stream_owner",job["id"],limit=200)
+        review_events=[
+            {key:value for key,value in {
+                "agent":event["agent"],"kind":event["kind"],
+                "status":event["payload"].get("status"),
+                "stage":event["payload"].get("stage"),
+                "artifact_kind":event["payload"].get("artifact_kind"),
+                "category":event["payload"].get("category"),
+                "error_code":event["payload"].get("error_code"),
+                "attempt":event["payload"].get("attempt"),
+                "action":event["payload"].get("action"),
+            }.items() if value is not None}
+            for event in scoped_events
+            if event["agent"] in ("recovery_controller","cross_artifact_auditor")
+            and event["kind"] in ("gap","state","verification")]
+        report["safe_review_events"]=review_events[-40:]
         report.update({"worker_processed": bool(processed),
                        "job_status": status,
                        "master_quality_passed": bool(
