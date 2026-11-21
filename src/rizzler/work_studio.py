@@ -21,7 +21,8 @@ MAX_SLIDES = 36
 
 def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
                         sources: tuple[str, ...], *,
-                        min_slides: int = 3, max_slides: int = MAX_SLIDES) -> dict:
+                        min_slides: int = 3, max_slides: int = MAX_SLIDES,
+                        required_section_ids: frozenset[int] | None = None) -> dict:
     """Reject hallucinated citations, omitted sections or empty slide content."""
     if not isinstance(document, dict) or not {
             "schema_version", "slides"}.issubset(document) or (
@@ -61,8 +62,13 @@ def validate_storyboard(document: dict, sections: tuple[tuple[str, str], ...],
         output.append({"title": _display_text(title), "message": _display_text(message),
                        "kind":kind, "bullets":[_display_text(x) for x in bullets],
                        "section_ids":section_ids, "source_urls":list(dict.fromkeys(citations))})
-    if used != set(range(len(sections))):
-        raise ValueError("Presentation omits required content coverage")
+    mandatory=(set(range(len(sections))) if required_section_ids is None
+               else set(required_section_ids))
+    if not mandatory or any(type(i) is not int or not 0<=i<len(sections)
+                            for i in mandatory):
+        raise ValueError("Invalid editorial evidence coverage requirement")
+    if used != mandatory:
+        raise ValueError("Presentation omits required selected insights or adds unauthorized sections")
     if "sections_covered" in document and document["sections_covered"] != sorted(used):
         raise ValueError("Presentation section coverage checksum disagrees")
     return {"schema_version":1,"slides":output,
