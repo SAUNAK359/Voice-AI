@@ -80,10 +80,26 @@ async def run_streamed_paid(out: Path) -> dict:
         processed = await WorkWorker(store).once()
         status = store.get("v26_stream_owner", job["id"])["status"]
         qa = store.quality_report("v26_stream_owner", job["id"])
+        # Failed downstream tasks previously exposed only "job_status: failed".
+        # Export strictly typed diagnostics; never user content, full prompts
+        # or the private WorkStore. This makes failed CI triage actionable.
+        stages=store.agent_steps("v26_stream_owner",job["id"])
+        diagnostics=store.diagnostics("v26_stream_owner",job["id"])
         report.update({"worker_processed": bool(processed),
                        "job_status": status,
                        "master_quality_passed": bool(
-                           (qa.get("quality") or {}).get("passed"))})
+                           (qa.get("quality") or {}).get("passed")),
+                       "stage_diagnostics":[{
+                           "specialist":s.get("agent"),
+                           "status":s.get("status"),
+                           "error_code":s.get("error_code")}
+                           for s in stages],
+                       "failure_categories":[{
+                           "stage":d.get("stage"),
+                           "code":d.get("code"),
+                           "exception_module":d.get("exception_module"),
+                           "exception_type":d.get("exception_type")}
+                           for d in diagnostics[:30]]})
         oracle = await asyncio.to_thread(
             analyze_streaming_sql, store.upload("v26_stream_owner", uploaded["id"]))
         summary = oracle["summary"]
