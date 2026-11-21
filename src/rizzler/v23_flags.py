@@ -33,16 +33,25 @@ EXPERIMENTAL_FEATURES = frozenset({
     "RIZZLER_GEMINI_NATIVE_TOOLS",
 })
 
+# Versioned V26 capabilities start OFF until migration and real acceptance.
+# Unlike legacy full mode, new graph schema never activates implicitly.
+V26_FEATURES = frozenset({
+    "RIZZLER_V26_OUTCOME_PHASES",
+    "RIZZLER_V26_CONTEXT_FABRIC",
+    "RIZZLER_V26_EDITORIAL_DIRECTOR",
+    "RIZZLER_V26_CROSS_ARTIFACT_QA",
+})
+
 
 def enabled(key: str) -> bool:
-    if key not in (FEATURES | EXPERIMENTAL_FEATURES):
+    if key not in (FEATURES | EXPERIMENTAL_FEATURES | V26_FEATURES):
         raise ValueError("Unknown V23 capability")
     profile=environ.get("RIZZLER_V23_MODE","full").lower()
     if profile not in ("off","full"):
         raise ValueError("RIZZLER_V23_MODE must be off or full")
     override=environ.get(key)
     if override is None:
-        return profile=="full"
+        return False if key in V26_FEATURES else profile=="full"
     flag=override.strip().lower()
     if flag not in ("1","true","yes","0","false","no"):
         raise ValueError("Invalid V23 feature override")
