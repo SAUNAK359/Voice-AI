@@ -57,6 +57,25 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                "receipts": {}, "uploaded": [], "preflight": {}}
 
     async def run_agent(spec):
+        # A checkpoint is reusable only within the immutable user job and
+        # current, validated evidence graph. Do not trust model context fields
+        # to define owner, output scope or revision.
+        from .v26_flags import foundation_enabled as handoff_enabled
+        if handoff_enabled() and spec.name in (
+                "powerpoint","word","excel","pdf_visual","quality"):
+            from .work_phase1_protocol import validate_task_handoff
+            authoritative=context.get("work_graph")
+            if not isinstance(authoritative,dict):
+                raise ValueError("Specialist has no authenticated proof-carrying context")
+            handoff=validate_task_handoff(
+                authoritative,payload=payload,owner=owner,
+                job_id=jid,specialist=spec.name)
+            context.setdefault("_phase1_handoffs",{})[spec.name]=handoff
+            store.publish_cognition(jid,worker_id,fence,"context_handoff",
+                "verification",{"specialist":spec.name,
+                    "revision":handoff["context_revision"],
+                    "handoff_sha256":handoff["handoff_sha256"],
+                    "critical_metric_count":len(handoff["critical_metric_ids"])})
         # Other specialists' committed findings are visible before this task
         # starts. Only verified summaries are shared, never raw model traces.
         latest = store.cognitive_events(owner, jid, limit=100)
@@ -792,7 +811,13 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             raise ValueError("Analysis lineage missing independent SQL")
         if not context["text"] and not context["summary"]:
             raise ValueError("No substantive evidence to publish")
-        from .v26_flags import enabled as v26_enabled
+        from .v26_flags import enabled as v26_enabled, foundation_enabled
+        if foundation_enabled():
+            from .work_phase1_protocol import assert_current_handoff
+            assert_current_handoff(
+                context.get("_phase1_handoffs",{}).get("quality"),
+                context["work_graph"],payload=payload,owner=owner,
+                job_id=jid,specialist="quality")
         if v26_enabled("RIZZLER_V26_CROSS_ARTIFACT_QA"):
             from .v26_flags import foundation_enabled
             if not foundation_enabled():
@@ -1131,6 +1156,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 cfg=Settings.from_env()
                 diagnostic=recovery_diagnostic(
                     exc,stage=phase,kind=kind,attempt=attempt_no)
+                # Preserve the FIRST planning/render failure before any
+                # model retry or evidence backdelegation can replace it.
+                # Emit only typed categories; no private source text.
+                store.publish_cognition(jid,worker_id,fence,
+                    "failure_origin","gap",{
+                        "specialist":name,"artifact_kind":kind,
+                        "stage":phase,"attempt":attempt_no+1,
+                        "error_code":diagnostic["error_code"],
+                        "error_type":diagnostic["error_type"],
+                        "context_revision":(
+                            (context.get("work_graph") or {}).get(
+                                "context_revision"))})
                 from .v26_flags import enabled as recovery_v26_enabled
                 recovery_requirements=(
                     (context.get("goal_contract") or {}).get("requirements") or []
@@ -1221,6 +1258,13 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             inspections[kind]["editor_blueprint"] = editor_blueprint
         if excel_blueprint is not None:
             inspections[kind]["excel_blueprint"] = excel_blueprint
+        from .v26_flags import foundation_enabled as handoff_enabled
+        if handoff_enabled():
+            from .work_phase1_protocol import assert_current_handoff
+            assert_current_handoff(
+                context.get("_phase1_handoffs",{}).get(name),
+                context["work_graph"],payload=payload,owner=owner,
+                job_id=jid,specialist=name)
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published specialist artifact failed checksum")
@@ -1238,6 +1282,13 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     {"name": r.name, "sha256": r.sha256, "bytes": r.byte_size}
                     for r in contents]}, indent=2))
         receipt = verify_artifact(working, "zip")
+        from .v26_flags import foundation_enabled as handoff_enabled
+        if handoff_enabled():
+            from .work_phase1_protocol import assert_current_handoff
+            assert_current_handoff(
+                context.get("_phase1_handoffs",{}).get(name),
+                context["work_graph"],payload=payload,owner=owner,
+                job_id=jid,specialist=name)
         promoted = store.agent_publish(jid, worker_id, fence, owner, working, receipt)
         if not verify_checkpoint(promoted, receipt):
             raise ValueError("Published archive failed checksum")
