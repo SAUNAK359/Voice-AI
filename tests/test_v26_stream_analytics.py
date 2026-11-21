@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import importlib.util
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -89,6 +90,8 @@ class StreamedAnalyticsTests(unittest.TestCase):
             self.assertEqual(result["missing"]["b"],2)
             self.assertEqual(result["numeric_exact"]["a"]["sum"],"0.4")
 
+    @unittest.skipUnless(importlib.util.find_spec("openpyxl") is not None,
+                         "OpenPyXL required for XLSX streaming")
     def test_xlsx_reader_and_formula_fallback(self):
         from openpyxl import Workbook
         with TemporaryDirectory() as temp:
@@ -102,6 +105,8 @@ class StreamedAnalyticsTests(unittest.TestCase):
             self.assertEqual(result["summary"]["rows"],500)
             self.assertEqual(result["summary"]["numeric_exact"]["sales"]["sum"],"125250")
 
+    @unittest.skipUnless(importlib.util.find_spec("openpyxl") is not None,
+                         "OpenPyXL required for native workbook")
     def test_editable_profile_and_tamper_rejection(self):
         from openpyxl import load_workbook
         with TemporaryDirectory() as temp:
