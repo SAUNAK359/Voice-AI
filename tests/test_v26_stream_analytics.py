@@ -134,7 +134,7 @@ class StreamedAnalyticsTests(unittest.TestCase):
         with TemporaryDirectory() as temp:
             source=Path(temp)/"data.csv"
             source.write_text(
-                "category,value\\nA,1\\nA,2\\nB,3\\nB,4\\nB,5\\n",encoding="utf-8")
+                "category,value\nA,1\nA,2\nB,3\nB,4\nB,5\n",encoding="utf-8")
             sandbox=StreamingSQLDataset(source)
             try:
                 with self.assertRaises((ValueError,__import__("sqlite3").DatabaseError)):
