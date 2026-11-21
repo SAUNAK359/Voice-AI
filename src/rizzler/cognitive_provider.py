@@ -22,9 +22,8 @@ class ProviderBusy(RuntimeError):
 def _transient(exc: BaseException) -> bool:
     if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
         return True
-    status = getattr(exc, "status_code", None)
-    if status is None:
-        status = getattr(exc, "code", None)
+    from .work_diagnostics import provider_http_status
+    status = provider_http_status(exc)
     if isinstance(status, int):
         return status in (408, 429, 500, 502, 503, 504)
     message = str(exc).lower()
