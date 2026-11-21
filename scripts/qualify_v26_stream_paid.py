@@ -57,14 +57,17 @@ async def run_streamed_paid(out: Path) -> dict:
         "streaming": True,
         "limitations": "Not a live 200MB trial, 120-task benchmark or release certificate",
     }
+    phase="fixture_creation"
     try:
         path, expected = fixture(out / "private_workstore" / "live_fixture")
+        phase="local_upload_registration"
         store = WorkStore(out / "private_workstore")
         source = path.read_bytes()
         # This bounded fixture exercises the >10K-row Work path, not 200MB HTTP
         # upload transport. The dedicated 200MB bench separately tests disk I/O.
         uploaded = store.register_upload(
             "v26_stream_owner", path.name, source)
+        phase="work_job_submission"
         objective = (
             "Produce an executive, source-grounded comparative report for the "
             "uploaded SYNTHETIC 15,017-row import/export dataset. Use the actual "
@@ -77,7 +80,9 @@ async def run_streamed_paid(out: Path) -> dict:
             "v26_stream_owner", objective, sorted(KINDS),
             "v26_stream_" + secrets.token_hex(8), [uploaded["id"]],
             requested_formats=sorted(KINDS))
+        phase="work_agent_execution"
         processed = await WorkWorker(store).once()
+        phase="source_oracle_and_artifact_review"
         status = store.get("v26_stream_owner", job["id"])["status"]
         qa = store.quality_report("v26_stream_owner", job["id"])
         # Failed downstream tasks previously exposed only "job_status: failed".
@@ -159,7 +164,12 @@ async def run_streamed_paid(out: Path) -> dict:
             and observed == KINDS)
         return report
     except Exception as exc:
+        from rizzler.work_diagnostics import failure_code, provider_http_status
         report["error_category"] = type(exc).__name__
+        report["error_code"] = failure_code(exc)
+        report["error_stage"] = phase
+        if (status := provider_http_status(exc)) is not None:
+            report["http_status"] = status
         return report
     finally:
         if previous is None:
