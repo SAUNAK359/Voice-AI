@@ -98,14 +98,25 @@ async def run_streamed_paid(out: Path) -> dict:
         observed = set()
         reports = {}
         if status == "completed":
-            for artifact in store.artifacts("v26_stream_owner", job["id"]):
+            from rizzler.contracts import ArtifactReceipt
+            published=store.artifacts("v26_stream_owner", job["id"])
+            bundle_receipts={}
+            for item in published:
+                if item["kind"]!="zip":
+                    source_path,metadata=store.artifact(
+                        "v26_stream_owner",item["id"])
+                    bundle_receipts[source_path.name]=verify_artifact(
+                        source_path,item["kind"])
+            for artifact in published:
                 kind = artifact["kind"]
                 path, metadata = store.artifact("v26_stream_owner", artifact["id"])
                 receipt = verify_artifact(path, kind)
                 if receipt.sha256 != metadata["sha256"]:
                     raise ValueError("Artifact receipt does not match published content")
                 review = inspect_artifact(
-                    path, kind, dataset_summary=summary if kind == "xlsx" else None,
+                    path, kind,
+                    bundle_receipts=bundle_receipts if kind=="zip" else None,
+                    dataset_summary=summary if kind == "xlsx" else None,
                     visual_required=kind in ("pptx", "docx", "pdf"))
                 if not review["passed"]:
                     raise ValueError("Generated file failed independent structural QA")
