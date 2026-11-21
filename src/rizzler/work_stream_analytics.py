@@ -76,6 +76,7 @@ class StreamingSQLDataset(SQLResearchSandbox):
         self.db_path = Path(self.temp.name) / "private_source.sqlite3"
         self.db = sqlite3.connect(self.db_path, check_same_thread=False)
         self.calls = 0
+        self.query_step_limit = 60_000
         self.closed = False
         try:
             self.db.execute("PRAGMA cache_size=-8192")
