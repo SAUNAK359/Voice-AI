@@ -664,8 +664,8 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "bytes": 68909,
-      "sha256": "f46a78b263885bfe5e19f3e411607e0fcfa8699638e8eceae22b60d5cbfcec5b"
+      "bytes": 69604,
+      "sha256": "9d77cabf6aa5fd89efbc9c935be5d11e0225114251da03eb97bd2980a164525b"
     },
     {
       "path": "src/rizzler/work_stream_analytics.py",
@@ -919,8 +919,8 @@
     },
     {
       "path": "tests/test_v26_provider_word_regression.py",
-      "bytes": 2880,
-      "sha256": "1c7f5cae52c4a4cf596e1a854ee6f5e134140bc40990d9a157616fc6e28b5f34"
+      "bytes": 4654,
+      "sha256": "e8fe9a872b52cc63cdf83ada2636e09ddefc33d5f1dc0ddccf3435c324a76a7c"
     },
     {
       "path": "tests/test_v26_reasoning_audit.py",
