@@ -812,9 +812,18 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             sem=asyncio.Semaphore(2)
             async def audit_receipt(receipt):
                 async with sem:
-                    review=await audit_artifact_claims(
-                        checkpoint/receipt.name,receipt.kind,graph,
-                        model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                    try:
+                        review=await audit_artifact_claims(
+                            checkpoint/receipt.name,receipt.kind,graph,
+                            model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                    except ConsistencyViolation as exc:
+                        from .work_consistency import claim_audit_failure_category
+                        store.publish_cognition(
+                            jid,worker_id,fence,"cross_artifact_auditor","gap",{
+                                "status":"source_bound_audit_rejected",
+                                "artifact_kind":receipt.kind,
+                                "category":claim_audit_failure_category(exc)})
+                        raise
                     return receipt.kind,review
             checked=await asyncio.gather(
                 *(audit_receipt(receipt) for receipt in supported))
@@ -1108,6 +1117,14 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     need_plan=False
                     continue
                 if attempt_no>=3:
+                    diagnostic=recovery_diagnostic(
+                        exc,stage=phase,kind=kind,attempt=attempt_no)
+                    store.publish_cognition(
+                        jid,worker_id,fence,"recovery_controller","gap",{
+                            "kind":kind,"stage":phase,
+                            "error_code":diagnostic["error_code"],
+                            "status":"recovery_budget_exhausted",
+                            "attempt":attempt_no+1})
                     raise RecoveryExhausted(
                         "Artifact failed validation after supervised repair budget") from exc
                 from .config import Settings
