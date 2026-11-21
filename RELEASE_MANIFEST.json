@@ -188,6 +188,11 @@
       "sha256": "877f4ad998fbcf3241865f7b8c441a741734f044122bc81149af8fec0e3dbba0"
     },
     {
+      "path": "docs/V26_PHASE1_ARCHITECTURAL_P0.md",
+      "bytes": 5033,
+      "sha256": "6406e17c43097df9a60d75d19780d6dc740da49ec3bc6b8cf436bb0f6b4b9e6b"
+    },
+    {
       "path": "docs/V26_STREAMED_INGESTION_ROLLOUT.md",
       "bytes": 2409,
       "sha256": "7c999c86875098c0358c17a45e7b2f6a128c4db6f57a946cf660689d9023cb98"
@@ -309,8 +314,8 @@
     },
     {
       "path": "scripts/qualify_v26_live.py",
-      "bytes": 7561,
-      "sha256": "7f574159236975b67d80a3779aea0dc147ee44f986c39cb3d4fa9d802242e653"
+      "bytes": 7596,
+      "sha256": "6f204b178e886feabd98251a538fcc4f5d561c997b11e9dea7d7b912b04992a1"
     },
     {
       "path": "scripts/qualify_v26_stream_paid.py",
@@ -534,8 +539,8 @@
     },
     {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 34859,
-      "sha256": "97c2397dff70fcf763d8126334fd302bc5912b05fe4f5ae2136c979781ef323c"
+      "bytes": 35559,
+      "sha256": "4abb6aab69038fdcba896d7f63a4e59d4067626ff98a43a1aa9896bc9518101f"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -564,13 +569,13 @@
     },
     {
       "path": "src/rizzler/work_execution_recovery.py",
-      "bytes": 11181,
-      "sha256": "5a6a14866d121462384eb6646d4e96e76acb736e2099ec51d59c855d392a24cd"
+      "bytes": 11271,
+      "sha256": "9cb2a7122af336b19a19e4301d31d540cecc0a2efdb3d7da404e621df6f67266"
     },
     {
       "path": "src/rizzler/work_feedback.py",
-      "bytes": 14833,
-      "sha256": "5371dffc27e0e63ba0af1e4410ac25ea35dcb82e7cb73bb58f94d21362d545ab"
+      "bytes": 14880,
+      "sha256": "5c168aeeeb00498403e8d753e9d58ba9601103e85d4bba287b18dc9c86c323aa"
     },
     {
       "path": "src/rizzler/work_formula.py",
@@ -606,6 +611,11 @@
       "path": "src/rizzler/work_outcome.py",
       "sha256": "9b04aa4ee1c14a65cba0ed1d6853032c207eb887b8d79be30d4bd301ea6f0416",
       "bytes": 10012
+    },
+    {
+      "path": "src/rizzler/work_phase1_protocol.py",
+      "bytes": 6077,
+      "sha256": "378d1156ea4a3a5b63f8c62c03e6257984bc39a593a31f54743ca4ca63d1af81"
     },
     {
       "path": "src/rizzler/work_postgres.py",
@@ -654,8 +664,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 71692,
-      "sha256": "a6a331706165179722398895a29e05c8384a52a1b30ef1f116abaef41afbde0f"
+      "bytes": 76886,
+      "sha256": "791fa4193d01479105177161b93ed8623dac669e73c68ce263bd74f27e7b6807"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -911,6 +921,11 @@
       "path": "tests/test_v26_outcome_phases.py",
       "bytes": 10837,
       "sha256": "11a5dce6a78157dcf63268414190a3ded17eb73a603350fe274fb67805db2312"
+    },
+    {
+      "path": "tests/test_v26_phase1_protocol.py",
+      "bytes": 9561,
+      "sha256": "6baf4059f603ad88ae5f6ce96665beb1f0b7de870cd2d690bb0986854dabf1da"
     },
     {
       "path": "tests/test_v26_presentation_layout.py",
