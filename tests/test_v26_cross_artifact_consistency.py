@@ -65,7 +65,7 @@ class ActualArtifactQuantitativeTests(unittest.TestCase):
             if not isinstance(node,ast.ListComp):
                 continue
             if not any(isinstance(t,ast.Attribute) and t.attr=="kind"
-                       for t in ast.walk(node.elt) if isinstance(t,ast.AST)):
+                       for t in ast.walk(node)):
                 continue
             for generator in node.generators:
                 iterator=generator.iter
