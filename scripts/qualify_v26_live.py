@@ -37,6 +37,7 @@ TESTS=[
     "test_v26_reasoning_audit.py",
     "test_v26_visual_strategy.py",
     "test_v26_visual_critic.py",
+    "test_v26_stream_analytics.py",
     "test_v25_work_recovery_integration.py",
     "test_v24_storyboard_recovery.py",
 ]
