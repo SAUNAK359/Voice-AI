@@ -158,7 +158,10 @@ def validate_context_review(document: dict, *, package: dict,
             raise ValueError("Invalid context back-delegation request")
         recipient, question = item["recipient"], item["question"]
         if v26:
-            validate_evidence_request(item,package["requirements"])
+            from .work_phase1_protocol import validate_source_request
+            validate_source_request(
+                item,requirements=package["requirements"],
+                permitted=permitted)
         if (recipient not in RECIPIENTS
                 or (recipient != "user" and recipient not in permitted)
                 or not isinstance(question, str) or not 16 <= len(question) <= 650
@@ -439,7 +442,16 @@ async def converge_context(context: dict, *, payload: dict,
         specialist=focus[0] if focus else "powerpoint"
         allowed=frozenset(s.name for s in approved_plan(payload))
         for request in forced_requests:
-            # Revalidate the entire request list, including later siblings.
+            # Revalidate requests against the same approved source obligations
+            # that normal context review and downstream recovery use.
+            from .v26_flags import enabled as outcome_v26_enabled
+            if outcome_v26_enabled("RIZZLER_V26_OUTCOME_PHASES"):
+                from .work_phase1_protocol import validate_source_request
+                validate_source_request(
+                    request,
+                    requirements=(context.get("goal_contract") or {}).get(
+                        "requirements") or [],
+                    permitted=allowed)
             validate_specialist_feedback(
                 {"specialist":specialist,
                  "readiness":"needs_evidence",
@@ -487,9 +499,10 @@ async def converge_context(context: dict, *, payload: dict,
             for request in [*downstream, *forced_requests]:
                 from .v26_flags import enabled
                 if enabled("RIZZLER_V26_OUTCOME_PHASES"):
-                    from .work_outcome_phases import validate_evidence_request
-                    validate_evidence_request(
-                        request,package["requirements"])
+                    from .work_phase1_protocol import validate_source_request
+                    validate_source_request(
+                        request,requirements=package["requirements"],
+                        permitted=permitted)
                 if not any(r["recipient"] == request["recipient"] and
                            r["question"].casefold().strip() ==
                            request["question"].casefold().strip()
