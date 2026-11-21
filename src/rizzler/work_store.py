@@ -117,6 +117,14 @@ class WorkStore:
               FOREIGN KEY(job_id) REFERENCES jobs(id));
             CREATE INDEX IF NOT EXISTS context_checkpoints_owner
               ON context_checkpoints(owner,job_id);
+            CREATE TABLE IF NOT EXISTS knowledge_graphs(
+              job_id TEXT PRIMARY KEY, owner TEXT NOT NULL,
+              task_digest TEXT NOT NULL, revision TEXT NOT NULL,
+              graph_json TEXT NOT NULL, graph_sha256 TEXT NOT NULL,
+              updated REAL NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id));
+            CREATE INDEX IF NOT EXISTS knowledge_graphs_owner
+              ON knowledge_graphs(owner,job_id);
             CREATE TABLE IF NOT EXISTS job_plans(
               job_id TEXT PRIMARY KEY, plan_json TEXT NOT NULL, sha256 TEXT NOT NULL,
               created REAL NOT NULL, FOREIGN KEY(job_id) REFERENCES jobs(id));
@@ -553,6 +561,77 @@ class WorkStore:
                     or snapshot.get("schema_version")!=1):
                 raise ValueError("Context recovery record schema or revision mismatch")
             return snapshot
+
+    def save_knowledge_graph(self, jid: str, worker: str, fence: int,
+                             graph: dict,
+                             expected_revision: str | None = None) -> str:
+        """Owner-fenced CAS on V26 knowledge graph with source-byte hashing.
+
+        Revisions may only change under a live worker lease and the same
+        immutable task digest; concurrent stale writers cannot silently win.
+        """
+        from .work_context_fabric import validate_graph,canonical,digest
+        valid=validate_graph(graph)
+        raw=canonical(valid)
+        graph_bytes=raw.encode("utf-8")
+        if len(graph_bytes)>2_000_000:
+            raise ValueError("Knowledge graph exceeds persistence budget")
+        with self._tx() as c:
+            active=self._active(c,jid,worker,fence)
+            if active["owner"]!=valid["owner"] or valid["job_id"]!=jid:
+                raise PermissionError("Knowledge graph owner does not match leased job")
+            actual_task=json.loads(active["payload"])
+            if digest(actual_task)!=valid["task_digest"]:
+                raise ValueError("Knowledge graph was derived from another task")
+            old=c.execute(
+                "SELECT revision,task_digest FROM knowledge_graphs WHERE job_id=?",
+                (jid,)).fetchone()
+            if old is not None:
+                if old["task_digest"]!=valid["task_digest"]:
+                    raise ValueError("Knowledge graph task identity changed")
+                if old["revision"]!=valid["revision"] and (
+                        expected_revision!=old["revision"]):
+                    raise StaleLease("Concurrent knowledge graph revision changed")
+                if (old["revision"]==valid["revision"] and
+                        expected_revision not in (None,old["revision"])):
+                    raise StaleLease("Expected revision is obsolete")
+            elif expected_revision is not None:
+                raise StaleLease("Knowledge graph was not previously initialized")
+            c.execute("""INSERT INTO knowledge_graphs(
+                job_id,owner,task_digest,revision,graph_json,graph_sha256,updated)
+                VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                  revision=excluded.revision,
+                  graph_json=excluded.graph_json,
+                  graph_sha256=excluded.graph_sha256,
+                  updated=excluded.updated""",
+                (jid,valid["owner"],valid["task_digest"],valid["revision"],
+                 raw,hashlib.sha256(graph_bytes).hexdigest(),time.time()))
+        return valid["revision"]
+
+    def knowledge_graph(self, owner: str, jid: str) -> dict | None:
+        """Owner-scoped authoritative snapshot, with strict digest validation."""
+        from .work_context_fabric import validate_graph,digest
+        with self._tx() as c:
+            job=c.execute(
+                "SELECT payload FROM jobs WHERE id=? AND owner=?",
+                (jid,owner)).fetchone()
+            if job is None:
+                raise Missing("Job not found")
+            row=c.execute("""SELECT task_digest,revision,graph_json,
+                     graph_sha256 FROM knowledge_graphs
+                     WHERE job_id=? AND owner=?""",(jid,owner)).fetchone()
+            if row is None:
+                return None
+            raw=row["graph_json"]
+            if hashlib.sha256(raw.encode("utf-8")).hexdigest()!=row["graph_sha256"]:
+                raise ValueError("Knowledge graph persistence integrity mismatch")
+            if row["task_digest"]!=digest(json.loads(job["payload"])):
+                raise ValueError("Knowledge graph no longer matches source job")
+            result=validate_graph(json.loads(raw))
+            if result["revision"]!=row["revision"]:
+                raise ValueError("Knowledge graph revision changed")
+            return result
 
     def reopen_agents(self, jid: str, worker: str, fence: int,
                       names: list[str]) -> list[str]:
