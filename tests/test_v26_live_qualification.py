@@ -33,6 +33,9 @@ class V26LiveQualificationContractTests(unittest.TestCase):
         self.assertIn('report["offline_passed"] and report["live_passed"] and report["streamed_paid_passed"]',code)
         self.assertIn("from qualify_v26_stream_paid import run_streamed_paid",code)
         self.assertIn("RIZZLER_V26_CROSS_ARTIFACT_QA",code)
+        self.assertIn("test_v26_stream_paid_submission.py",code)
+        self.assertIn("BLOCKED_BY_PROVIDER_PREFLIGHT",code)
+        self.assertIn("paid.get(\"preflight\",{}).get(\"passed\") is True",code)
         for required in ("test_v26_cross_artifact_consistency.py",
                          "test_v26_final_release_gate.py",
                          "test_v26_large_uploads.py",
