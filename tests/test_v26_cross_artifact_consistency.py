@@ -128,6 +128,9 @@ class ActualArtifactQuantitativeTests(unittest.TestCase):
         joined=reconcile_claim_reports({"pptx":net,"docx":imports})
         self.assertTrue(joined["passed"])
 
+    @unittest.skipUnless(
+        __import__("importlib").util.find_spec("pptx"),
+        "Install the work extra to exercise actual editable PowerPoint bytes")
     def test_actual_native_powerpoint_text_is_used(self):
         slides=[]
         for i in range(3):
