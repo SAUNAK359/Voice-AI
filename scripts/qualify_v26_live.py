@@ -110,6 +110,8 @@ def main():
     ap.add_argument("--output",required=True)
     ap.add_argument("--expected-sha",required=True)
     ap.add_argument("--model",default="")
+    ap.add_argument("--skip-streamed",action="store_true",
+                    help="Run 4-row and research smoke without the 15,017-row paid job")
     options=ap.parse_args()
     repo=Path(options.repo).resolve()
     out=Path(options.output).resolve()
@@ -155,9 +157,13 @@ def main():
             from qualify_v25_live import run_paid
             paid=asyncio.run(run_paid(repo,out,secrets.token_hex(7)))
             report["paid"]=paid
-            if paid.get("preflight",{}).get("passed") is True:
+            if paid.get("preflight",{}).get("passed") is True and not options.skip_streamed:
                 from qualify_v26_stream_paid import run_streamed_paid
                 report["streamed_paid"]=asyncio.run(run_streamed_paid(out))
+            elif options.skip_streamed:
+                report["streamed_paid"]={
+                    "passed":False,"status":"NOT_RUN_USER_OPT_OUT",
+                    "live_gemini_required":True}
             else:
                 # Do not spend further tokens or mislabel expected provider
                 # failures as an independent Work Agent implementation defect.
@@ -176,7 +182,10 @@ def main():
         paid.get("analytical",{}).get("passed"))
     report["streamed_paid_passed"]=bool(report.get("streamed_paid",{}).get("passed"))
     report["passed"]=bool(report["offline_passed"] and report["live_passed"] and report["streamed_paid_passed"])
-    report["release_status"]="CANDIDATE_SMOKE_TEST_ONLY" if report["passed"] else "NOT_READY"
+    report["release_status"]=("CANDIDATE_SMOKE_TEST_ONLY" if report["passed"]
+                              else "PARTIAL_SMOKE_TEST_ONLY"
+                              if options.skip_streamed and report["offline_passed"]
+                              and report["live_passed"] else "NOT_READY")
     report["required_release_gates"]=[f"G{i:02d}" for i in range(18)]
     report["production_signoff"]="NOT_RUN"
     report["large_file_200mb_network"]="NOT_RUN"
