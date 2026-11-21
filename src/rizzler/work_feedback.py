@@ -57,8 +57,9 @@ def validate_specialist_feedback(raw: dict, *, specialist: str,
             raise ValueError("Downstream request schema mismatch")
         recipient, question = item["recipient"], item["question"]
         if v26:
-            from .work_outcome_phases import validate_evidence_request
-            validate_evidence_request(item,requirements)
+            from .work_phase1_protocol import validate_source_request
+            validate_source_request(
+                item,requirements=requirements,permitted=permitted)
         if (recipient not in RECIPIENTS
                 or (recipient != "user" and recipient not in permitted)
                 or not isinstance(question, str)
