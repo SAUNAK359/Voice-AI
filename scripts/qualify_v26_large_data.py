@@ -11,8 +11,11 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
-import resource
 import sys
+try:
+    import resource
+except ImportError:
+    resource=None
 from tempfile import TemporaryDirectory
 import time
 
@@ -74,8 +77,14 @@ def main():
         evidence["error_type"]=type(exc).__name__
     evidence["elapsed_seconds"]=round(time.perf_counter()-start,3)
     # ru_maxrss is KiB on Linux, bytes on macOS; benchmark targets Linux.
-    rss=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    evidence["peak_rss_mb_linux"]=round(rss/1024,2) if sys.platform.startswith("linux") else None
+    rss=(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+         if resource is not None else None)
+    evidence["peak_rss_mb_linux"]=(round(rss/1024,2)
+                                  if rss is not None and sys.platform.startswith("linux")
+                                  else None)
+    if (evidence["status"]=="TECHNICAL_INGESTION_SMOKE_PASSED"
+            and args.max_rss_mb and evidence["peak_rss_mb_linux"] is None):
+        evidence["status"]="TECHNICAL_INGESTION_MEMORY_UNMEASURED"
     if (evidence["status"]=="TECHNICAL_INGESTION_SMOKE_PASSED"
             and ((args.max_seconds and evidence["elapsed_seconds"]>args.max_seconds)
                  or (args.max_rss_mb and evidence["peak_rss_mb_linux"] is not None
