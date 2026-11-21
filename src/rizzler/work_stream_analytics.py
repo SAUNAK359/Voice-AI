@@ -205,14 +205,38 @@ class StreamingSQLDataset(SQLResearchSandbox):
                         "source_sha256": self.source_sha256,
                         "privacy_note": "Only schema, aggregates and authorized SQL results can reach the model."}
 
+    @staticmethod
+    def _authorize(action, arg1, arg2, database, trigger):
+        # String aggregates can leak huge source values despite small result counts.
+        if action == sqlite3.SQLITE_FUNCTION and str(arg2 or "").lower() in {
+                "group_concat", "printf", "substr", "replace", "ltrim",
+                "rtrim", "lower", "upper", "length"}:
+            return sqlite3.SQLITE_DENY
+        return SQLResearchSandbox._authorize(action, arg1, arg2, database, trigger)
+
     def query(self, query: str) -> dict:
-        """Only bounded aggregate-oriented SELECT queries may leave the index."""
+        """Require bounded aggregate queries and suppress isolated group labels."""
         if (not isinstance(query, str) or
                 re.search(r"\bWITH\s+RECURSIVE\b", query, re.I) or
                 re.search(r"\bSELECT\s+\*", query, re.I) or
+                re.search(r"\bOVER\s*\(", query, re.I) or
                 not re.search(r"\b(COUNT|SUM|AVG|MIN|MAX|TOTAL)\s*\(", query, re.I)):
             raise ValueError("Large-source SQL must be a bounded aggregate query")
-        return super().query(query)
+        result = super().query(query)
+        names = [str(name).casefold() for name in result["columns"]]
+        grouped = bool(re.search(r"\bGROUP\s+BY\b", query, re.I))
+        if grouped:
+            if "group_count" not in names:
+                raise ValueError("Grouped SQL requires COUNT(*) AS group_count")
+            index = names.index("group_count")
+            if (not re.search(r"\bCOUNT\s*\(\s*\*\s*\)\s+AS\s+group_count\b", query, re.I)
+                    or any(type(row[index]) is not int or row[index] < 3
+                           for row in result["rows"])):
+                raise ValueError("Grouped SQL contains unverified or isolated groups")
+        elif any(isinstance(value, str)
+                 for row in result["rows"] for value in row):
+            raise ValueError("Large-source SQL returned ungrouped raw text")
+        return result
 
     def close(self):
         if not self.closed:
