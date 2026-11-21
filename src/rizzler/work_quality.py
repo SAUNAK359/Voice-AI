@@ -73,20 +73,32 @@ def inspect_artifact(path: Path, kind: str, *,
         finally:
             wb.close()
         from .work_formula import verify_workbook
-        details["formula_validation"] = verify_workbook(
+        if dataset_summary is not None and dataset_summary.get("streaming"):
+            from .work_stream_analytics import verify_profile_workbook
+            details["source_profile_validation"] = verify_profile_workbook(path,dataset_summary)
+            checks.append("full_source_profile_independently_reconciled")
+        else:
+            details["formula_validation"] = verify_workbook(
             path, dataset_summary=dataset_summary,
             require_recalculation=visual_required and dataset_rows is not None,
-            analytical_plan=excel_plan)
-        checks.append("independently_evaluated_formula_contract")
-        if visual_required and dataset_rows is not None:
-            checks.append("spreadsheet_recalculated_by_independent_engine")
+                analytical_plan=excel_plan)
+            checks.append("independently_evaluated_formula_contract")
+            if visual_required and dataset_rows is not None:
+                checks.append("spreadsheet_recalculated_by_independent_engine")
     elif kind == "csv":
-        with path.open(encoding="utf-8-sig", newline="") as stream:
-            rows = list(csv.reader(stream))
-        if dataset_rows is None or len(rows) - 1 != dataset_rows:
-            raise ValueError("CSV does not reconcile with source row count")
-        details["dataset_rows"] = len(rows) - 1
-        checks.append("source_row_count_reconciled")
+        if dataset_summary is not None and dataset_summary.get("streaming"):
+            from .work_large_uploads import sha256_file
+            if sha256_file(path)!=dataset_summary["source_sha256"]:
+                raise ValueError("Streamed CSV differs from original source")
+            details["source_sha256"]=dataset_summary["source_sha256"]
+            checks.append("full_source_bytes_identical")
+        else:
+            with path.open(encoding="utf-8-sig", newline="") as stream:
+                rows = list(csv.reader(stream))
+            if dataset_rows is None or len(rows) - 1 != dataset_rows:
+                raise ValueError("CSV does not reconcile with source row count")
+            details["dataset_rows"] = len(rows) - 1
+            checks.append("source_row_count_reconciled")
     elif kind == "json":
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict) or not data.get("sections"):

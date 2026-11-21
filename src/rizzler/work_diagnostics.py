@@ -21,11 +21,26 @@ def root_exception(exc: BaseException) -> BaseException:
     return exc
 
 
+def provider_http_status(exc: BaseException) -> int | None:
+    """Extract only safe numeric HTTP status from provider error wrappers.
+
+    Never parse exception message text, prompt content or response bodies.
+    """
+    error = root_exception(exc)
+    response = getattr(error, "response", None)
+    for obj in (error, response):
+        if obj is None:
+            continue
+        for attr in ("status_code", "code"):
+            value = getattr(obj, attr, None)
+            if type(value) is int and 100 <= value <= 599:
+                return value
+    return None
+
+
 def failure_code(exc: BaseException) -> str:
     error = root_exception(exc)
-    status = getattr(error, "status_code", None)
-    if status is None:
-        status = getattr(error, "code", None)
+    status = provider_http_status(error)
     if isinstance(status, int):
         if status in (429, 503, 500, 502, 504, 408):
             return "provider_transient"
@@ -48,6 +63,9 @@ def failure_code(exc: BaseException) -> str:
     from .work_semantic_quality import CandidateQualityIssue
     if isinstance(error, CandidateQualityIssue):
         return "candidate_quality_revision_required"
+    from .work_consistency import ConsistencyViolation
+    if isinstance(error, ConsistencyViolation):
+        return "cross_artifact_metric_consistency_failed"
     from .work_visual_critic import VisualReviewFailure, VisualReviewIncomplete
     if isinstance(error, VisualReviewFailure):
         return "visual_critical_issue"
@@ -89,7 +107,9 @@ def failure_record(exc: BaseException, stage: str) -> dict:
     research = ({"research_reason": error.reason,
                  "research_failure_categories": error.counts}
                 if isinstance(error, ResearchQualificationError) else {})
+    safe_status = provider_http_status(error)
     return {"stage": stage, "code": failure_code(exc),
+            **({"http_status": safe_status} if safe_status is not None else {}),
             **research,
             "exception_type": typ, "exception_module": module,
             "locations": src,

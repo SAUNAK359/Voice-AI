@@ -14,6 +14,7 @@ from .work_skills import SKILLS
 from .work_agents import SPECS
 from .work_store import WorkStore, Conflict, Missing
 from .upload_scan import ScanUnavailable
+from .work_large_uploads import UploadTooLarge, upload_limit, spool_request
 
 def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
            owner_admission=None) -> APIRouter:
@@ -261,10 +262,38 @@ def router(store: WorkStore, signing_key: str, identity: Identity | None = None,
     @api.post("/uploads",status_code=201)
     async def upload(req: Request):
         who=owner(req);same_origin(req)
+        limit=upload_limit()
+        length=req.headers.get("content-length")
+        if length is not None:
+            try:
+                if int(length)<0:
+                    raise ValueError("Invalid content length")
+                if int(length)>limit:
+                    raise HTTPException(status_code=413,detail="Upload too large")
+            except ValueError:
+                raise HTTPException(status_code=400,detail="Invalid content length") from None
+        from .v26_flags import enabled as v26_enabled
+        if v26_enabled("RIZZLER_V26_LARGE_UPLOADS"):
+            stage=store.prepare_upload_staging()
+            try:
+                _, digest=await spool_request(req.stream(),stage,maximum=limit)
+                return await asyncio.to_thread(
+                    store.register_upload_file,who,
+                    req.headers.get("x-file-name",""),stage,expected_sha256=digest)
+            except UploadTooLarge:
+                raise HTTPException(status_code=413,detail="Upload too large") from None
+            except ScanUnavailable:
+                raise HTTPException(status_code=503,detail="Upload rejected or scanner unavailable") from None
+            except Conflict:
+                raise HTTPException(status_code=429,detail="Upload quota exceeded") from None
+            except (ValueError,UnicodeError):
+                raise HTTPException(status_code=400,detail="Invalid upload") from None
+            finally:
+                stage.unlink(missing_ok=True)
         raw=bytearray()
         async for chunk in req.stream():
             raw.extend(chunk)
-            if len(raw)>8_000_000:
+            if len(raw)>limit:
                 raise HTTPException(status_code=413,detail="Upload too large")
         try:
             return await asyncio.to_thread(

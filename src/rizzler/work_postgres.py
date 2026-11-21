@@ -48,7 +48,7 @@ class _Tx:
             self.connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                 (owner + ":" + key,))
-        elif stripped.startswith("SELECT count(*) FROM uploads WHERE owner=?"):
+        elif stripped.startswith("SELECT count(*) FROM uploads WHERE owner=?") or stripped.startswith("SELECT count(*),COALESCE(sum(size),0) FROM uploads WHERE owner=?"):
             self.connection.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                 ("uploads:" + str(parameters[0]),))
@@ -76,11 +76,13 @@ class _Tx:
 
 
 class PostgresWorkStore(WorkStore):
-    def __init__(self, root: str | Path, dsn: str, upload_scanner=None, object_store=None):
+    def __init__(self, root: str | Path, dsn: str, upload_scanner=None, object_store=None,
+                 upload_scanner_file=None):
         if not isinstance(dsn, str) or not dsn.startswith(("postgresql://", "postgres://")):
             raise ValueError("PostgreSQL DSN required")
         self.dsn = dsn
-        super().__init__(root, upload_scanner=upload_scanner, object_store=object_store)
+        super().__init__(root, upload_scanner=upload_scanner, object_store=object_store,
+                         upload_scanner_file=upload_scanner_file)
 
     @contextmanager
     def _tx(self):

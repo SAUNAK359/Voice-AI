@@ -28,8 +28,26 @@ class V26LiveQualificationContractTests(unittest.TestCase):
         self.assertIn("RIZZLER_ARTIFACT_QA",code)
         self.assertIn('os.environ.get("GEMINI_API_KEY")',code)
         self.assertIn("from qualify_v25_live import run_paid",code)
-        self.assertIn('report["release_status"]="CANDIDATE_SMOKE_TEST_ONLY"',code)
-        self.assertIn('report["passed"]=report["offline_passed"]',code)
+        self.assertIn('"CANDIDATE_SMOKE_TEST_ONLY" if report["passed"]',code)
+        self.assertIn('"PARTIAL_SMOKE_TEST_ONLY"',code)
+        self.assertIn("--skip-streamed",code)
+        self.assertIn('report["streamed_paid_passed"]',code)
+        self.assertIn('report["streamed_paid_passed"]',code)
+        self.assertIn('report["offline_passed"] and report["live_passed"] and report["streamed_paid_passed"]',code)
+        self.assertIn("from qualify_v26_stream_paid import run_streamed_paid",code)
+        self.assertIn("RIZZLER_V26_CROSS_ARTIFACT_QA",code)
+        self.assertIn("test_v26_stream_paid_submission.py",code)
+        self.assertIn("BLOCKED_BY_PROVIDER_PREFLIGHT",code)
+        streamed=(ROOT/"scripts"/"qualify_v26_stream_paid.py").read_text()
+        self.assertIn('report["safe_review_events"]',streamed)
+        self.assertIn('"recovery_controller","cross_artifact_auditor"',streamed)
+        self.assertNotIn('event["payload"].get("prompt")',streamed)
+        self.assertIn("paid.get(\"preflight\",{}).get(\"passed\") is True",code)
+        for required in ("test_v26_cross_artifact_consistency.py",
+                         "test_v26_final_release_gate.py",
+                         "test_v26_large_uploads.py",
+                         "test_v26_stream_analytics.py"):
+            self.assertIn(required,code)
         self.assertIn('return 0 if report["passed"] else 1',code)
 
     def test_notebook_python_cells_compilable_and_secret_remains_in_kaggle(self):
@@ -52,7 +70,12 @@ class V26LiveQualificationContractTests(unittest.TestCase):
                 "libreoffice-writer","libreoffice-impress","libreoffice-calc"):
             self.assertIn(required,joined)
         self.assertIn("qualify_v26_live.py",joined)
-        self.assertIn("Rizzler_V26_Qualification_",joined)
+        self.assertIn("Rizzler_V26_Audit_",joined)
+        self.assertIn("feature/v26-final-integration-gates",joined)
+        self.assertNotIn("feature/v24-context-convergence-and-safe-repair",joined)
+        self.assertIn("verify_release.py",joined)
+        self.assertIn("qualify_v26_large_data.py",joined)
+        self.assertIn("evaluate_v26_release.py",joined)
         self.assertNotIn("AIza",joined)
 
     def test_diagnostics_bundle_does_not_export_private_workstore(self):
@@ -60,7 +83,10 @@ class V26LiveQualificationContractTests(unittest.TestCase):
         for marker in ("private_workstore","private_slots",
                        ".sqlite3",".pem",".env",".key"):
             self.assertIn(marker,code)
-        self.assertIn('report["release_status"]="CANDIDATE_SMOKE_TEST_ONLY"',code)
+        self.assertIn('"CANDIDATE_SMOKE_TEST_ONLY" if report["passed"]',code)
+        self.assertIn('"PARTIAL_SMOKE_TEST_ONLY"',code)
+        self.assertIn("--skip-streamed",code)
+        self.assertIn('report["streamed_paid_passed"]',code)
         self.assertNotIn('report["release_status"]="PRODUCTION_QUALIFIED"',code)
 
 

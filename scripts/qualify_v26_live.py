@@ -29,14 +29,26 @@ V26_FLAGS={
     "RIZZLER_V26_DOMAIN_METHODS":"1",
     "RIZZLER_V26_ARTIFACT_STRATEGY":"1",
     "RIZZLER_V26_VISUAL_CRITIC":"1",
+    "RIZZLER_V26_CROSS_ARTIFACT_QA":"1",
 }
 TESTS=[
+    "test_v26_phase1_protocol.py",
+    "test_v26_native_outcome_coverage.py",
     "test_v26_outcome_phases.py",
     "test_v26_context_fabric.py",
+    "test_v26_context_brief_runtime.py",
+    "test_v26_provider_word_regression.py",
+    "test_v26_stream_paid_submission.py",
     "test_v26_editorial_strategy.py",
     "test_v26_reasoning_audit.py",
     "test_v26_visual_strategy.py",
     "test_v26_visual_critic.py",
+    "test_v26_stream_analytics.py",
+    "test_v26_cross_artifact_consistency.py",
+    "test_v26_presentation_layout.py",
+    "test_v26_final_release_gate.py",
+    "test_v26_large_uploads.py",
+    "test_v26_live_qualification.py",
     "test_v25_work_recovery_integration.py",
     "test_v24_storyboard_recovery.py",
 ]
@@ -98,6 +110,8 @@ def main():
     ap.add_argument("--output",required=True)
     ap.add_argument("--expected-sha",required=True)
     ap.add_argument("--model",default="")
+    ap.add_argument("--skip-streamed",action="store_true",
+                    help="Run 4-row and research smoke without the 15,017-row paid job")
     options=ap.parse_args()
     repo=Path(options.repo).resolve()
     out=Path(options.output).resolve()
@@ -119,6 +133,13 @@ def main():
     # The runtime flags are exact. No fallback silently disables cognition,
     # source verification, native artifact QA or user authorization checks.
     os.environ.update(V26_FLAGS)
+    native_qa=os.environ.get("RIZZLER_V26_NATIVE_OUTCOME_QA","0")
+    if native_qa.strip().lower() not in ("0","1","true","false","yes","no"):
+        report["blocking_error"]="invalid_native_outcome_flag"
+        save(out/"V26_QUALIFICATION.json",report)
+        return 1
+    report["phase2_native_outcome_qa_requested"]=(
+        native_qa.strip().lower() in ("1","true","yes"))
     os.environ["RIZZLER_V23_MODE"]="full"
     os.environ["RIZZLER_CONTEXT_CONVERGENCE"]="1"
     os.environ["RIZZLER_ARTIFACT_QA"]="strict"
@@ -136,6 +157,20 @@ def main():
             from qualify_v25_live import run_paid
             paid=asyncio.run(run_paid(repo,out,secrets.token_hex(7)))
             report["paid"]=paid
+            if paid.get("preflight",{}).get("passed") is True and not options.skip_streamed:
+                from qualify_v26_stream_paid import run_streamed_paid
+                report["streamed_paid"]=asyncio.run(run_streamed_paid(out))
+            elif options.skip_streamed:
+                report["streamed_paid"]={
+                    "passed":False,"status":"NOT_RUN_USER_OPT_OUT",
+                    "live_gemini_required":True}
+            else:
+                # Do not spend further tokens or mislabel expected provider
+                # failures as an independent Work Agent implementation defect.
+                report["streamed_paid"]={
+                    "passed":False,"status":"BLOCKED_BY_PROVIDER_PREFLIGHT",
+                    "live_gemini_required":True,
+                    "failure_code":paid.get("preflight",{}).get("failure_code","unknown")}
         else:
             report["blocking_error"]="missing_kaggle_GEMINI_API_KEY"
     except Exception as exc:
@@ -145,8 +180,17 @@ def main():
         paid.get("preflight",{}).get("passed") and
         paid.get("research",{}).get("passed") and
         paid.get("analytical",{}).get("passed"))
-    report["passed"]=report["offline_passed"] and report["live_passed"]
-    report["release_status"]="CANDIDATE_SMOKE_TEST_ONLY" if report["passed"] else "NOT_READY"
+    report["streamed_paid_passed"]=bool(report.get("streamed_paid",{}).get("passed"))
+    report["passed"]=bool(report["offline_passed"] and report["live_passed"] and report["streamed_paid_passed"])
+    report["release_status"]=("CANDIDATE_SMOKE_TEST_ONLY" if report["passed"]
+                              else "PARTIAL_SMOKE_TEST_ONLY"
+                              if options.skip_streamed and report["offline_passed"]
+                              and report["live_passed"] else "NOT_READY")
+    report["required_release_gates"]=[f"G{i:02d}" for i in range(18)]
+    report["production_signoff"]="NOT_RUN"
+    report["large_file_200mb_network"]="NOT_RUN"
+    report["cross_domain_benchmark_120_plus"]="NOT_RUN"
+    report["blind_human_review"]="NOT_RUN"
     save(out/"V26_QUALIFICATION.json",report)
     zip_path=package(out,sha)
     print("VERDICT:",report["release_status"],flush=True)
