@@ -178,6 +178,11 @@
       "sha256": "815558f252a3a40a546498580fe924a9c9f609f21f00f3535e394d7649b43da1"
     },
     {
+      "path": "docs/V26_STREAMED_INGESTION_ROLLOUT.md",
+      "bytes": 2409,
+      "sha256": "7c999c86875098c0358c17a45e7b2f6a128c4db6f57a946cf660689d9023cb98"
+    },
+    {
       "path": "docs/voice-pipeline.md",
       "bytes": 6313,
       "sha256": "d09f1bbf3fee24559faf3a73ada4f62627e3ad4263e00413315a7097469ff291"
@@ -363,6 +368,11 @@
       "bytes": 1944
     },
     {
+      "path": "src/rizzler/api.py",
+      "bytes": 66265,
+      "sha256": "c0d9b1fbeeb6910a32f7b88753deba2bea8e24b367a02f73ed0b9afcd0d0f93d"
+    },
+    {
       "path": "src/rizzler/artifacts.py",
       "bytes": 2417,
       "sha256": "dae3350a0cc47beb3fce019de5ce22d9f776834628f014ab8955651dfbd129b9"
@@ -469,8 +479,8 @@
     },
     {
       "path": "src/rizzler/v26_flags.py",
-      "bytes": 1505,
-      "sha256": "4f36088e9fde03ab6cbdfe3a1e4d6349869ef121e804caef55b5fb01d9cb580a"
+      "bytes": 1538,
+      "sha256": "727ee92a6cd1a4e76d1196302d3e6c00fbd4dc760dd43b13903b0e5e11ef94c7"
     },
     {
       "path": "src/rizzler/web/work.js",
@@ -484,8 +494,8 @@
     },
     {
       "path": "src/rizzler/work_api.py",
-      "bytes": 14934,
-      "sha256": "709c22f34ccc501d273e849142c018376015731fde3ca24451d28365c75bbc08"
+      "bytes": 16507,
+      "sha256": "87354df962e34a4a30e83921996a8c52b7164a8536e2a42fcee831aab16e3d4b"
     },
     {
       "path": "src/rizzler/work_artifact_strategy.py",
@@ -553,9 +563,19 @@
       "sha256": "db803039c58626f454fc7254f368cd526143eaadbbe4c2c43d6adf067da59004"
     },
     {
+      "path": "src/rizzler/work_large_uploads.py",
+      "bytes": 5453,
+      "sha256": "aacf155cacdacb1ff29aab06e573c3f5f41ea56d72698b75c4b68ca3f0ea7485"
+    },
+    {
       "path": "src/rizzler/work_memory_context.py",
       "bytes": 3373,
       "sha256": "b0145722c1c26bc193724b467a13e6c976373ef78faa2a8e65367bd90ecfa207"
+    },
+    {
+      "path": "src/rizzler/work_objects.py",
+      "bytes": 4313,
+      "sha256": "60f6cb3179a9dd227483b2939e90511e80dcd7b25344aef810d39367c9febbf4"
     },
     {
       "path": "src/rizzler/work_outcome_phases.py",
@@ -566,6 +586,11 @@
       "path": "src/rizzler/work_outcome.py",
       "sha256": "9b04aa4ee1c14a65cba0ed1d6853032c207eb887b8d79be30d4bd301ea6f0416",
       "bytes": 10012
+    },
+    {
+      "path": "src/rizzler/work_postgres.py",
+      "bytes": 4143,
+      "sha256": "aaef4cf1b1d99f3ffe947b19d996e00d10c78293930db7901ecf8f8c3262ffd2"
     },
     {
       "path": "src/rizzler/work_presentation_layout.py",
@@ -619,8 +644,8 @@
     },
     {
       "path": "src/rizzler/work_store.py",
-      "bytes": 65134,
-      "sha256": "1357e76ce1c84da34fcdf152523f7d7243115a2087e4dea7eb151a2a6566207d"
+      "bytes": 68757,
+      "sha256": "a02b1d068a670ba393ba946f893e3eb608013004ea1fc4b331865a175f4bc455"
     },
     {
       "path": "src/rizzler/work_studio.py",
@@ -841,6 +866,11 @@
       "path": "tests/test_v26_final_release_gate.py",
       "bytes": 6363,
       "sha256": "c4054ef688cbd5db1302b2872ce3b90874d574e108aab56fc4fc59884d7c2cf5"
+    },
+    {
+      "path": "tests/test_v26_large_uploads.py",
+      "bytes": 7106,
+      "sha256": "a76ad24b89a25d94dc02695fd071ed23c4b9d335584483a7348a195f29ea9565"
     },
     {
       "path": "tests/test_v26_live_qualification.py",
