@@ -299,8 +299,8 @@
     },
     {
       "path": "scripts/qualify_v26_large_data.py",
-      "bytes": 4690,
-      "sha256": "8f526d2d4a2665f6ca5abe9f5c03f605fc7812cb963373586d4ca9551572ea14"
+      "bytes": 4776,
+      "sha256": "275f0f7d88d3ee4ff71580765af46b8b14ef38893efae1803a1c8f65f378431d"
     },
     {
       "path": "scripts/qualify_v26_live.py",
@@ -649,8 +649,8 @@
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
-      "sha256": "e830ec9b89a09fa45e5a763255f471933cc641345429580d449fe641b4208f70",
-      "bytes": 21347
+      "sha256": "28bea5b40c8a41026d12a942482eab923b7d904aca02e17a2bd3f4b43b740ca0",
+      "bytes": 22002
     },
     {
       "path": "src/rizzler/work_store.py",
@@ -659,8 +659,8 @@
     },
     {
       "path": "src/rizzler/work_stream_analytics.py",
-      "bytes": 17489,
-      "sha256": "86b29b8c8991c5df74a644aa9a6ed010ba012a83b952fc855880ecf65a0ff797"
+      "bytes": 18914,
+      "sha256": "50b33042d33dd56f13727a8e3f575465e92823d349435060c52aa77f7e8eb2fe"
     },
     {
       "path": "src/rizzler/work_studio.py",
@@ -909,8 +909,8 @@
     },
     {
       "path": "tests/test_v26_stream_analytics.py",
-      "bytes": 6493,
-      "sha256": "ee60b78507e3557f8478d523c5c9996d2ccf12dfae50c6c2ac0c3db81123d8dc"
+      "bytes": 7453,
+      "sha256": "1f5a65bbc510c996edc9f0a5e2df5ec7e99d0c321b5aeaf71bd553ea0af844e6"
     },
     {
       "path": "tests/test_v26_visual_critic.py",
