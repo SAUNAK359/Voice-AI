@@ -93,7 +93,7 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
         from .work_auth import _secret
         _secret(work_signing_key)
         if production:
-            from .upload_scan import scan_clamd
+            from .upload_scan import scan_clamd, scan_clamd_file
             scanner_host = environ.get("RIZZLER_CLAMD_HOST", "")
             if not scanner_host:
                 raise ValueError("Production requires RIZZLER_CLAMD_HOST")
@@ -103,9 +103,11 @@ def create_app(settings: Settings | None = None, providers: ProviderSet | None =
                 raise ValueError("Invalid malware scanner port") from None
             def scanner(data):
                 return scan_clamd(data, scanner_host, scanner_port)
-            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], upload_scanner=scanner, object_store=object_store)
+            def scanner_file(path):
+                return scan_clamd_file(path, scanner_host, scanner_port)
+            work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], upload_scanner=scanner, upload_scanner_file=scanner_file, object_store=object_store)
                     if environ.get("RIZZLER_DATABASE_URL") else
-                    WorkStore(work_root, upload_scanner=scanner, object_store=object_store))
+                    WorkStore(work_root, upload_scanner=scanner, upload_scanner_file=scanner_file, object_store=object_store))
         else:
             work = (WorkStore(work_root, environ["RIZZLER_DATABASE_URL"], object_store=object_store)
                     if environ.get("RIZZLER_DATABASE_URL") else WorkStore(work_root, object_store=object_store))

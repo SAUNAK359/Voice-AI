@@ -35,8 +35,10 @@ class StaleLease(Exception):
 
 
 class WorkStore:
-    def __init__(self, root: str | Path, upload_scanner=None, object_store=None):
+    def __init__(self, root: str | Path, upload_scanner=None, object_store=None,
+                 upload_scanner_file=None):
         self.upload_scanner, self.objects = upload_scanner, object_store
+        self.upload_scanner_file = upload_scanner_file
         self.root = Path(root).expanduser().resolve()
         if not self.root.is_absolute():
             raise ValueError("Work root must be absolute")
@@ -1081,6 +1083,72 @@ class WorkStore:
             c.execute("INSERT INTO uploads VALUES(?,?,?,?,?,?)",
                       (uid,owner,name,hashlib.sha256(data).hexdigest(),len(data),time.time()))
         return {"id":uid,"name":name,"bytes":len(data)}
+
+    def prepare_upload_staging(self) -> Path:
+        """Reserve an unpredictable private staging name; API creates it exclusively."""
+        directory=self.root/"upload_staging"
+        directory.mkdir(mode=0o700,parents=True,exist_ok=True)
+        if directory.is_symlink():
+            raise ValueError("Unsafe staging directory")
+        return directory/(secrets.token_hex(24)+".part")
+
+    def register_upload_file(self,owner,name,source:Path,*,expected_sha256:str):
+        """Atomically admit an already-streamed source under the owner's scope."""
+        from .security import safe_upload_name, validate_session_id
+        from .work_large_uploads import (
+            DIGEST_RE,OWNER_TOTAL_LIMIT,sha256_file,upload_limit,
+            validate_uploaded_file)
+        from .upload_scan import ScanUnavailable
+        validate_session_id(owner)
+        safe_upload_name(name)
+        stage=Path(source)
+        directory=(self.root/"upload_staging").resolve()
+        if (not stage.is_file() or stage.is_symlink() or
+                stage.resolve().parent!=directory):
+            raise ValueError("Upload not in isolated staging directory")
+        if not isinstance(expected_sha256,str) or not DIGEST_RE.fullmatch(expected_sha256):
+            raise ValueError("Invalid stream digest")
+        size=validate_uploaded_file(stage,name,maximum=upload_limit())
+        if sha256_file(stage)!=expected_sha256:
+            raise ValueError("Upload changed between receipt and validation")
+        # A byte-only scanner must never be bypassed for large disk uploads.
+        if self.upload_scanner is not None and self.upload_scanner_file is None:
+            raise ScanUnavailable("File-based malware scanner required")
+        if self.upload_scanner_file is not None:
+            self.upload_scanner_file(stage)
+        if stage.stat().st_size!=size or sha256_file(stage)!=expected_sha256:
+            raise ValueError("Upload changed during malware scan")
+        directory=self.root/"uploads"/owner
+        directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+        if directory.is_symlink():
+            raise ValueError("Unsafe owner upload directory")
+        uid=secrets.token_hex(16)
+        final=directory/(uid+Path(name).suffix.lower())
+        moved=False
+        try:
+            with self._tx() as c:
+                row=c.execute(
+                    "SELECT count(*),COALESCE(sum(size),0) FROM uploads WHERE owner=?",
+                    (owner,)).fetchone()
+                if row[0]>=30 or row[1]+size>OWNER_TOTAL_LIMIT:
+                    raise Conflict("Upload quota exceeded")
+                if final.exists() or final.is_symlink():
+                    raise Conflict("Upload path already exists")
+                stage.replace(final)
+                moved=True
+                final.chmod(0o600)
+                if self.objects is not None:
+                    self.objects.put(f"uploads/{owner}/{final.name}",
+                        final,expected_sha256,size)
+                c.execute("INSERT INTO uploads VALUES(?,?,?,?,?,?)",
+                          (uid,owner,name,expected_sha256,size,time.time()))
+        except BaseException:
+            if moved:
+                final.unlink(missing_ok=True)
+            raise
+        return {"id":uid,"name":name,"bytes":size,
+                "sha256":expected_sha256,
+                "analysis_row_limit":10000}
 
     def upload(self,owner,uid):
         with self._tx() as c:
