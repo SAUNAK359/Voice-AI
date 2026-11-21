@@ -654,8 +654,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 70078,
-      "sha256": "561fd085bc4b962f49223033a84565115bc0b08a2efa4f3a4217f557558f66f8"
+      "bytes": 70242,
+      "sha256": "5120b9c150d335237794ee7ab39ab8222512ceae650ef52165cf8ebae89ba398"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -884,8 +884,8 @@
     },
     {
       "path": "tests/test_v26_cross_artifact_consistency.py",
-      "bytes": 8294,
-      "sha256": "e1ae1fd620d38b4b8cabad82465595ff0fd8e505be759da53e50ee7a3dfe70d9"
+      "bytes": 9503,
+      "sha256": "fc7ac2c379a871ad75924a754444bc7c8774621756a4a2de34b817e8bdfdbf05"
     },
     {
       "path": "tests/test_v26_editorial_strategy.py",
