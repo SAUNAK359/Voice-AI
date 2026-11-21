@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import importlib.util
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -129,7 +130,7 @@ class ActualArtifactQuantitativeTests(unittest.TestCase):
         self.assertTrue(joined["passed"])
 
     @unittest.skipUnless(
-        __import__("importlib").util.find_spec("pptx"),
+        importlib.util.find_spec("pptx") is not None,
         "Install the work extra to exercise actual editable PowerPoint bytes")
     def test_actual_native_powerpoint_text_is_used(self):
         slides=[]
