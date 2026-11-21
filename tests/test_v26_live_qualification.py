@@ -28,7 +28,10 @@ class V26LiveQualificationContractTests(unittest.TestCase):
         self.assertIn("RIZZLER_ARTIFACT_QA",code)
         self.assertIn('os.environ.get("GEMINI_API_KEY")',code)
         self.assertIn("from qualify_v25_live import run_paid",code)
-        self.assertIn('report["release_status"]="CANDIDATE_SMOKE_TEST_ONLY"',code)
+        self.assertIn('"CANDIDATE_SMOKE_TEST_ONLY" if report["passed"]',code)
+        self.assertIn('"PARTIAL_SMOKE_TEST_ONLY"',code)
+        self.assertIn("--skip-streamed",code)
+        self.assertIn('report["streamed_paid_passed"]',code)
         self.assertIn('report["streamed_paid_passed"]',code)
         self.assertIn('report["offline_passed"] and report["live_passed"] and report["streamed_paid_passed"]',code)
         self.assertIn("from qualify_v26_stream_paid import run_streamed_paid",code)
@@ -80,7 +83,10 @@ class V26LiveQualificationContractTests(unittest.TestCase):
         for marker in ("private_workstore","private_slots",
                        ".sqlite3",".pem",".env",".key"):
             self.assertIn(marker,code)
-        self.assertIn('report["release_status"]="CANDIDATE_SMOKE_TEST_ONLY"',code)
+        self.assertIn('"CANDIDATE_SMOKE_TEST_ONLY" if report["passed"]',code)
+        self.assertIn('"PARTIAL_SMOKE_TEST_ONLY"',code)
+        self.assertIn("--skip-streamed",code)
+        self.assertIn('report["streamed_paid_passed"]',code)
         self.assertNotIn('report["release_status"]="PRODUCTION_QUALIFIED"',code)
 
 
