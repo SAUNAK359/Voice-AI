@@ -33,6 +33,7 @@ V26_FLAGS={
 }
 TESTS=[
     "test_v26_phase1_protocol.py",
+    "test_v26_native_outcome_coverage.py",
     "test_v26_outcome_phases.py",
     "test_v26_context_fabric.py",
     "test_v26_context_brief_runtime.py",
@@ -130,6 +131,13 @@ def main():
     # The runtime flags are exact. No fallback silently disables cognition,
     # source verification, native artifact QA or user authorization checks.
     os.environ.update(V26_FLAGS)
+    native_qa=os.environ.get("RIZZLER_V26_NATIVE_OUTCOME_QA","0")
+    if native_qa.strip().lower() not in ("0","1","true","false","yes","no"):
+        report["blocking_error"]="invalid_native_outcome_flag"
+        save(out/"V26_QUALIFICATION.json",report)
+        return 1
+    report["phase2_native_outcome_qa_requested"]=(
+        native_qa.strip().lower() in ("1","true","yes"))
     os.environ["RIZZLER_V23_MODE"]="full"
     os.environ["RIZZLER_CONTEXT_CONVERGENCE"]="1"
     os.environ["RIZZLER_ARTIFACT_QA"]="strict"
