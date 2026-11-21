@@ -303,6 +303,12 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         context["artifact_ir"] = compile_ir(payload["objective"][:120],
             context["text"] or "# Dataset analysis\nVerified dataset statistics",
             context["sources"], context["summary"])
+        if feature_enabled("RIZZLER_V26_CONTEXT_FABRIC"):
+            from .work_context_adapter import legacy_context_to_fabric
+            context["knowledge_graph"]=legacy_context_to_fabric(
+                owner=owner,job_id=jid,payload=payload,
+                ir=context["artifact_ir"],summary=context["summary"],
+                goal_contract=context.get("goal_contract"))
 
     # Execute the authoritative persisted DAG. Model-led reassessment runs
     # after source/orchestrator stages and BEFORE the first artifact stage.
@@ -339,6 +345,22 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                 researcher=researcher,
                 focus=tuple(sorted(renderers.intersection(planned))))
             context_reviewed = True
+        if (feature_enabled("RIZZLER_V26_CONTEXT_FABRIC")
+                and (renderers.intersection(wave) or "quality" in wave)
+                and isinstance(context.get("knowledge_graph"),dict)):
+            # Finalized upstream evidence is persisted before any format
+            # specialist runs. A crash never turns an unverified text summary
+            # into an authoritative context graph.
+            old=store.knowledge_graph(owner,jid)
+            previous=old["revision"] if old is not None else None
+            revision=store.save_knowledge_graph(
+                jid,worker_id,fence,context["knowledge_graph"],
+                expected_revision=previous)
+            store.publish_cognition(jid,worker_id,fence,
+                "context_fabric","verification",{
+                    "schema":2,"revision":revision,
+                    "typed_nodes":len(context["knowledge_graph"]["nodes"]),
+                    "status":"owner_fenced_committed"})
         try:
             await stage_group(wave)
         except Exception as exc:
