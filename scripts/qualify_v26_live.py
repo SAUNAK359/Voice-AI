@@ -34,6 +34,7 @@ V26_FLAGS={
 TESTS=[
     "test_v26_outcome_phases.py",
     "test_v26_context_fabric.py",
+    "test_v26_context_brief_runtime.py",
     "test_v26_editorial_strategy.py",
     "test_v26_reasoning_audit.py",
     "test_v26_visual_strategy.py",
