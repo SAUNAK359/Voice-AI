@@ -48,6 +48,9 @@ def failure_code(exc: BaseException) -> str:
     from .work_semantic_quality import CandidateQualityIssue
     if isinstance(error, CandidateQualityIssue):
         return "candidate_quality_revision_required"
+    from .work_consistency import ConsistencyViolation
+    if isinstance(error, ConsistencyViolation):
+        return "cross_artifact_metric_consistency_failed"
     from .work_visual_critic import VisualReviewFailure, VisualReviewIncomplete
     if isinstance(error, VisualReviewFailure):
         return "visual_critical_issue"
