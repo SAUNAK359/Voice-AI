@@ -189,8 +189,8 @@
     },
     {
       "path": "docs/V26_PHASE1_ARCHITECTURAL_P0.md",
-      "bytes": 5212,
-      "sha256": "0328619ae450b742789c5acacb01c54b2b9623a6f95eea72bea5e6ae18cbe214"
+      "bytes": 5497,
+      "sha256": "ab5eae601904905349d7312afe143674691e5514be04596bbe1ca810c91ed32c"
     },
     {
       "path": "docs/V26_STREAMED_INGESTION_ROLLOUT.md",
@@ -614,8 +614,8 @@
     },
     {
       "path": "src/rizzler/work_phase1_protocol.py",
-      "bytes": 6077,
-      "sha256": "378d1156ea4a3a5b63f8c62c03e6257984bc39a593a31f54743ca4ca63d1af81"
+      "bytes": 7523,
+      "sha256": "e4b9ff8995fcd2511e7be0e0bd85adceba430b752aeb8c241bd6e09ff82c9228"
     },
     {
       "path": "src/rizzler/work_postgres.py",
@@ -664,8 +664,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 76886,
-      "sha256": "791fa4193d01479105177161b93ed8623dac669e73c68ce263bd74f27e7b6807"
+      "bytes": 77883,
+      "sha256": "37672434e4e9efea5050e150c2f1991a1657fdb0881cc70619c7d00b1933ae9e"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -924,8 +924,8 @@
     },
     {
       "path": "tests/test_v26_phase1_protocol.py",
-      "bytes": 14835,
-      "sha256": "122679261ba301864728c16f19c4de5d1e15b5cd87a7aebd2a770e39d6fdb5db"
+      "bytes": 16599,
+      "sha256": "7a27c1dde77622be20c947774da6b70c8003b6b05df1a6228af1292d150482ad"
     },
     {
       "path": "tests/test_v26_presentation_layout.py",
