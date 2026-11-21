@@ -195,5 +195,39 @@ class Phase1CrossAgentContractTests(unittest.TestCase):
                 self.request,requirements=REQS,permitted=frozenset())
 
 
+
+    def test_planning_schema_errors_are_owned_by_planner_not_upstream_data(self):
+        # Actual archived Kaggle failure: planning/contract_invalid was
+        # incorrectly escalated to backdelegated SQL, then rejected by context.
+        request=self.request
+        backdelegate={"action":"backdelegate",
+                      "reason":"A planning contract failed and requires reinspection.",
+                      "request":request}
+        diagnosis={"stage":"planning","kind":"pptx",
+                   "attempt":1,"error_code":"contract_invalid",
+                   "error_type":"ValueError"}
+        with self.assertRaises(ValueError):
+            validate_recovery_decision(
+                backdelegate,kind="pptx",permitted=self.permitted,
+                requirements=REQS,diagnostic=diagnosis)
+        replan={"action":"replan",
+                "reason":"Regenerate a valid source-grounded presentation plan.",
+                "request":None}
+        self.assertEqual(
+            validate_recovery_decision(
+                replan,kind="pptx",permitted=self.permitted,
+                requirements=REQS,diagnostic=diagnosis),replan)
+        permitted_gap={**diagnosis,"error_code":"evidence_gap",
+                       "error_type":"EvidenceGap"}
+        self.assertEqual(
+            validate_recovery_decision(
+                backdelegate,kind="pptx",permitted=self.permitted,
+                requirements=REQS,diagnostic=permitted_gap),backdelegate)
+        with self.assertRaises(ValueError):
+            validate_recovery_decision(
+                backdelegate,kind="pptx",permitted=self.permitted,
+                requirements=REQS,diagnostic={**diagnosis,
+                    "error_code":"provider_transient"})
+
 if __name__=="__main__":
     unittest.main()
