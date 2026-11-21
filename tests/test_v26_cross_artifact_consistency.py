@@ -130,6 +130,27 @@ class ActualArtifactQuantitativeTests(unittest.TestCase):
                 report(claims=[invalid]),
                 catalog=self.catalog,source_text=excerpt,kind="pptx")
 
+    def test_quantitative_audit_reason_is_safe_fixed_vocabulary(self):
+        from rizzler.work_consistency import (
+            AUDIT_REASONS, claim_audit_failure_category)
+        seen=ConsistencyViolation(
+            "Model could not provide a trustworthy claim audit",
+            reason="unobserved_excerpt")
+        self.assertEqual(seen.reason,"unobserved_excerpt")
+        self.assertIn(seen.reason,AUDIT_REASONS)
+        wrong=ConsistencyViolation(
+            "Reported metric disagrees with verified source")
+        self.assertEqual(claim_audit_failure_category(wrong),"numeric_mismatch")
+        with self.assertRaises(ValueError):
+            ConsistencyViolation("Unsafe private prompt",reason="freeform_secret")
+
+    def test_audit_prompt_does_not_supply_fictional_example_metric(self):
+        code=(Path(__file__).resolve().parents[1]/
+              "src"/"rizzler"/"work_consistency.py").read_text()
+        self.assertNotIn("metric:comparison_total_first",code)
+        self.assertIn("previous_reason=claim_audit_failure_category(exc)",code)
+        self.assertIn("claims:[], not a fabricated metric",code)
+
     def test_missing_supported_artifacts_never_qualifies(self):
         result=reconcile_claim_reports({})
         self.assertFalse(result["passed"])
