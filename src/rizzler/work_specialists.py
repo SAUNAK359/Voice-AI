@@ -89,7 +89,11 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                          payload, store, owner, composer, researcher,
                          jid, worker_id, fence, attempt),
                          timeout=spec.sla_seconds * (
-                             6 if (
+                             8 if (
+                                 spec.name=="quality" and
+                                 __import__("rizzler.v26_flags",fromlist=["enabled"]).enabled(
+                                     "RIZZLER_V26_CROSS_ARTIFACT_QA"))
+                             else 6 if (
                                  spec.name=="powerpoint" and
                                  feature_enabled("RIZZLER_COMPONENT_PLANNING"))
                              else 4 if (
@@ -746,6 +750,46 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
             raise ValueError("Analysis lineage missing independent SQL")
         if not context["text"] and not context["summary"]:
             raise ValueError("No substantive evidence to publish")
+        from .v26_flags import enabled as v26_enabled
+        if v26_enabled("RIZZLER_V26_CROSS_ARTIFACT_QA"):
+            from .v26_flags import foundation_enabled
+            if not foundation_enabled():
+                raise ValueError("V26 cross-artifact QA needs full proof context")
+            from .work_consistency import (
+                audit_artifact_claims,reconcile_claim_reports,
+                ConsistencyViolation)
+            from .config import Settings
+            graph=context.get("work_graph")
+            if not isinstance(graph,dict):
+                raise ConsistencyViolation("No accepted owner-scoped V26 context")
+            cfg=Settings.from_env()
+            supported=[r for r in receipts if r.kind in (
+                "pptx","docx","pdf","xlsx")]
+            sem=asyncio.Semaphore(2)
+            async def audit_receipt(receipt):
+                async with sem:
+                    review=await audit_artifact_claims(
+                        checkpoint/receipt.name,receipt.kind,graph,
+                        model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                    return receipt.kind,review
+            checked=await asyncio.gather(
+                *(audit_receipt(receipt) for receipt in supported))
+            reports=dict(checked)
+            consistency=reconcile_claim_reports(reports)
+            if not consistency["passed"]:
+                store.publish_cognition(
+                    jid,worker_id,fence,"cross_artifact_auditor","gap",{
+                        "status":"critical_numeric_claim_missing",
+                        "missing_metric_count":
+                            len(consistency["missing_required_metrics"])})
+                raise ConsistencyViolation(
+                    "Critical source-computed metrics are absent from all output artifacts")
+            detailed_qa["cross_artifact_consistency"]=consistency
+            store.publish_cognition(
+                jid,worker_id,fence,"cross_artifact_auditor","verification",{
+                    "status":"source_bound_metric_reconciled",
+                    "verified_metric_count":
+                        len(consistency["verified_metric_appearances"])})
         return {"passed": True, "missing": missing, "artifacts": sorted(receipts),
                 "context_revision": (context.get("context_package") or {}).get("revision"),
                 "artifact_ir_schema": context["artifact_ir"].schema_version,
