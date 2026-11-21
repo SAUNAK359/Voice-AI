@@ -84,6 +84,12 @@ class ProviderStatusTests(unittest.TestCase):
             with store._tx() as tx, self.assertRaises(ValueError):
                 store._diagnostic(tx,claim["id"],owner,wrong)
 
+    def test_shared_provider_slot_admission_is_bounded_transient(self):
+        from rizzler.cognitive_provider import ProviderBusy
+        from rizzler.production_guard import BudgetExceeded
+        self.assertTrue(_transient(ProviderBusy("slots saturated")))
+        self.assertFalse(_transient(BudgetExceeded("budget limit exhausted")))
+
     def test_non_numeric_fields_do_not_leak_or_bypass_retry_policy(self):
         error=type("ClientError",(Exception,),{"code":"SECRET HTTP 503 with PII"})(
             "Private contents")
