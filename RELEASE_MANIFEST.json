@@ -314,8 +314,8 @@
     },
     {
       "path": "scripts/qualify_v26_stream_paid.py",
-      "bytes": 8683,
-      "sha256": "ac326d3a8fcebd2dc3bb860438d4bfbb69bfe762a0016fed813d9266a674b798"
+      "bytes": 9765,
+      "sha256": "05cd0568ca2c781144d36c11b0fa5a1cdc30bdcd8d60c7d63bd98f4d72c42af8"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -409,8 +409,8 @@
     },
     {
       "path": "src/rizzler/cognitive_provider.py",
-      "bytes": 9236,
-      "sha256": "31febe1869098b0e6ec7da1ef2f44b181661926dd183ab8e020c0ed18c1183fd"
+      "bytes": 9519,
+      "sha256": "d99c3de26b6528a6484a33b62679c72be9a0e38be104b049dcaaee30d8cd2baf"
     },
     {
       "path": "src/rizzler/config.py",
@@ -524,8 +524,8 @@
     },
     {
       "path": "src/rizzler/work_consistency.py",
-      "bytes": 12654,
-      "sha256": "4aa5c0838f20d00feafbf85288e0574c8a38f69a96d8427ef6264759314cb497"
+      "bytes": 14509,
+      "sha256": "bc1b300b7296b2cb07c2fa18c2857712151c66d4704bd270a6e0680e1e3af7b8"
     },
     {
       "path": "src/rizzler/work_context_fabric.py",
@@ -654,8 +654,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 70242,
-      "sha256": "5120b9c150d335237794ee7ab39ab8222512ceae650ef52165cf8ebae89ba398"
+      "bytes": 71273,
+      "sha256": "5707b01daf9ab93329e6d3aa5847b4f40834c7f86a0cf701046ee9e3568ada29"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -884,8 +884,8 @@
     },
     {
       "path": "tests/test_v26_cross_artifact_consistency.py",
-      "bytes": 9474,
-      "sha256": "e57bc7a4b6aa620c510d96269a79d92277b167d3a3749b15d309bc26757105de"
+      "bytes": 10604,
+      "sha256": "9bab8906184beb1caabfdf60620a4e1d5afd37e498218d32a15686a024a430ee"
     },
     {
       "path": "tests/test_v26_editorial_strategy.py",
@@ -904,8 +904,8 @@
     },
     {
       "path": "tests/test_v26_live_qualification.py",
-      "bytes": 4059,
-      "sha256": "fa100f970d654e22945254c1b385524ee8021baf531b69eb222fe25cad79c99d"
+      "bytes": 4346,
+      "sha256": "3ac6146f8733b6dd9cee6903d220a81135a7977e9bfaebce06b72d7cd54fa17d"
     },
     {
       "path": "tests/test_v26_outcome_phases.py",
@@ -919,8 +919,8 @@
     },
     {
       "path": "tests/test_v26_provider_word_regression.py",
-      "bytes": 4654,
-      "sha256": "e8fe9a872b52cc63cdf83ada2636e09ddefc33d5f1dc0ddccf3435c324a76a7c"
+      "bytes": 4995,
+      "sha256": "51c565f674e7019ad35e83a233c19e913c1bb399c71f499d6129f61361f13a60"
     },
     {
       "path": "tests/test_v26_reasoning_audit.py",
