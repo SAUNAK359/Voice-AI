@@ -294,11 +294,6 @@ def render_profile_workbook(path: Path, summary: dict, title: str,
     overview.append([None])
     for heading, body in sections:
         overview.append([csv_escape(heading), csv_escape(body)])
-    overview.append(["Scope notice", "Data sheet contains source-derived aggregates only, NOT original rows."])
-    overview.append(["Original row count", summary["rows"]])
-    overview.append(["Source digest (SHA-256)", summary["source_sha256"]])
-    overview.append(["Source coverage", summary["source_coverage"]])
-    overview.append(["Limitations", "; ".join(summary["limitations"])])
     data = wb.create_sheet("Data")
     data.append(header)
     for row in records:
