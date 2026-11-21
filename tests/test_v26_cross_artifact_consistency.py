@@ -54,6 +54,30 @@ class ActualArtifactQuantitativeTests(unittest.TestCase):
         self.graph=source_graph()
         self.catalog=metric_catalog(self.graph)
 
+    def test_quality_auditor_uses_artifact_receipt_values_not_map_keys(self):
+        """Regression: real Kaggle QA crashed on str.kind at quality stage."""
+        import ast
+        source=(Path(__file__).resolve().parents[1]/
+                "src"/"rizzler"/"work_specialists.py").read_text(encoding="utf-8")
+        tree=ast.parse(source)
+        matches=[]
+        for node in ast.walk(tree):
+            if not isinstance(node,ast.ListComp):
+                continue
+            if not any(isinstance(t,ast.Attribute) and t.attr=="kind"
+                       for t in ast.walk(node.elt) if isinstance(t,ast.AST)):
+                continue
+            for generator in node.generators:
+                iterator=generator.iter
+                if (isinstance(iterator,ast.Call)
+                        and isinstance(iterator.func,ast.Attribute)
+                        and isinstance(iterator.func.value,ast.Name)
+                        and iterator.func.value.id=="receipts"):
+                    matches.append(iterator.func.attr)
+        self.assertIn("values",matches,
+                      "Cross-artifact quality must iterate real receipts, not strings")
+        self.assertNotIn("keys",matches)
+
     def test_source_bound_metric_catalog(self):
         self.assertEqual(set(self.catalog),{
             "metric:net_total","metric:import_total"})
