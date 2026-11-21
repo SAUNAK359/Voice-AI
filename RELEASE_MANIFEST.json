@@ -310,12 +310,12 @@
     {
       "path": "scripts/qualify_v26_live.py",
       "bytes": 6972,
-      "sha256": "482f720b5071204b41f4b1681d3094123b0e228973f500333d554756521498e2"
+      "sha256": "352bc92b8907df7e6636dfef8a75ad548d6f1c207c40ea0ebb4fec55448604c5"
     },
     {
       "path": "scripts/qualify_v26_stream_paid.py",
       "bytes": 8154,
-      "sha256": "70b6159e1bca45ceb79406687b68a300f6202e0cbd100ca5a28471b22cc6f7b5"
+      "sha256": "21c71238d167f16bb26da635a48070d14080324c752c39e9a31078e4647e0a26"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -535,7 +535,7 @@
     {
       "path": "src/rizzler/work_context_intelligence.py",
       "bytes": 34859,
-      "sha256": "239ee05e3e176aac0056132045ac6ad647ac06475e7acd88b2de4f1875d804c6"
+      "sha256": "97c2397dff70fcf763d8126334fd302bc5912b05fe4f5ae2136c979781ef323c"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -874,7 +874,7 @@
     },
     {
       "path": "tests/test_v26_context_brief_runtime.py",
-      "sha256": "7ddd4e10e3002412b60dc354aa67858aa7b701c5bf44364bd33dea5080cfc22b",
+      "sha256": "4bac1e121453d322e978831ed9b8a94372003ba29ed1587feb27b8fe9cd55dd3",
       "bytes": 3890
     },
     {
