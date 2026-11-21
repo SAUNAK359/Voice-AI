@@ -98,8 +98,16 @@ def read_gate_receipt(evidence_root: Path,gate_id: str,
             or "\\" in location or any(part in (".","..","")
                 for part in location.split("/"))):
         raise ReleaseEvidenceError("Unsafe or external proof path")
-    target=(root/location).resolve()
-    if root not in target.parents or not target.is_file() or target.is_symlink():
+    raw_target=root/location
+    # No path segment may be a symlink; otherwise a proof could be changed
+    # between hash inspection and a later release review.
+    current=root
+    for part in location.split("/"):
+        current=current/part
+        if current.is_symlink():
+            raise ReleaseEvidenceError("Release proof contains a symlink")
+    target=raw_target.resolve()
+    if root not in target.parents or not target.is_file():
         raise ReleaseEvidenceError("Release proof does not exist in allowed directory")
     if not 16<=target.stat().st_size<=MAX_PROOF_BYTES:
         raise ReleaseEvidenceError("Release proof empty or oversized")
