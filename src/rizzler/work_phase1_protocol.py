@@ -57,6 +57,37 @@ def validate_source_request(request: dict, *, requirements: list[dict],
     return request
 
 
+def immutable_task_digest(payload: dict) -> str:
+    """The L0 authorization digest is identical before and after PCCF build."""
+    from .work_context_fabric import _sha as canonical_sha
+    if (not isinstance(payload,dict)
+            or not isinstance(payload.get("objective"),str)
+            or not payload["objective"].strip()
+            or not isinstance(payload.get("deliverables"),list)
+            or not payload["deliverables"]
+            or any(not isinstance(fmt,str) or not fmt
+                   for fmt in payload["deliverables"])):
+        raise HandoffContractError("Immutable user goal or output scope missing")
+    return canonical_sha({
+        "original_objective":payload["objective"],
+        "authorized_formats":payload["deliverables"]})
+
+
+def validate_upstream_handoff(*, payload: dict,owner: str,
+                              job_id: str,specialist: str) -> dict:
+    """Bind pre-graph research/SQL/orchestration to the same L0 user scope."""
+    from .work_agents import plan
+    if (not isinstance(owner,str) or not 3<=len(owner)<=150
+            or not isinstance(job_id,str) or not 3<=len(job_id)<=150
+            or specialist not in ("research","sql_analytics","orchestrator")):
+        raise HandoffContractError("Invalid upstream identity or agent scope")
+    if specialist not in {x.name for x in plan(payload)}:
+        raise HandoffContractError("Upstream agent is not authorized by job plan")
+    return {"schema_version":1,"owner_scope":owner,"job_id":job_id,
+            "recipient_specialist":specialist,
+            "immutable_goal_digest":immutable_task_digest(payload)}
+
+
 def validate_task_handoff(graph: dict, *, payload: dict,
                           owner: str, job_id: str, specialist: str) -> dict:
     """Verify exact task, tenant, source revision and critical metric lineage.
@@ -66,7 +97,6 @@ def validate_task_handoff(graph: dict, *, payload: dict,
     hash is derived from a canonical bounded packet, not a provider summary.
     """
     from .work_context_fabric import validate_fabric, READERS
-    from .work_context_fabric import _sha as canonical_sha
     from .work_context_fabric import ContextAccessDenied
 
     validate_fabric(graph)
@@ -78,9 +108,7 @@ def validate_task_handoff(graph: dict, *, payload: dict,
             or not isinstance(payload.get("deliverables"),list)
             or not payload["deliverables"]):
         raise HandoffContractError("Persisted user goal is unavailable")
-    authorized={"original_objective":payload["objective"],
-                "authorized_formats":payload["deliverables"]}
-    if canonical_sha(authorized)!=graph["immutable_goal_digest"]:
+    if immutable_task_digest(payload)!=graph["immutable_goal_digest"]:
         raise HandoffContractError("Source graph does not match immutable job")
     original=next((item for item in graph["nodes"]
                    if item["id"]=="goal:original"),None)
