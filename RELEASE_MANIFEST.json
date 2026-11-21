@@ -439,8 +439,8 @@
     },
     {
       "path": "src/rizzler/v23_flags.py",
-      "bytes": 1607,
-      "sha256": "599eaf84e83b76bfcf6c66bd79d9c4c0aef0dff27714cced500a5a537c3d411d"
+      "bytes": 1978,
+      "sha256": "7625c5d7880912fc257eca5d27825738083ada4d29c255e80fced8b548c3022c"
     },
     {
       "path": "src/rizzler/web/work.js",
@@ -458,9 +458,19 @@
       "sha256": "709c22f34ccc501d273e849142c018376015731fde3ca24451d28365c75bbc08"
     },
     {
+      "path": "src/rizzler/work_context_adapter.py",
+      "bytes": 4083,
+      "sha256": "23702c59a6bb8f8780d46388b4dfe0b68d3c3a27fe143521eb89f84991863215"
+    },
+    {
+      "path": "src/rizzler/work_context_fabric.py",
+      "bytes": 11757,
+      "sha256": "d2dc238f14f58a4c3e853f634a7137d2baa945e303641c9e77409b38562d48a5"
+    },
+    {
       "path": "src/rizzler/work_context_intelligence.py",
-      "bytes": 27841,
-      "sha256": "209d7ce71f62b25516e6a036b81eb8c5b032d9dcbf1933848fd2edb5e2b74805"
+      "bytes": 31253,
+      "sha256": "822a8217bed73fbcba5eb17c0ddb586914eafb9a66cba8e09c17528902b956ce"
     },
     {
       "path": "src/rizzler/work_design.py",
@@ -476,6 +486,11 @@
       "path": "src/rizzler/work_editor.py",
       "bytes": 18138,
       "sha256": "e8c325ffa679835b4186af60617bc90c39f7ad6f36d7cc6df1883823ecf099fc"
+    },
+    {
+      "path": "src/rizzler/work_editorial_director.py",
+      "bytes": 8563,
+      "sha256": "3fb31ba93b4509316611a0285b6d978bf9bb6141d7ae3bea7386e076b41c631c"
     },
     {
       "path": "src/rizzler/work_excel_studio.py",
@@ -518,6 +533,11 @@
       "bytes": 11783
     },
     {
+      "path": "src/rizzler/work_readiness.py",
+      "bytes": 3347,
+      "sha256": "3b3c44eb0a43b5fdb62805840b3a39fe4cd8989274900722300c33dff8fe9af1"
+    },
+    {
       "path": "src/rizzler/work_repair.py",
       "bytes": 19129,
       "sha256": "73d0781ff62976dd543cb5b248e5838dccc59e2fd301e6a1bc7c1ce3534f3695"
@@ -539,8 +559,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 55578,
-      "sha256": "0ec2d5eee4345bf7ca7cf5a42870b9119c7cabc1aeb09f7e9c30427cdfcf9955"
+      "bytes": 58295,
+      "sha256": "f52197f5f5e72ae53b297cdddd1ad96fc141c53ea95ee596fdbbdd499d63cd63"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -554,8 +574,8 @@
     },
     {
       "path": "src/rizzler/work_studio.py",
-      "bytes": 17070,
-      "sha256": "921891b5f46c19ef8c975ef938f51e8d53a234bf041f38da161ed6114185b274"
+      "bytes": 17479,
+      "sha256": "d2b8a7c5c5283bdcf18489fe2fb0a8a3d98bec860d964b096f70338421e82f07"
     },
     {
       "path": "src/rizzler/work_worker.py",
@@ -741,6 +761,11 @@
       "path": "tests/test_v25_work_recovery_integration.py",
       "bytes": 5981,
       "sha256": "519da28920c1d667ea4442d5891c251aa5d264702bae701915ceb1328da02cb1"
+    },
+    {
+      "path": "tests/test_v26_context_editorial.py",
+      "bytes": 11487,
+      "sha256": "965f73e403d52c0b4f55c7f88e4540fab6b4587835695994681f403113d550c1"
     },
     {
       "path": "web/app.js",
