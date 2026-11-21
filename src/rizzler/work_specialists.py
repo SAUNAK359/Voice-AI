@@ -990,6 +990,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                 elif streaming and kind == "csv":
                     import shutil
                     source_path=store.upload(owner,payload["uploads"][0])
+                    if source_path.suffix.lower()!=".csv":
+                        raise ValueError("XLSX-to-CSV conversion is not qualified for streamed sources")
                     await asyncio.to_thread(shutil.copyfile,source_path,working)
                 elif studio_blueprint is not None:
                     from .work_studio import render_storyboard
