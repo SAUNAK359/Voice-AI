@@ -309,13 +309,13 @@
     },
     {
       "path": "scripts/qualify_v26_live.py",
-      "bytes": 6972,
-      "sha256": "352bc92b8907df7e6636dfef8a75ad548d6f1c207c40ea0ebb4fec55448604c5"
+      "bytes": 7016,
+      "sha256": "1c0129ee8457d2a08fe84154572662a09c08bc13bd4cf750c8710f6eb6a75505"
     },
     {
       "path": "scripts/qualify_v26_stream_paid.py",
-      "bytes": 8154,
-      "sha256": "21c71238d167f16bb26da635a48070d14080324c752c39e9a31078e4647e0a26"
+      "bytes": 8217,
+      "sha256": "e5290c70d9036826bc7ce74ce9292ea5ba6605b33f637b5270005e068d17704d"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -409,8 +409,8 @@
     },
     {
       "path": "src/rizzler/cognitive_provider.py",
-      "bytes": 9256,
-      "sha256": "ef457ea120d39414a75f09cf4622b1df82f7318b66eebcb931d0b117d7266711"
+      "bytes": 9236,
+      "sha256": "31febe1869098b0e6ec7da1ef2f44b181661926dd183ab8e020c0ed18c1183fd"
     },
     {
       "path": "src/rizzler/config.py",
@@ -544,8 +544,8 @@
     },
     {
       "path": "src/rizzler/work_diagnostics.py",
-      "bytes": 4376,
-      "sha256": "12507ceef08a521a72e8daf611a3684f7988727ea42eb2445462a5b445dfef82"
+      "bytes": 5000,
+      "sha256": "a6d2394d040d72a1891df0fee950f836c2d0b2d88306345ae07350b207dc5202"
     },
     {
       "path": "src/rizzler/work_editor.py",
@@ -654,8 +654,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 69879,
-      "sha256": "092bf15c6ec9dc836f7a372a4baa2d8c20224940bf17fe5713f174f21abaec0b"
+      "bytes": 70078,
+      "sha256": "561fd085bc4b962f49223033a84565115bc0b08a2efa4f3a4217f557558f66f8"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -916,6 +916,11 @@
       "path": "tests/test_v26_presentation_layout.py",
       "bytes": 4253,
       "sha256": "7507a9628ea86240dfb6cfc7a94ff4f6b1e060d2e650cdd78da073cd2f50183e"
+    },
+    {
+      "path": "tests/test_v26_provider_word_regression.py",
+      "bytes": 2880,
+      "sha256": "1c7f5cae52c4a4cf596e1a854ee6f5e134140bc40990d9a157616fc6e28b5f34"
     },
     {
       "path": "tests/test_v26_reasoning_audit.py",
