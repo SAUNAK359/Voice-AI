@@ -89,7 +89,11 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
                          payload, store, owner, composer, researcher,
                          jid, worker_id, fence, attempt),
                          timeout=spec.sla_seconds * (
-                             8 if (
+                             16 if (
+                                 spec.name=="sql_analytics" and
+                                 __import__("rizzler.v26_flags",fromlist=["enabled"]).enabled(
+                                     "RIZZLER_V26_STREAM_ANALYTICS"))
+                             else 8 if (
                                  spec.name=="quality" and
                                  __import__("rizzler.v26_flags",fromlist=["enabled"]).enabled(
                                      "RIZZLER_V26_CROSS_ARTIFACT_QA"))
@@ -485,6 +489,27 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         from .v26_flags import enabled as v26_analytics_enabled
         if v26_analytics_enabled("RIZZLER_V26_STREAM_ANALYTICS"):
             from .work_stream_analytics import analyze_streaming_sql
+            if feature_enabled("RIZZLER_SQL_EXPLORATION"):
+                from .config import Settings
+                from .work_sql_exploration import explore_dataset
+                cfg=Settings.from_env()
+                if cfg.gemini_api_key:
+                    try:
+                        deep=await explore_dataset(
+                            source,payload["objective"]+
+                            ("\n"+context.get("goal_brief",""))[:2500],
+                            model=cfg.gemini_model,api_key=cfg.gemini_api_key)
+                        if deep.get("analysis_receipts",{}).get("verified_queries",0):
+                            return deep
+                        store.publish_cognition(jid,worker_id,fence,
+                            "sql_analytics","gap",{
+                                "status":"streamed_sql_experiments_unavailable",
+                                "category":str(deep.get("exploration_status","unknown"))[:80]})
+                    except Exception as exc:
+                        store.publish_cognition(jid,worker_id,fence,
+                            "sql_analytics","gap",{
+                                "status":"streamed_sql_experiments_unavailable",
+                                "category":type(exc).__name__})
             result=await asyncio.to_thread(analyze_streaming_sql,source)
             store.publish_cognition(jid,worker_id,fence,"sql_analytics",
                 "verification",{"status":"full_source_verified",
