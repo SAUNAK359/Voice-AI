@@ -168,6 +168,11 @@
       "sha256": "b5c9270cf0206643849a043cfcdcc9860f7767a8c8ff8843ba988f043a59aa9a"
     },
     {
+      "path": "docs/V26_FINAL_INTEGRATION_RELEASE_POLICY.md",
+      "bytes": 3638,
+      "sha256": "dfc37f1dcdbb4756335f332a44a1f1a84222f37a7fd15632991ab277ab07898d"
+    },
+    {
       "path": "docs/V26_IMPLEMENTATION_PROGRESS.md",
       "bytes": 9588,
       "sha256": "815558f252a3a40a546498580fe924a9c9f609f21f00f3535e394d7649b43da1"
@@ -266,6 +271,11 @@
       "path": "scripts/build_frontend.py",
       "bytes": 3188,
       "sha256": "a4782e1916d1fa5ec71153e96c06f0042477d0400f6d5aa742fb1b4dbc7febee"
+    },
+    {
+      "path": "scripts/evaluate_v26_release.py",
+      "bytes": 1971,
+      "sha256": "db3a777031306718386d5177e6d7e25c72de45b49d0ea3e4babfb7e3d535ff7e"
     },
     {
       "path": "scripts/export_notebook.py",
@@ -573,6 +583,11 @@
       "sha256": "ec3b869db00067a60f689f133301401c0b10250f4af3f3665e26e797028bbebc"
     },
     {
+      "path": "src/rizzler/work_release_gate.py",
+      "bytes": 9792,
+      "sha256": "e73d27a6d7535acb7a76645d79aa75d293a91228f3ec0f2619e4b822f85cf60c"
+    },
+    {
       "path": "src/rizzler/work_repair.py",
       "bytes": 19129,
       "sha256": "73d0781ff62976dd543cb5b248e5838dccc59e2fd301e6a1bc7c1ce3534f3695"
@@ -821,6 +836,11 @@
       "path": "tests/test_v26_editorial_strategy.py",
       "bytes": 5892,
       "sha256": "7f1ba2372a6a8614c6ddd7d037e6a98a71723f29406b4641ca07a60b14448bc0"
+    },
+    {
+      "path": "tests/test_v26_final_release_gate.py",
+      "bytes": 6363,
+      "sha256": "c4054ef688cbd5db1302b2872ce3b90874d574e108aab56fc4fc59884d7c2cf5"
     },
     {
       "path": "tests/test_v26_live_qualification.py",
