@@ -205,6 +205,12 @@ def raise_verified_backdelegation(decision: dict, *, specialist: str,
         raise ValueError("No delegated evidence needed")
     from .work_feedback import EvidenceGap, validate_specialist_feedback
     request=decision["request"]
+    if requirements is not None:
+        # General context feedback may discard output-only asks, but a
+        # post-failure recovery backdelegation MUST reject them explicitly.
+        # A dropped request cannot be promoted to an authorized EvidenceGap.
+        from .work_outcome_phases import validate_evidence_request
+        validate_evidence_request(request,requirements)
     validate_specialist_feedback(
         {"specialist":specialist,"readiness":"needs_evidence",
          "requests":[request],
