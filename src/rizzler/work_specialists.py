@@ -346,7 +346,8 @@ async def _execute_once(store, claim: dict, worker_id: str, composer, researcher
         if (v26_enabled("RIZZLER_V26_DOMAIN_METHODS")
                 and renderers.intersection(wave)
                 and payload.get("uploads")
-                and not context.get("_v26_method_attempted")):
+                and not context.get("_v26_method_attempted")
+                and not v26_enabled("RIZZLER_V26_STREAM_ANALYTICS")):
             if not foundation_enabled():
                 raise ValueError("V26 domain methods require complete context foundation")
             from .config import Settings
@@ -481,6 +482,17 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
         if len(uploads) != 1:
             raise ValueError("SQL analysis requires exactly one uploaded dataset")
         source = store.upload(owner, uploads[0])
+        from .v26_flags import enabled as v26_analytics_enabled
+        if v26_analytics_enabled("RIZZLER_V26_STREAM_ANALYTICS"):
+            from .work_stream_analytics import analyze_streaming_sql
+            result=await asyncio.to_thread(analyze_streaming_sql,source)
+            store.publish_cognition(jid,worker_id,fence,"sql_analytics",
+                "verification",{"status":"full_source_verified",
+                    "source_sha256":result["summary"]["source_sha256"],
+                    "source_rows":result["summary"]["rows"],
+                    "execution":result["execution"],
+                    "limitations":"Professional interpretation still requires domain review"})
+            return result
         if feature_enabled("RIZZLER_SQL_EXPLORATION"):
             from .config import Settings
             from .work_sql_exploration import explore_dataset
@@ -728,7 +740,8 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     raise ValueError("Format-specific edited document failed semantic QA")
             structural_qa = await asyncio.to_thread(
                 inspect_artifact, checkpoint / receipt.name, receipt.kind,
-                dataset_rows=context["summary"]["rows"] if context["summary"] else None,
+                dataset_rows=(context["summary"]["rows"] if
+                    context["summary"] and not context["summary"].get("streaming") else None),
                 bundle_receipts=bundle,
                 artifact_ir=None if studio is not None else document_ir,
                 dataset_summary=context["summary"],
@@ -817,13 +830,17 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
     # document generation tools rather than duplicating their implementations.
     for kind in [x for x in requested if x != "zip"]:
         table = None
-        if payload.get("uploads"):
+        from .v26_flags import enabled as v26_stream_enabled
+        streaming = v26_stream_enabled("RIZZLER_V26_STREAM_ANALYTICS") and bool(
+            (context.get("summary") or {}).get("streaming"))
+        if payload.get("uploads") and not streaming:
             from .work_skills import read_dataset
             table = await asyncio.to_thread(read_dataset,
                                              store.upload(owner, payload["uploads"][0]))
         working = attempt / (kind + "." + kind)
         ir = context["artifact_ir"]
-        dataset_rows = context["summary"]["rows"] if context["summary"] else None
+        dataset_rows = (context["summary"]["rows"] if
+            context["summary"] and not streaming else None)
         studio_blueprint = None
         editor_blueprint = None
         # The immutable IR remains authoritative. This bounded, versioned
@@ -940,7 +957,16 @@ async def invoke(spec, checkpoint: Path, context: dict, formats: set[str],
                     await build_format_plan()
                     need_plan=False
                 phase="render_quality"
-                if studio_blueprint is not None:
+                if streaming and kind == "xlsx":
+                    from .work_stream_analytics import render_profile_workbook
+                    await asyncio.to_thread(
+                        render_profile_workbook,working,context["summary"],
+                        document_ir.title,document_ir.sections,list(document_ir.sources))
+                elif streaming and kind == "csv":
+                    import shutil
+                    source_path=store.upload(owner,payload["uploads"][0])
+                    await asyncio.to_thread(shutil.copyfile,source_path,working)
+                elif studio_blueprint is not None:
                     from .work_studio import render_storyboard
                     await asyncio.to_thread(
                         render_storyboard,working,studio_blueprint,
