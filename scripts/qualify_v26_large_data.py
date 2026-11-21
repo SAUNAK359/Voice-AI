@@ -32,9 +32,12 @@ def main():
     parser.add_argument("--max-seconds",type=float,default=0)
     parser.add_argument("--max-rss-mb",type=float,default=0)
     args=parser.parse_args()
-    source=Path(args.source).resolve(strict=True)
+    supplied=Path(args.source)
+    if supplied.is_symlink():
+        parser.error("Symlink sources are not accepted")
+    source=supplied.resolve(strict=True)
     output=Path(args.output)
-    if source.is_symlink() or output.resolve()==source:
+    if output.resolve()==source:
         parser.error("Unsafe source or evidence path")
     evidence={"schema_version":1,"run_utc":datetime.now(timezone.utc).isoformat(),
               "status":"NOT_QUALIFIED","release_certification":False,
