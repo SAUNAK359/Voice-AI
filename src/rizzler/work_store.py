@@ -935,12 +935,23 @@ class WorkStore:
         required = {"stage","code","exception_type","exception_module",
                     "locations","fingerprint"}
         research_fields = {"research_reason","research_failure_categories"}
+        safe_provider_fields = {"http_status"}
         if (not isinstance(record, dict)
                 or not required <= set(record)
-                or not set(record) <= required | research_fields
+                or not set(record) <= required | research_fields | safe_provider_fields
                 or set(record).intersection(research_fields) not in
                    (set(), research_fields)):
             raise ValueError("Invalid safe diagnostic contract")
+        if "http_status" in record:
+            status = record["http_status"]
+            if type(status) is not int or not 100 <= status <= 599:
+                raise ValueError("Diagnostic HTTP status must be bounded integer")
+            expected = (
+                "provider_transient" if status in (408,429,500,502,503,504) else
+                "provider_authorization" if status in (401,403) else
+                "provider_invalid_request" if status==400 else None)
+            if expected is not None and record["code"] != expected:
+                raise ValueError("Diagnostic status contradicts failure category")
         if research_fields <= set(record):
             from .work_research_errors import SAFE_REASONS
             reason=record["research_reason"]
