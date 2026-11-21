@@ -924,8 +924,8 @@
     },
     {
       "path": "tests/test_v26_live_qualification.py",
-      "bytes": 4346,
-      "sha256": "3ac6146f8733b6dd9cee6903d220a81135a7977e9bfaebce06b72d7cd54fa17d"
+      "bytes": 4662,
+      "sha256": "b339f35e054394757fbb1dc6b4e2f5248a2619ed34cc7a904c50f231856c0717"
     },
     {
       "path": "tests/test_v26_native_outcome_coverage.py",
