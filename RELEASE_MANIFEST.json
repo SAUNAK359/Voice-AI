@@ -168,6 +168,11 @@
       "sha256": "b5c9270cf0206643849a043cfcdcc9860f7767a8c8ff8843ba988f043a59aa9a"
     },
     {
+      "path": "docs/V26_20261121_DEEP_AUDIT_AND_QUALIFICATION.md",
+      "bytes": 4004,
+      "sha256": "ae6a9c063aa3ee09a8f967fbdae344f7b87d657e8ca97e4d3d2dd7b29e3e4b9c"
+    },
+    {
       "path": "docs/V26_FINAL_INTEGRATION_RELEASE_POLICY.md",
       "bytes": 3638,
       "sha256": "dfc37f1dcdbb4756335f332a44a1f1a84222f37a7fd15632991ab277ab07898d"
@@ -244,8 +249,8 @@
     },
     {
       "path": "notebooks/Rizzler_V26_Real_Gemini_Qualification_Kaggle.ipynb",
-      "bytes": 5856,
-      "sha256": "05b399b2b70f9e41037997ba2c48e2f42001e24134aaf3f777961b28df7dff2d"
+      "bytes": 11285,
+      "sha256": "9bf183b3043d496f9d8bd934a015f7e1a980e4974c14aa619bf4bd66e79a43b3"
     },
     {
       "path": "notebooks/Rizzler_V9_Kaggle_Gemini_Specialist_Skill_Studio.ipynb",
@@ -304,8 +309,13 @@
     },
     {
       "path": "scripts/qualify_v26_live.py",
-      "bytes": 6170,
-      "sha256": "f7fbbc4a4fa1389efe1d4fb01836ea4214ff0421def86674a3635fad531e0745"
+      "bytes": 6931,
+      "sha256": "21b1ca599b734bf1b852f8037cd1df1632adb24878b07bb17d851ef4066aa2fc"
+    },
+    {
+      "path": "scripts/qualify_v26_stream_paid.py",
+      "bytes": 7184,
+      "sha256": "3a1067f241d9a36d6ca7f528a544de2c082bd0190c25995f25a769648dcb4b2b"
     },
     {
       "path": "scripts/scan_secrets.py",
@@ -889,8 +899,8 @@
     },
     {
       "path": "tests/test_v26_live_qualification.py",
-      "bytes": 3018,
-      "sha256": "457591ed59a4b6d1d4b8745708508c432e259af29942e3b4a2951eed85ac1056"
+      "bytes": 3853,
+      "sha256": "7135aeb7ba44e0568270122926918b9bd0fb39cedffaba216ebf715b8051e30a"
     },
     {
       "path": "tests/test_v26_outcome_phases.py",
