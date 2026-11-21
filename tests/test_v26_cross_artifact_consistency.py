@@ -106,6 +106,26 @@ class ActualArtifactQuantitativeTests(unittest.TestCase):
                 report(claims=[invalid]),
                 catalog=self.catalog,source_text=excerpt,kind="pptx")
 
+    def test_missing_supported_artifacts_never_qualifies(self):
+        result=reconcile_claim_reports({})
+        self.assertFalse(result["passed"])
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("docx") is not None,
+        "Install the Work extra to test complete long-document inspection")
+    def test_long_document_cannot_be_silently_truncated(self):
+        from docx import Document
+        from rizzler.work_consistency import MAX_SOURCE_CHARS
+        with TemporaryDirectory() as temp:
+            doc=Document()
+            doc.add_paragraph("Important evidence " * (
+                MAX_SOURCE_CHARS//15+50))
+            source=Path(temp)/"extended.docx"
+            doc.save(source)
+            with self.assertRaisesRegex(
+                    ConsistencyViolation,"complete-review budget"):
+                extracted_artifact_text(source,"docx")
+
     def test_cross_format_critical_missing_fails_final_gate(self):
         net=validate_claim_report(
             report(claims=[claim("metric:net_total",-150,
