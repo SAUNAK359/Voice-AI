@@ -145,8 +145,16 @@ def main():
             from qualify_v25_live import run_paid
             paid=asyncio.run(run_paid(repo,out,secrets.token_hex(7)))
             report["paid"]=paid
-            from qualify_v26_stream_paid import run_streamed_paid
-            report["streamed_paid"]=asyncio.run(run_streamed_paid(out))
+            if paid.get("preflight",{}).get("passed") is True:
+                from qualify_v26_stream_paid import run_streamed_paid
+                report["streamed_paid"]=asyncio.run(run_streamed_paid(out))
+            else:
+                # Do not spend further tokens or mislabel expected provider
+                # failures as an independent Work Agent implementation defect.
+                report["streamed_paid"]={
+                    "passed":False,"status":"BLOCKED_BY_PROVIDER_PREFLIGHT",
+                    "live_gemini_required":True,
+                    "failure_code":paid.get("preflight",{}).get("failure_code","unknown")}
         else:
             report["blocking_error"]="missing_kaggle_GEMINI_API_KEY"
     except Exception as exc:
