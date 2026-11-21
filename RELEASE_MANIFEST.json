@@ -193,6 +193,11 @@
       "sha256": "ab5eae601904905349d7312afe143674691e5514be04596bbe1ca810c91ed32c"
     },
     {
+      "path": "docs/V26_PHASE2_NATIVE_ARTIFACT_QUALITY.md",
+      "bytes": 2254,
+      "sha256": "3b6e76b4fd3433fe122ab5a3f134772cac37d0fec66d0a2fc7a2d636d3db107b"
+    },
+    {
       "path": "docs/V26_STREAMED_INGESTION_ROLLOUT.md",
       "bytes": 2409,
       "sha256": "7c999c86875098c0358c17a45e7b2f6a128c4db6f57a946cf660689d9023cb98"
@@ -314,8 +319,8 @@
     },
     {
       "path": "scripts/qualify_v26_live.py",
-      "bytes": 7596,
-      "sha256": "6f204b178e886feabd98251a538fcc4f5d561c997b11e9dea7d7b912b04992a1"
+      "bytes": 8600,
+      "sha256": "0e733666fe331bf52869a08f4c3a2918973c57b4b2d499840f11cbfd948385d5"
     },
     {
       "path": "scripts/qualify_v26_stream_paid.py",
@@ -504,8 +509,8 @@
     },
     {
       "path": "src/rizzler/v26_flags.py",
-      "bytes": 1574,
-      "sha256": "1b0ae789c635b37ae6dce0938d4f9112c9f6f7f92a9fcb7883c1d4bafb157f76"
+      "bytes": 1611,
+      "sha256": "4caaf3be63f0c5ef6595ba22e897ff27a4de9b2807e077d286bafaa96a04bffd"
     },
     {
       "path": "src/rizzler/web/work.js",
@@ -603,6 +608,11 @@
       "sha256": "60f6cb3179a9dd227483b2939e90511e80dcd7b25344aef810d39367c9febbf4"
     },
     {
+      "path": "src/rizzler/work_outcome_coverage.py",
+      "bytes": 10075,
+      "sha256": "0e8ae6067b0fc349da61745146b22af7a129aa7c2e2a14c27ee1816235d636be"
+    },
+    {
       "path": "src/rizzler/work_outcome_phases.py",
       "bytes": 5040,
       "sha256": "dc2b196b2e48f04f2b4dabda6a5200189bc86dc1d3e59ff92dd39920ea91a2a7"
@@ -664,8 +674,8 @@
     },
     {
       "path": "src/rizzler/work_specialists.py",
-      "bytes": 77883,
-      "sha256": "37672434e4e9efea5050e150c2f1991a1657fdb0881cc70619c7d00b1933ae9e"
+      "bytes": 80633,
+      "sha256": "a9d6968451933da8c2dda01d8b3092012fb12a4037e9238ef0333e46cbc6b3ef"
     },
     {
       "path": "src/rizzler/work_sql_exploration.py",
@@ -916,6 +926,11 @@
       "path": "tests/test_v26_live_qualification.py",
       "bytes": 4346,
       "sha256": "3ac6146f8733b6dd9cee6903d220a81135a7977e9bfaebce06b72d7cd54fa17d"
+    },
+    {
+      "path": "tests/test_v26_native_outcome_coverage.py",
+      "bytes": 6745,
+      "sha256": "e8c33b0223edf4f407d8f8089443e426362b4a30061bae3017706783a0905a61"
     },
     {
       "path": "tests/test_v26_outcome_phases.py",
