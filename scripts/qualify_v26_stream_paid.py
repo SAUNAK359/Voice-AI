@@ -98,7 +98,8 @@ async def run_streamed_paid(out: Path) -> dict:
                            "stage":d.get("stage"),
                            "code":d.get("code"),
                            "exception_module":d.get("exception_module"),
-                           "exception_type":d.get("exception_type")}
+                           "exception_type":d.get("exception_type"),
+                           "http_status":d.get("http_status")}
                            for d in diagnostics[:30]]})
         oracle = await asyncio.to_thread(
             analyze_streaming_sql, store.upload("v26_stream_owner", uploaded["id"]))
