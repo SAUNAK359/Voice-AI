@@ -124,7 +124,13 @@ def extracted_artifact_text(path: Path,kind: str) -> str:
     full="\n".join(chunks)
     if not full.strip():
         raise ConsistencyViolation("Artifact contains no inspectable content")
-    return full[:MAX_SOURCE_CHARS]
+    if len(full)>MAX_SOURCE_CHARS:
+        # Never claim to have reviewed a long artifact after silently
+        # discarding its later pages, tables, or numerical conclusions.
+        raise ConsistencyViolation(
+            "Artifact text exceeds complete-review budget; split into "
+            "independently reviewable components before certification")
+    return full
 
 
 def validate_claim_report(report: object, *, catalog: dict,
@@ -240,6 +246,10 @@ def reconcile_claim_reports(reports: dict[str,dict]) -> dict:
     """All approved source-backed claims have one canonical cross-format truth."""
     if not isinstance(reports,dict):
         raise ConsistencyViolation("Malformed cross-artifact QA set")
+    if not reports:
+        return {"passed":False,"verified_metric_appearances":{},
+                "missing_required_metrics":[],
+                "limitations":"No supported artifact was independently inspected"}
     checked={}
     for kind,report in reports.items():
         if kind not in SUPPORTED or not isinstance(report,dict) or not report.get("passed"):
